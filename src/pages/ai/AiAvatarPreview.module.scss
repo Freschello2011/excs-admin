@@ -1,0 +1,129 @@
+/* ==================== AI Avatar State Preview ==================== */
+
+.preview {
+  margin-top: 24px;
+}
+
+.previewTitle {
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 16px;
+  color: var(--ant-color-text);
+}
+
+/* ---- state flow row ---- */
+.stateFlow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  flex-wrap: nowrap;
+}
+
+/* ---- state card ---- */
+.stateCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 140px;
+  min-height: 100px;
+  padding: 16px 12px;
+  border-radius: 12px;
+  border: 2px solid var(--ant-color-border);
+  background: var(--ant-color-bg-container);
+  transition: border-color 0.3s, box-shadow 0.3s;
+  text-align: center;
+  user-select: none;
+}
+
+.stateIcon {
+  font-size: 28px;
+  color: var(--ant-color-text-secondary);
+  margin-bottom: 6px;
+  transition: color 0.3s;
+}
+
+.stateName {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ant-color-text);
+  margin-bottom: 4px;
+}
+
+.videoName {
+  font-size: 12px;
+  color: var(--ant-color-text-quaternary);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* active (simulating) state */
+.stateCard.active {
+  border-color: var(--ant-color-primary);
+  box-shadow: 0 0 0 3px var(--ant-color-primary-bg);
+  animation: cardPulse 1.5s ease-in-out infinite;
+}
+
+.stateCard.active .stateIcon {
+  color: var(--ant-color-primary);
+}
+
+@keyframes cardPulse {
+  0%, 100% { box-shadow: 0 0 0 3px var(--ant-color-primary-bg); }
+  50%      { box-shadow: 0 0 0 6px var(--ant-color-primary-bg-hover); }
+}
+
+/* ---- arrows between cards ---- */
+.arrow {
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  font-size: 20px;
+  color: var(--ant-color-text-quaternary);
+  flex-shrink: 0;
+  animation: arrowSlide 2s ease-in-out infinite;
+}
+
+@keyframes arrowSlide {
+  0%, 100% { opacity: 0.5; transform: translateX(0); }
+  50%      { opacity: 1; transform: translateX(3px); }
+}
+
+/* ---- return arrow (dashed path below cards) ---- */
+.returnArrow {
+  display: flex;
+  justify-content: center;
+  margin-top: 8px;
+  position: relative;
+}
+
+.returnPath {
+  width: 340px;
+  height: 28px;
+  border: 2px dashed var(--ant-color-border);
+  border-top: none;
+  border-radius: 0 0 16px 16px;
+  position: relative;
+}
+
+.returnLabel {
+  position: absolute;
+  bottom: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  color: var(--ant-color-text-quaternary);
+  background: var(--ant-color-bg-layout);
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+/* ---- simulate button ---- */
+.simulateBtn {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+}

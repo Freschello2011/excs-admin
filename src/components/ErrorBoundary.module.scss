@@ -1,0 +1,91 @@
+.errorPage {
+  min-height: 60vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  font-family: 'PingFang SC', 'Inter', sans-serif;
+}
+
+.errorCard {
+  text-align: center;
+  max-width: 420px;
+  padding: 3rem 2rem;
+  background: var(--color-surface-container-lowest, #ffffff);
+  border-radius: 1rem;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+
+  :global([data-theme="dark"]) & {
+    background: var(--color-surface-container, #1e2328);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+  }
+}
+
+.iconWrap {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 1.5rem;
+  border-radius: 50%;
+  background: var(--color-error-container, #ffdad6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  :global([data-theme="dark"]) & {
+    background: rgba(255, 218, 214, 0.12);
+  }
+
+  .icon {
+    font-size: 36px;
+    color: var(--color-error-deep, #ba1a1a);
+
+    :global([data-theme="dark"]) & {
+      color: var(--color-error, #F56C6C);
+    }
+  }
+}
+
+.title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--color-on-surface, #181c20);
+  margin-bottom: 0.75rem;
+}
+
+.desc {
+  color: var(--color-outline, #707784);
+  font-size: 0.875rem;
+  font-weight: 300;
+  line-height: 1.6;
+  margin-bottom: 2rem;
+  word-break: break-word;
+}
+
+.btnRefresh {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem 2rem;
+  background: var(--color-primary-container, #409eff);
+  color: #ffffff;
+  border: none;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.2);
+
+  .icon {
+    font-size: 18px;
+  }
+
+  &:hover {
+    filter: brightness(1.1);
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
+}

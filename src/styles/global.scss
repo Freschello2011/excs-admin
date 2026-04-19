@@ -1,0 +1,444 @@
+/* =============================================
+   ExCS — Global Design System Styles
+   Adapted from SSO Design System
+   浅色精致风（紫色主色 + 淡极光 + 精致阴影）
+   ============================================= */
+
+/* ---------- CSS Custom Properties (Color Palette) ---------- */
+:root {
+  /* Core Palette — 紫色主色 */
+  --color-primary: #6A4EE8;
+  --color-primary-rgb: 106, 78, 232;
+  --color-primary-deep: #4A32C7;
+  --color-primary-container: #EFEBFE;
+  --color-primary-container-rgb: 239, 235, 254;
+  --color-primary-fixed: #E4DDFD;
+  --color-primary-fixed-dim: #C4B5FB;
+  --color-on-primary: #FFFFFF;
+  --color-on-primary-container: #2A1A7A;
+  --color-on-primary-fixed: #1A0E5C;
+  --color-on-primary-fixed-variant: #3B249B;
+
+  /* Surface System — 带极淡紫蓝色调的浅灰 */
+  --color-surface: #F5F5FB;
+  --color-surface-bright: #FAFAFE;
+  --color-surface-dim: #E8E9F3;
+  --color-surface-container-lowest: #FFFFFF;
+  --color-surface-container-low: #F1F1F8;
+  --color-surface-container: #EBEBF4;
+  --color-surface-container-high: #E4E4EF;
+  --color-surface-container-highest: #DDDDE9;
+  --color-surface-variant: #E0E1EC;
+  --color-surface-tint: #6A4EE8;
+
+  /* On-Surface — 深蓝黑（比纯黑更精致） */
+  --color-on-surface: #0F1226;
+  --color-on-surface-variant: #4A4D63;
+  --color-on-background: #0F1226;
+  --color-background: #F5F5FB;
+
+  /* Secondary — 中性石板色 */
+  --color-secondary: #585B74;
+  --color-secondary-container: #E2E3EE;
+  --color-on-secondary: #FFFFFF;
+  --color-on-secondary-container: #3E4159;
+
+  /* Tertiary / Success — 克制的森林绿 */
+  --color-tertiary: #1F6B3A;
+  --color-tertiary-container: #B6E8C4;
+  --color-success: #2F9E5A;
+
+  /* Error — 降饱和的玫瑰红 */
+  --color-error: #D84C5E;
+  --color-error-deep: #A01E32;
+  --color-error-container: #FFDDE1;
+  --color-on-error: #FFFFFF;
+  --color-on-error-container: #5C0013;
+
+  /* Warning — 温暖琥珀 */
+  --color-warning: #D68A2A;
+
+  /* Outline — 冷灰，与紫主色和谐 */
+  --color-outline: #6E7189;
+  --color-outline-variant: #C6C9D7;
+
+  /* Inverse */
+  --color-inverse-surface: #2B2E45;
+  --color-inverse-on-surface: #EEF0F7;
+  --color-inverse-primary: #C4B5FB;
+
+  /* Typography */
+  --font-family-headline: 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-family-body: 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-family-label: 'Inter', 'PingFang SC', sans-serif;
+
+  /* Font Sizes */
+  --font-size-display-lg: 3.5rem;
+  --font-size-headline-md: 1.75rem;
+  --font-size-title-sm: 1rem;
+  --font-size-body-md: 0.875rem;
+  --font-size-label-sm: 0.6875rem;
+
+  /* Spacing */
+  --spacing-1: 0.25rem;
+  --spacing-2: 0.5rem;
+  --spacing-3: 0.75rem;
+  --spacing-4: 1rem;
+  --spacing-5: 1.25rem;
+  --spacing-6: 1.5rem;
+  --spacing-8: 2rem;
+  --spacing-10: 2.5rem;
+  --spacing-12: 3rem;
+
+  /* Shadows — 多层精致阴影 + 紫色调投影 */
+  --shadow-sm:
+    0 1px 1px rgba(24, 28, 60, 0.04),
+    0 2px 4px rgba(24, 28, 60, 0.03);
+  --shadow-md:
+    0 1px 2px rgba(24, 28, 60, 0.04),
+    0 4px 10px rgba(24, 28, 60, 0.05),
+    0 10px 24px -8px rgba(80, 60, 170, 0.10);
+  --shadow-lg:
+    0 2px 4px rgba(24, 28, 60, 0.04),
+    0 8px 24px rgba(24, 28, 60, 0.06),
+    0 24px 48px -12px rgba(80, 60, 170, 0.14);
+  --shadow-xl:
+    0 4px 8px rgba(24, 28, 60, 0.05),
+    0 16px 40px rgba(24, 28, 60, 0.08),
+    0 40px 80px -20px rgba(80, 60, 170, 0.18);
+
+  /* Transitions */
+  --transition-default: 200ms ease;
+
+  /* Border Radius */
+  --radius-sm: 0.125rem;
+  --radius-md: 0.25rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+}
+
+/* ---------- Dark Theme ---------- */
+[data-theme="dark"] {
+  /* Core Palette — 紫色在暗底下提亮 */
+  --color-primary: #A68DFF;
+  --color-primary-rgb: 166, 141, 255;
+  --color-primary-deep: #C4B5FB;
+  --color-primary-container: #3B249B;
+  --color-primary-container-rgb: 59, 36, 155;
+  --color-primary-fixed: #E4DDFD;
+  --color-primary-fixed-dim: #C4B5FB;
+  --color-on-primary: #2A1A7A;
+  --color-on-primary-container: #E4DDFD;
+  --color-on-primary-fixed: #1A0E5C;
+  --color-on-primary-fixed-variant: #3B249B;
+
+  /* Surface — 墨蓝黑，微微偏冷 */
+  --color-surface: #0B1020;
+  --color-surface-bright: #2A3250;
+  --color-surface-dim: #0B1020;
+  --color-surface-container-lowest: #070B18;
+  --color-surface-container-low: #131A2E;
+  --color-surface-container: #1A2139;
+  --color-surface-container-high: #222A44;
+  --color-surface-container-highest: #2A3250;
+  --color-surface-variant: #353E5C;
+  --color-surface-tint: #A68DFF;
+
+  /* On-Surface */
+  --color-on-surface: #E6E8F2;
+  --color-on-surface-variant: #B4B8CC;
+  --color-on-background: #E6E8F2;
+  --color-background: #0B1020;
+
+  /* Secondary */
+  --color-secondary: #C5C7D8;
+  --color-secondary-container: #3E4159;
+  --color-on-secondary: #2A2D42;
+  --color-on-secondary-container: #E2E3EE;
+
+  /* Tertiary / Success */
+  --color-tertiary: #7ED89E;
+  --color-tertiary-container: #1F6B3A;
+  --color-success: #7ED89E;
+
+  /* Error */
+  --color-error: #FFB3BC;
+  --color-error-deep: #FFB3BC;
+  --color-error-container: #A01E32;
+  --color-on-error: #5C0013;
+  --color-on-error-container: #FFDDE1;
+
+  /* Warning */
+  --color-warning: #F0C078;
+
+  /* Outline */
+  --color-outline: #8B8FA5;
+  --color-outline-variant: #353E5C;
+
+  /* Inverse */
+  --color-inverse-surface: #E6E8F2;
+  --color-inverse-on-surface: #2B2E45;
+  --color-inverse-primary: #4A32C7;
+
+  /* Shadows — 暗色模式下用更深的黑 + 一点紫光 */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-md:
+    0 2px 6px rgba(0, 0, 0, 0.35),
+    0 6px 16px rgba(40, 20, 90, 0.25);
+  --shadow-lg:
+    0 4px 12px rgba(0, 0, 0, 0.4),
+    0 16px 36px rgba(40, 20, 90, 0.35);
+  --shadow-xl:
+    0 8px 20px rgba(0, 0, 0, 0.45),
+    0 28px 60px rgba(40, 20, 90, 0.4);
+}
+
+/* ---------- Global Reset & Base ---------- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  font-family: var(--font-family-body);
+  font-size: var(--font-size-body-md);
+  color: var(--color-on-surface);
+  background-color: var(--color-surface);
+  line-height: 1.6;
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* ---------- Aurora Ambient Background ---------- */
+/* 极淡的环境光，透过毛玻璃侧栏 / 顶栏渗出，不抢视觉 */
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(100px);
+  opacity: 0.22;
+  pointer-events: none;
+  z-index: 0;
+}
+
+body::before {
+  width: 640px;
+  height: 640px;
+  top: -160px;
+  left: 22%;
+  background: radial-gradient(
+    circle,
+    oklch(0.78 0.16 285) 0%,
+    oklch(0.78 0.16 285 / 0) 70%
+  );
+}
+
+body::after {
+  width: 600px;
+  height: 600px;
+  bottom: -220px;
+  right: 8%;
+  background: radial-gradient(
+    circle,
+    oklch(0.80 0.14 225) 0%,
+    oklch(0.80 0.14 225 / 0) 70%
+  );
+}
+
+[data-theme="dark"] body::before {
+  opacity: 0.14;
+}
+
+[data-theme="dark"] body::after {
+  opacity: 0.12;
+}
+
+/* Layout 层级高于极光 */
+#root {
+  position: relative;
+  z-index: 1;
+}
+
+a {
+  color: var(--color-primary);
+  text-decoration: none;
+  transition: color var(--transition-default);
+  &:hover {
+    color: var(--color-primary-deep);
+  }
+}
+
+/* ---------- Material Symbols ---------- */
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  vertical-align: middle;
+  user-select: none;
+}
+
+/* ---------- Utility Classes ---------- */
+.auth-card-shadow {
+  box-shadow: var(--shadow-lg);
+}
+
+.glass-effect {
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  background: rgba(255, 255, 255, 0.6);
+}
+
+[data-theme="dark"] .glass-effect {
+  background: rgba(19, 26, 46, 0.65);
+}
+
+/* ---------- AntD Card 全站升级 ---------- */
+/* 用更高权重选择器 + !important，覆盖 AntD inline style 和 size="small" 变体 */
+body .ant-card,
+body .ant-card.ant-card-bordered,
+body .ant-card.ant-card-small {
+  border: none !important;
+  border-radius: 16px !important;
+  background: rgba(255, 255, 255, 0.75) !important;
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  transition: box-shadow 0.25s ease, transform 0.25s ease;
+
+  box-shadow:
+    0 1px 2px rgba(24, 28, 60, 0.04),
+    0 4px 10px rgba(24, 28, 60, 0.05),
+    0 10px 24px -8px rgba(80, 60, 170, 0.10) !important;
+
+  &:hover {
+    box-shadow:
+      0 2px 4px rgba(24, 28, 60, 0.05),
+      0 8px 20px rgba(24, 28, 60, 0.07),
+      0 20px 40px -12px rgba(80, 60, 170, 0.14) !important;
+  }
+}
+
+/* 嵌套 Card（Card 里又有 Card，如 RulesPage / SceneListPage）降级为虚线容器 */
+body .ant-card .ant-card {
+  background: var(--color-surface-container-low) !important;
+  box-shadow: none !important;
+  border: 1px dashed var(--color-outline-variant) !important;
+  backdrop-filter: none;
+}
+
+body .ant-card .ant-card-head {
+  border-bottom: 1px solid var(--color-outline-variant) !important;
+  background: transparent !important;
+}
+
+[data-theme="dark"] body .ant-card,
+[data-theme="dark"] body .ant-card.ant-card-bordered,
+[data-theme="dark"] body .ant-card.ant-card-small {
+  background: rgba(26, 33, 57, 0.6) !important;
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.35),
+    0 6px 16px rgba(40, 20, 90, 0.25) !important;
+
+  &:hover {
+    box-shadow:
+      0 4px 12px rgba(0, 0, 0, 0.4),
+      0 16px 36px rgba(40, 20, 90, 0.35) !important;
+  }
+}
+
+[data-theme="dark"] body .ant-card .ant-card {
+  background: rgba(19, 26, 46, 0.4) !important;
+}
+
+/* ---------- Scrollbar Styling ---------- */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-outline-variant);
+  border-radius: 3px;
+  &:hover {
+    background: var(--color-outline);
+  }
+}
+
+/* ---------- Transition Classes ---------- */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+.slide-fade-enter-active {
+  transition: all 0.3s ease-out;
+}
+
+.slide-fade-leave-active {
+  transition: all 0.2s ease-in;
+}
+
+.slide-fade-enter-from {
+  transform: translateY(10px);
+  opacity: 0;
+}
+
+.slide-fade-leave-to {
+  transform: translateY(-10px);
+  opacity: 0;
+}
+
+/* ---------- Loading Spinner ---------- */
+.loading-spinner {
+  border: 3px solid var(--color-surface-container-high);
+  border-top: 3px solid var(--color-primary);
+  border-radius: 50%;
+  width: 42px;
+  height: 42px;
+  animation: spin 1s linear infinite;
+}
+
+/* ---------- Theme Transition ---------- */
+html[data-theme] {
+  color-scheme: light;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* ---------- Exhibit context highlight (顶栏选择器联动) ---------- */
+.excs-row-highlight > td {
+  background-color: rgba(var(--color-primary-rgb), 0.12) !important;
+  animation: excsRowPulse 1.2s ease-out;
+}
+[data-theme="dark"] .excs-row-highlight > td {
+  background-color: rgba(var(--color-primary-rgb), 0.18) !important;
+}
+@keyframes excsRowPulse {
+  0% { background-color: rgba(var(--color-primary-rgb), 0.35); }
+  100% { background-color: rgba(var(--color-primary-rgb), 0.12); }
+}

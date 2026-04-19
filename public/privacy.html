@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>隐私政策 — 无界智慧云中控 / 羿无界云中控</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      max-width: 760px;
+      margin: 40px auto;
+      padding: 0 20px 80px;
+      line-height: 1.75;
+      color: #222;
+      background: #fafafa;
+    }
+    @media (prefers-color-scheme: dark) {
+      body { color: #e6e6e6; background: #121212; }
+      a { color: #7dc4ff; }
+      .updated { color: #aaa; }
+    }
+    h1 { font-size: 1.6rem; margin-bottom: 0.2em; }
+    h2 { font-size: 1.15rem; margin-top: 2em; padding-left: 8px; border-left: 3px solid #0a84ff; }
+    .updated { color: #666; font-size: 0.9rem; margin-bottom: 1.5em; }
+    ul { padding-left: 1.4em; }
+    li { margin: 0.3em 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 0.95rem; }
+    th, td { border: 1px solid #ccc; padding: 8px 10px; text-align: left; vertical-align: top; }
+    @media (prefers-color-scheme: dark) { th, td { border-color: #444; } }
+    th { background: rgba(0,0,0,0.05); }
+    @media (prefers-color-scheme: dark) { th { background: rgba(255,255,255,0.05); } }
+    code { font-family: SFMono-Regular, Menlo, monospace; font-size: 0.92em; }
+    .footer { margin-top: 3em; padding-top: 1.5em; border-top: 1px solid #ddd; font-size: 0.9rem; color: #666; }
+    @media (prefers-color-scheme: dark) { .footer { border-top-color: #444; color: #aaa; } }
+  </style>
+</head>
+<body>
+  <h1>隐私政策</h1>
+  <p class="updated">最后更新：2026-04-19｜生效日期：2026-04-19｜版本：v1.0</p>
+
+  <p>本隐私政策适用于「<strong>无界智慧云中控</strong>」（Android 平台）与「<strong>羿无界云中控</strong>」（iOS / macOS 平台）（以下合称「本应用」）。本应用由北京无界创羿科技有限公司（以下简称「我们」）开发与运营，是面向博物馆、企业展厅、品牌体验中心等场景的专业中控系统。</p>
+
+  <p>我们非常重视您的个人信息与隐私保护。请在使用本应用前仔细阅读本政策，您开始使用即视为您已充分理解并同意本政策全部内容。</p>
+
+  <h2>一、我们收集的信息</h2>
+
+  <p>本应用面向企业（B2B）展厅运维使用，收集范围严格限定于功能必需。</p>
+
+  <table>
+    <thead><tr><th>类型</th><th>具体内容</th><th>收集目的</th><th>是否必需</th></tr></thead>
+    <tbody>
+      <tr><td>账号信息</td><td>SSO 用户名、显示名、角色权限、所属展厅</td><td>登录认证、权限控制</td><td>必需</td></tr>
+      <tr><td>设备信息</td><td>设备型号、操作系统版本、App 版本（用于异常诊断）</td><td>故障排查、兼容性适配</td><td>必需</td></tr>
+      <tr><td>展厅设备状态</td><td>通过 MQTT 接收展厅内设备在线状态、网络延迟、场景指令执行结果</td><td>中控调度核心功能</td><td>必需</td></tr>
+      <tr><td>日志信息</td><td>App 运行时的调试日志（本地环形缓冲，仅在您主动触发诊断时上传）</td><td>远程诊断支持</td><td>可选</td></tr>
+    </tbody>
+  </table>
+
+  <p><strong>我们不会收集</strong>：您的位置信息、通讯录、相机、麦克风、相册、短信、通话记录、生物识别信息、剪贴板等。本应用未集成任何第三方广告 SDK、统计 SDK 或推送 SDK。</p>
+
+  <h2>二、我们如何使用您的信息</h2>
+  <ul>
+    <li>为您提供展厅中控、场景切换、设备监控等核心功能</li>
+    <li>向您在企业 SSO 下的对应账号发送操作反馈与状态通知</li>
+    <li>根据您的角色权限，向您展示被授权的展厅与设备范围</li>
+    <li>用于 App 稳定性与兼容性的诊断分析</li>
+  </ul>
+
+  <p>我们<strong>不会</strong>将您的信息用于广告推送、用户画像、商业转售等目的。</p>
+
+  <h2>三、信息的存储与保护</h2>
+  <ul>
+    <li>您的账号凭证（Token）通过操作系统级加密存储（iOS Keychain / Android Keystore）保存在本地设备</li>
+    <li>展厅实时数据通过 HTTPS + MQTT over WSS 加密传输（TLS 1.2+）</li>
+    <li>云端服务部署于阿里云华北2（北京）地域，采用标准存储加密</li>
+    <li>我们采用访问控制、日志审计、权限隔离等多层保护措施</li>
+    <li>账号信息与展厅运营数据保留期限：您的企业与我们的服务合同有效期内</li>
+  </ul>
+
+  <h2>四、第三方 SDK 与共享</h2>
+
+  <p>本应用当前版本<strong>不集成任何第三方 SDK</strong>，所有网络请求均指向我们自有的服务端（<code>*.crossovercg.com.cn</code>）。本应用使用操作系统原生的 WebView 组件完成 SSO 单点登录流程，WebView 本身的隐私行为遵循您设备操作系统的策略。</p>
+
+  <p>我们<strong>不会</strong>主动向任何第三方共享、转让、公开披露您的个人信息，除非：</p>
+  <ul>
+    <li>取得您的明确同意</li>
+    <li>符合法律法规、司法机关或行政机关依法要求</li>
+    <li>为维护您或其他用户或社会公共利益、财产或安全免遭损害所必需</li>
+  </ul>
+
+  <h2>五、您的权利</h2>
+  <ul>
+    <li><strong>访问与更正</strong>：您可通过企业 SSO 后台查看和修改您的账号信息</li>
+    <li><strong>注销账号</strong>：您可联系您的企业管理员或通过下方邮箱申请注销，注销后我们将在 30 日内删除您的账号数据</li>
+    <li><strong>撤回同意</strong>：您可通过卸载本应用撤回对本政策的同意；App 内数据会随卸载一并清除</li>
+    <li><strong>投诉举报</strong>：如您认为您的权益受到侵害，可通过下方联系方式与我们反馈，我们将在 15 个工作日内响应</li>
+  </ul>
+
+  <h2>六、未成年人保护</h2>
+
+  <p>本应用是面向企业客户（B2B）的专业中控系统，不面向未满 14 周岁的未成年人提供服务。如您系未成年人或监护人发现未成年人使用本应用，请立即联系我们，我们将采取措施删除相关信息。</p>
+
+  <h2>七、政策变更</h2>
+
+  <p>我们保留不时更新本政策的权利。更新后的政策在本页面发布即生效；如涉及重大变更（如收集范围扩大、用途调整），我们将通过 App 内弹窗、推送等方式通知您。请您定期查阅最新政策。</p>
+
+  <h2>八、联系我们</h2>
+  <ul>
+    <li>公司：北京无界创羿科技有限公司</li>
+    <li>邮箱：<a href="mailto:ryan.qin@outlook.com">ryan.qin@outlook.com</a></li>
+    <li>地址：北京市</li>
+  </ul>
+
+  <div class="footer">
+    <p>Android App 备案号：京ICP备2024050364号-2A（无界智慧云中控）</p>
+    <p>iOS / macOS App 备案号：京ICP备2024050364号-3A（羿无界云中控）</p>
+    <p>网站 ICP 备案号：京ICP备2024050364号</p>
+    <p>© 2025-2026 北京无界创羿科技有限公司 版权所有</p>
+  </div>
+</body>
+</html>

@@ -1,0 +1,71 @@
+// 中控 App v2.0（暗黑毛玻璃 + 霓虹）后台预览
+// 设备帧：iPad 竖屏 820 × 高度由内容撑开（最高视口 - 上下空间）
+// 颜色 token 见 previewTokens.ts
+
+.wrapper {
+  width: 540px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #05070e;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  position: sticky;
+  top: 0;
+  max-height: calc(100vh - 64px - 64px); // topbar + padding
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: linear-gradient(180deg, #0c1322, #050811);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+.headerLabel {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 0.06em;
+  user-select: none;
+}
+
+.scaleContainer {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+
+  // 自定义滚动条
+  &::-webkit-scrollbar {
+    width: 4px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.18);
+    border-radius: 2px;
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.32);
+  }
+}
+
+.scaleInner {
+  transform-origin: top left;
+}
+
+// ─── 高亮动画（hover 联动） ───
+@keyframes highlightPulse {
+  0%, 100% { box-shadow: 0 0 0 2px #26BFF7, 0 0 18px rgba(38, 191, 247, 0.55); }
+  50%      { box-shadow: 0 0 0 4px rgba(38, 191, 247, 0.4), 0 0 28px rgba(38, 191, 247, 0.4); }
+}
+
+:global(.preview-card-highlighted) {
+  animation: highlightPulse 1.2s ease-in-out infinite;
+  border-radius: 18px;
+}

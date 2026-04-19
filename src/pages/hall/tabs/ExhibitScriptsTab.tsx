@@ -1,0 +1,155 @@
+import { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Card, Button, Input, Space } from 'antd';
+import { useMessage } from '@/hooks/useMessage';
+import { PlusOutlined, SaveOutlined, DeleteOutlined, ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
+import { hallApi } from '@/api/hall';
+import { queryKeys } from '@/api/queryKeys';
+import type { ExhibitScript } from '@/types/hall';
+
+interface Props {
+  hallId: number;
+  exhibitId: number;
+  canManage: boolean;
+}
+
+export default function ExhibitScriptsTab({ hallId, exhibitId, canManage }: Props) {
+  const { message } = useMessage();
+  const queryClient = useQueryClient();
+  const [scripts, setScripts] = useState<ExhibitScript[]>([]);
+  const [dirty, setDirty] = useState(false);
+
+  // Load exhibit data to get script_count, then initialize
+  const { data: exhibits = [] } = useQuery({
+    queryKey: queryKeys.exhibits(hallId),
+    queryFn: () => hallApi.getExhibits(hallId),
+    select: (res) => res.data.data,
+  });
+
+  const exhibit = exhibits.find((e) => e.id === exhibitId);
+
+  useEffect(() => {
+    if (exhibit) {
+      // Initialize with empty scripts based on count
+      if (exhibit.script_count > 0) {
+        setScripts(
+          Array.from({ length: exhibit.script_count }, (_, i) => ({ content: '', sort_order: i + 1 })),
+        );
+      } else {
+        setScripts([{ content: '', sort_order: 1 }]);
+      }
+      setDirty(false);
+    }
+  }, [exhibit?.id, exhibit?.script_count]);
+
+  const saveMutation = useMutation({
+    mutationFn: (data: ExhibitScript[]) =>
+      hallApi.updateExhibitScripts(hallId, exhibitId, data),
+    onSuccess: () => {
+      message.success('讲解词已保存');
+      setDirty(false);
+      queryClient.invalidateQueries({ queryKey: queryKeys.exhibits(hallId) });
+    },
+  });
+
+  const handleSave = () => {
+    const validScripts = scripts.filter((s) => s.content.trim());
+    saveMutation.mutate(validScripts);
+  };
+
+  const updateScript = (index: number, content: string) => {
+    const next = [...scripts];
+    next[index] = { ...next[index], content };
+    setScripts(next);
+    setDirty(true);
+  };
+
+  const addScript = () => {
+    setScripts([...scripts, { content: '', sort_order: scripts.length + 1 }]);
+    setDirty(true);
+  };
+
+  const removeScript = (index: number) => {
+    const next = scripts.filter((_, i) => i !== index).map((s, i) => ({ ...s, sort_order: i + 1 }));
+    setScripts(next);
+    setDirty(true);
+  };
+
+  const moveScript = (index: number, direction: 'up' | 'down') => {
+    const swapIdx = direction === 'up' ? index - 1 : index + 1;
+    if (swapIdx < 0 || swapIdx >= scripts.length) return;
+    const next = [...scripts];
+    [next[index], next[swapIdx]] = [next[swapIdx], next[index]];
+    next.forEach((s, i) => { s.sort_order = i + 1; });
+    setScripts(next);
+    setDirty(true);
+  };
+
+  return (
+    <Card
+      title={`讲解词（${scripts.filter((s) => s.content.trim()).length} 段）`}
+      extra={
+        canManage && (
+          <Button
+            type="primary"
+            icon={<SaveOutlined />}
+            onClick={handleSave}
+            loading={saveMutation.isPending}
+            disabled={!dirty}
+          >
+            保存
+          </Button>
+        )
+      }
+    >
+      {scripts.map((script, idx) => (
+        <div key={idx} style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+            <span style={{ minWidth: 28, lineHeight: '32px', color: 'var(--color-outline)' }}>
+              {idx + 1}.
+            </span>
+            <Input.TextArea
+              rows={3}
+              value={script.content}
+              onChange={(e) => updateScript(idx, e.target.value)}
+              placeholder="输入讲解内容..."
+              disabled={!canManage}
+            />
+            {canManage && (
+              <Space direction="vertical" size={2}>
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<ArrowUpOutlined />}
+                  onClick={() => moveScript(idx, 'up')}
+                  disabled={idx === 0}
+                />
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<ArrowDownOutlined />}
+                  onClick={() => moveScript(idx, 'down')}
+                  disabled={idx === scripts.length - 1}
+                />
+                <Button
+                  type="text"
+                  danger
+                  size="small"
+                  icon={<DeleteOutlined />}
+                  onClick={() => removeScript(idx)}
+                  disabled={scripts.length <= 1}
+                />
+              </Space>
+            )}
+          </div>
+        </div>
+      ))}
+
+      {canManage && (
+        <Button type="dashed" block icon={<PlusOutlined />} onClick={addScript}>
+          添加段落
+        </Button>
+      )}
+    </Card>
+  );
+}

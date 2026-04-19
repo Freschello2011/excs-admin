@@ -1,0 +1,16 @@
+.pageHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 8px;
+}
+
+.pageDesc {
+  font-size: 0.875rem;
+  color: var(--color-outline, #707784);
+
+  :global([data-theme="dark"]) & {
+    color: #94a3b8;
+  }
+}
