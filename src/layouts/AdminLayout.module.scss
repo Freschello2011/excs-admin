@@ -673,3 +673,80 @@
     opacity: 0.8;
   }
 }
+// ============================================================================
+// 方案 A · 冷静玻璃（Calm Glass）
+// 追加到 src/layouts/AdminLayout.module.scss 的末尾
+// ----------------------------------------------------------------------------
+// 视觉语言：极简 · 描边胶囊 · 留白 Region · 延续 v1.5 玻璃
+// Active: 1.5px 描边胶囊 + 轻底，不用竖条、不用阴影、不用渐变
+// Region: 取消 border-top 分隔线，全靠留白和字号对比
+// ============================================================================
+
+.admin-layout {
+  // ---------- Sidebar 玻璃底再加重一点 blur ----------
+  &__sidebar {
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(28px) saturate(160%);
+    -webkit-backdrop-filter: blur(28px) saturate(160%);
+    border-right: 1px solid rgba(255, 255, 255, 0.85);
+
+    :global([data-theme="dark"]) & {
+      background: rgba(19, 26, 46, 0.68);
+      border-right-color: rgba(53, 62, 92, 0.45);
+    }
+  }
+
+  // ---------- Region 之间改用留白 ----------
+  &__nav-region + &__nav-region {
+    margin-top: 14px;
+  }
+
+  &__nav-region-label {
+    border-top: none;
+    margin-top: 0;
+    padding: 18px 24px 8px;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--color-outline);
+  }
+
+  &__nav-group-label {
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+  }
+
+  // ---------- Nav item：hover 只做底色淡入 + 文字换色 ----------
+  &__nav-item {
+    color: var(--color-on-surface-variant);
+    font-weight: 500;
+
+    &:hover {
+      background: rgba(var(--color-primary-rgb), 0.06);
+      color: var(--color-primary);
+    }
+
+    // Active：1.5px 描边胶囊
+    &--active,
+    &--active:hover {
+      background: rgba(var(--color-primary-rgb), 0.04);
+      color: var(--color-primary);
+      box-shadow: inset 0 0 0 1.5px rgba(var(--color-primary-rgb), 0.55);
+      font-weight: 600;
+    }
+
+    :global([data-theme="dark"]) &--active,
+    :global([data-theme="dark"]) &--active:hover {
+      background: rgba(var(--color-primary-rgb), 0.10);
+      box-shadow: inset 0 0 0 1.5px rgba(var(--color-primary-rgb), 0.65);
+    }
+  }
+
+  // ---------- Logo：字重降一级 + 浅紫衬底 ----------
+  &__logo-title { font-weight: 600; }
+  &__logo-icon {
+    background: rgba(var(--color-primary-rgb), 0.08);
+    border-radius: 10px;
+  }
+}
