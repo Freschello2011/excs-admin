@@ -1,0 +1,663 @@
+/* ================================================================
+ * AiAvatarConfigPanel.module.scss · 紫玻璃风
+ *
+ * 直接放到：src/pages/ai/AiAvatarConfigPanel.module.scss
+ * 然后在 tsx 里 import styles from './AiAvatarConfigPanel.module.scss'
+ * 参考 ./AiAvatarConfigPanel.diff.md 里的位置给每个 <Card> 打类名
+ *
+ * 设计系统：跟 ExhibitDetailPage / AdminLayout 同一套
+ *   - 毛玻璃 rgba(255,255,255,0.72) + blur(20px) saturate(160%)
+ *   - 多层阴影 (inset 高光 + 低投影 + 紫色空气感)
+ *   - 圆角 12 / 14 / 16
+ *   - 顶部反光 1px 线
+ *   - 全走 var(--color-*) 新 token，暗色模式跟随
+ * ================================================================ */
+
+/* ───────── 根容器：左右 2 栏 ───────── */
+.root {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.left {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.right {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: sticky;
+  top: 16px;
+  align-self: flex-start;
+  max-height: calc(100vh - 64px - 32px);
+  overflow-y: auto;
+
+  // 滚动条美化（Webkit）
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: rgba(var(--color-primary-rgb), 0.25);
+    border-radius: 3px;
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background: rgba(var(--color-primary-rgb), 0.45);
+  }
+}
+
+/* ================================================================
+ * 玻璃 Card —— 直接加在 <Card className={styles.glassCard}>
+ *
+ * 覆盖 AntD Card 默认样式，注意这里用 :global(.ant-card-xxx)
+ * 因为 size="small" 会影响内边距
+ * ================================================================ */
+.glassCard {
+  // root
+  background: rgba(255, 255, 255, 0.72) !important;
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.9) !important;
+  border-radius: 14px !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 1px 2px rgba(24, 28, 60, 0.04),
+    0 4px 12px -4px rgba(80, 60, 170, 0.08) !important;
+  overflow: hidden;
+  position: relative;
+
+  // 顶部反光线
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 14px;
+    right: 14px;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.95) 50%,
+      transparent
+    );
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  :global([data-theme='dark']) & {
+    background: rgba(26, 33, 57, 0.72) !important;
+    border-color: rgba(53, 62, 92, 0.6) !important;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.05),
+      0 1px 2px rgba(0, 0, 0, 0.35),
+      0 4px 12px -4px rgba(40, 20, 90, 0.3) !important;
+
+    &::before {
+      background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.08) 50%,
+        transparent
+      );
+    }
+  }
+
+  /* ── Card 头 ── */
+  :global(.ant-card-head) {
+    background: transparent !important;
+    border-bottom: 1px solid rgba(var(--color-primary-rgb), 0.08) !important;
+    min-height: auto !important;
+    padding: 14px 18px !important;
+
+    :global([data-theme='dark']) & {
+      border-bottom-color: rgba(var(--color-primary-rgb), 0.14) !important;
+    }
+  }
+
+  :global(.ant-card-head-title) {
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    color: var(--color-on-surface) !important;
+    letter-spacing: -0.005em;
+    padding: 0 !important;
+
+    // icon 打色
+    .material-symbols-outlined,
+    :global(.material-symbols-outlined) {
+      color: var(--color-primary);
+    }
+  }
+
+  /* ── Card 体 ── */
+  :global(.ant-card-body) {
+    padding: 16px 18px !important;
+  }
+
+  /* ── 内部 label 提色 ── */
+  :global(.ant-form-item-label > label) {
+    color: var(--color-on-surface) !important;
+    font-weight: 500;
+    font-size: 13px;
+  }
+
+  /* ── 内部 Tabs 分隔 ── */
+  :global(.ant-tabs-nav::before) {
+    border-bottom-color: rgba(var(--color-primary-rgb), 0.08) !important;
+  }
+
+  :global(.ant-tabs-tab-btn) {
+    color: var(--color-on-surface-variant) !important;
+    font-size: 13px;
+  }
+  :global(.ant-tabs-tab-active .ant-tabs-tab-btn) {
+    color: var(--color-primary) !important;
+    font-weight: 600 !important;
+  }
+  :global(.ant-tabs-ink-bar) {
+    background: var(--color-primary) !important;
+  }
+
+  /* ── 内部 Collapse（高级设置）── */
+  :global(.ant-collapse-ghost .ant-collapse-header) {
+    padding: 6px 0 !important;
+    color: var(--color-primary) !important;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  :global(.ant-collapse-ghost .ant-collapse-content-box) {
+    padding: 8px 0 0 !important;
+  }
+}
+
+/* ================================================================
+ * 形象选择 —— 被选模板的预览小卡
+ * 原来：灰底色块 + 头像。升级成浅紫玻璃胶囊
+ * 用法：包一层 <div className={styles.templatePick}>
+ * ================================================================ */
+.templatePick {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  background: linear-gradient(
+    135deg,
+    rgba(var(--color-primary-rgb), 0.08),
+    oklch(0.55 0.16 230 / 0.05)
+  );
+  border: 1px solid rgba(var(--color-primary-rgb), 0.18);
+  border-radius: 10px;
+  position: relative;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 12px;
+    right: 12px;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.9) 50%,
+      transparent
+    );
+  }
+
+  :global([data-theme='dark']) & {
+    background: linear-gradient(
+      135deg,
+      rgba(var(--color-primary-rgb), 0.16),
+      oklch(0.60 0.14 230 / 0.08)
+    );
+    border-color: rgba(var(--color-primary-rgb), 0.28);
+
+    &::before {
+      background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.1) 50%,
+        transparent
+      );
+    }
+  }
+}
+
+.templateThumb {
+  width: 64px;
+  height: 48px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.6);
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(var(--color-primary-rgb), 0.15);
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .material-symbols-outlined,
+  :global(.material-symbols-outlined) {
+    font-size: 24px;
+    color: var(--color-primary);
+    opacity: 0.6;
+  }
+
+  :global([data-theme='dark']) & {
+    background: rgba(26, 33, 57, 0.6);
+  }
+}
+
+.templateInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.templateName {
+  font-weight: 600;
+  color: var(--color-on-surface);
+  font-size: 14px;
+  margin-bottom: 2px;
+}
+
+.templateMeta {
+  font-size: 11px;
+  color: var(--color-on-surface-variant);
+  letter-spacing: 0.02em;
+}
+
+.templateLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--color-primary);
+  cursor: pointer;
+  font-weight: 500;
+
+  &:hover {
+    color: var(--color-primary);
+    filter: brightness(1.15);
+  }
+}
+
+/* ================================================================
+ * 工具能力 checkbox 列表 —— 卡片化，不再是光裸的 Checkbox.Group
+ * 用法：把原先 <div gap:8> 改成 <div className={styles.toolsList}>
+ *       每个 row 包 <label className={styles.toolRow}>
+ * ================================================================ */
+.toolsList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.toolRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  transition: all 150ms ease;
+
+  &:hover {
+    background: rgba(var(--color-primary-rgb), 0.04);
+    border-color: rgba(var(--color-primary-rgb), 0.12);
+  }
+
+  :global([data-theme='dark']) &:hover {
+    background: rgba(var(--color-primary-rgb), 0.08);
+    border-color: rgba(var(--color-primary-rgb), 0.2);
+  }
+
+  :global(.ant-checkbox-wrapper) {
+    flex: 1;
+    color: var(--color-on-surface) !important;
+    font-size: 13px;
+  }
+}
+
+.toolHint {
+  font-size: 11px;
+  color: var(--color-on-surface-variant);
+  padding: 2px 8px;
+  background: rgba(var(--color-primary-rgb), 0.06);
+  border-radius: 4px;
+  letter-spacing: 0.01em;
+}
+
+/* ================================================================
+ * 布局设置 —— 切换段 + 说明区
+ * ================================================================ */
+.layoutSwitch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  background: rgba(var(--color-primary-rgb), 0.04);
+  border-radius: 10px;
+  border: 1px solid rgba(var(--color-primary-rgb), 0.08);
+
+  :global([data-theme='dark']) & {
+    background: rgba(var(--color-primary-rgb), 0.08);
+    border-color: rgba(var(--color-primary-rgb), 0.16);
+  }
+}
+
+.layoutTemplateHint {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+
+  .hintText {
+    flex: 1;
+    font-size: 13px;
+    color: var(--color-on-surface-variant);
+    line-height: 1.7;
+
+    strong {
+      color: var(--color-primary);
+      font-weight: 600;
+    }
+  }
+}
+
+/* ================================================================
+ * 保存大按钮 —— 紫渐变 hero CTA
+ * 用法：<Button className={styles.saveBtn}>
+ * ================================================================ */
+.saveBtn {
+  height: 46px !important;
+  font-size: 15px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.02em;
+  border-radius: 12px !important;
+  background: linear-gradient(
+    135deg,
+    var(--color-primary),
+    oklch(0.52 0.16 260)
+  ) !important;
+  border: none !important;
+  box-shadow:
+    0 4px 14px -2px rgba(var(--color-primary-rgb), 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+
+  &:hover {
+    filter: brightness(1.08);
+    transform: translateY(-1px);
+    box-shadow:
+      0 8px 20px -4px rgba(var(--color-primary-rgb), 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.25) !important;
+  }
+
+  &:disabled {
+    background: var(--color-surface-container) !important;
+    box-shadow: none !important;
+    filter: grayscale(0.4);
+  }
+}
+
+/* ================================================================
+ * 右侧预览：形象占位空态（没选模板时）
+ * ================================================================ */
+.previewEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 180px;
+  gap: 12px;
+  background: linear-gradient(
+    135deg,
+    rgba(var(--color-primary-rgb), 0.04),
+    transparent
+  );
+  border-radius: 10px;
+  color: var(--color-on-surface-variant);
+
+  .material-symbols-outlined,
+  :global(.material-symbols-outlined) {
+    font-size: 48px;
+    color: var(--color-primary);
+    opacity: 0.3;
+  }
+
+  .hint {
+    font-size: 13px;
+    letter-spacing: 0.02em;
+  }
+}
+
+/* 状态切换按钮组（待机 / 思考 / 说话）—— 胶囊组 */
+.stateBtns {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 4px;
+  background: rgba(var(--color-primary-rgb), 0.04);
+  border-radius: 10px;
+
+  :global([data-theme='dark']) & {
+    background: rgba(var(--color-primary-rgb), 0.08);
+  }
+}
+
+/* ================================================================
+ * 融合模式警告（替代光秃秃的 <Alert>）
+ * 用法：在 <Alert> 外加 className={styles.fusionAlert}
+ * ================================================================ */
+.fusionAlert {
+  margin-bottom: 14px !important;
+  border-radius: 12px !important;
+  border: 1px solid oklch(0.82 0.14 55 / 0.5) !important;
+  background: linear-gradient(
+    135deg,
+    oklch(0.95 0.08 65 / 0.6),
+    oklch(0.92 0.06 55 / 0.3)
+  ) !important;
+  backdrop-filter: blur(12px);
+
+  :global([data-theme='dark']) & {
+    background: linear-gradient(
+      135deg,
+      oklch(0.35 0.08 55 / 0.4),
+      oklch(0.30 0.06 50 / 0.2)
+    ) !important;
+    border-color: oklch(0.50 0.12 55 / 0.5) !important;
+  }
+}
+
+/* ================================================================
+ * 响应式
+ * ================================================================ */
+@media (max-width: 1280px) {
+  .root {
+    flex-direction: column;
+  }
+
+  .right {
+    position: static;
+    max-height: none;
+    width: 100%;
+  }
+}
+
+/* ================================================================
+ * 挡位 2 · AntD 控件紫色适配
+ * 作用域：.root（只影响本页，不外溢）
+ * 覆盖 AntD 默认蓝色控件，对齐 mockup 紫玻璃风
+ * ================================================================ */
+.root {
+  /* ----- Select ----- */
+  :global(.ant-select-selector) {
+    background: rgba(255, 255, 255, 0.9) !important;
+    border-color: var(--color-outline-variant) !important;
+    border-radius: 6px !important;
+    transition: all 180ms ease;
+  }
+  :global(.ant-select:hover .ant-select-selector),
+  :global(.ant-select-focused .ant-select-selector) {
+    border-color: var(--color-primary) !important;
+    box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb), 0.1) !important;
+  }
+  :global([data-theme='dark']) & :global(.ant-select-selector) {
+    background: rgba(26, 33, 57, 0.6) !important;
+  }
+
+  /* ----- Slider ----- */
+  :global(.ant-slider-rail) {
+    background: var(--color-outline-variant) !important;
+  }
+  :global(.ant-slider-track),
+  :global(.ant-slider:hover .ant-slider-track) {
+    background: var(--color-primary) !important;
+  }
+  :global(.ant-slider-handle::after) {
+    box-shadow: 0 0 0 2px var(--color-primary) !important;
+  }
+  :global(.ant-slider-handle:hover::after),
+  :global(.ant-slider-handle:focus::after) {
+    box-shadow: 0 0 0 4px rgba(var(--color-primary-rgb), 0.2) !important;
+  }
+
+  /* ----- Switch ----- */
+  :global(.ant-switch-checked) {
+    background: var(--color-primary) !important;
+  }
+  :global(.ant-switch-checked:hover:not(.ant-switch-disabled)) {
+    background: var(--color-primary-deep) !important;
+  }
+
+  /* ----- Segmented ----- */
+  :global(.ant-segmented) {
+    background: rgba(255, 255, 255, 0.6) !important;
+    border: 1px solid var(--color-outline-variant);
+    border-radius: 8px !important;
+    padding: 2px !important;
+  }
+  :global(.ant-segmented-item-selected) {
+    background: #fff !important;
+    color: var(--color-primary) !important;
+    font-weight: 600 !important;
+    box-shadow: 0 1px 3px rgba(24, 28, 60, 0.08) !important;
+  }
+  :global([data-theme='dark']) & :global(.ant-segmented) {
+    background: rgba(26, 33, 57, 0.5) !important;
+  }
+  :global([data-theme='dark']) & :global(.ant-segmented-item-selected) {
+    background: var(--color-surface-container-high) !important;
+  }
+
+  /* ----- Input / Textarea / InputNumber ----- */
+  :global(.ant-input),
+  :global(.ant-input-number),
+  :global(.ant-input-number-input),
+  :global(textarea.ant-input) {
+    background: rgba(255, 255, 255, 0.9) !important;
+    border-color: var(--color-outline-variant) !important;
+  }
+  :global(.ant-input:hover),
+  :global(.ant-input-number:hover),
+  :global(.ant-input:focus),
+  :global(.ant-input-focused),
+  :global(.ant-input-number-focused) {
+    border-color: var(--color-primary) !important;
+    box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb), 0.1) !important;
+  }
+  :global([data-theme='dark']) & :global(.ant-input),
+  :global([data-theme='dark']) & :global(.ant-input-number),
+  :global([data-theme='dark']) & :global(textarea.ant-input) {
+    background: rgba(26, 33, 57, 0.6) !important;
+  }
+
+  /* ----- Checkbox ----- */
+  :global(.ant-checkbox-checked .ant-checkbox-inner) {
+    background: var(--color-primary) !important;
+    border-color: var(--color-primary) !important;
+  }
+  :global(.ant-checkbox-wrapper:hover .ant-checkbox-inner),
+  :global(.ant-checkbox:hover .ant-checkbox-inner) {
+    border-color: var(--color-primary) !important;
+  }
+
+  /* ----- Table（知识库 / 任何 Card 内的表） ----- */
+  :global(.ant-table) {
+    background: transparent !important;
+    font-size: 12px;
+  }
+  :global(.ant-table-thead > tr > th) {
+    background: transparent !important;
+    border-bottom: 1px solid var(--color-outline-variant) !important;
+    color: var(--color-on-surface-variant) !important;
+    font-weight: 500 !important;
+    padding: 8px 10px !important;
+  }
+  :global(.ant-table-tbody > tr > td) {
+    background: transparent !important;
+    border-bottom: 1px solid rgba(var(--color-primary-rgb), 0.06) !important;
+    padding: 10px !important;
+    color: var(--color-on-surface) !important;
+    font-variant-numeric: tabular-nums;
+  }
+  :global(.ant-table-tbody > tr:last-child > td) {
+    border-bottom: none !important;
+  }
+  :global(.ant-table-tbody > tr:hover > td) {
+    background: rgba(var(--color-primary-rgb), 0.04) !important;
+  }
+
+  /* ----- Tag（解析状态等） ----- */
+  :global(.ant-tag-success),
+  :global(.ant-tag-green) {
+    background: oklch(0.92 0.12 155 / 0.4) !important;
+    color: oklch(0.40 0.15 155) !important;
+    border-color: transparent !important;
+  }
+  :global(.ant-tag-processing),
+  :global(.ant-tag-blue) {
+    background: oklch(0.92 0.10 230 / 0.4) !important;
+    color: oklch(0.42 0.15 230) !important;
+    border-color: transparent !important;
+  }
+  :global([data-theme='dark']) & :global(.ant-tag-success),
+  :global([data-theme='dark']) & :global(.ant-tag-green) {
+    background: oklch(0.35 0.10 155 / 0.3) !important;
+    color: oklch(0.78 0.14 155) !important;
+  }
+  :global([data-theme='dark']) & :global(.ant-tag-processing),
+  :global([data-theme='dark']) & :global(.ant-tag-blue) {
+    background: oklch(0.35 0.10 230 / 0.3) !important;
+    color: oklch(0.78 0.14 230) !important;
+  }
+
+  /* ----- 普通 Button（非 saveBtn / 非 type=primary）紫色描边悬浮 ----- */
+  :global(.ant-btn-default) {
+    background: rgba(255, 255, 255, 0.9) !important;
+    border-color: var(--color-outline-variant) !important;
+    color: var(--color-on-surface) !important;
+  }
+  :global(.ant-btn-default:hover) {
+    border-color: var(--color-primary) !important;
+    color: var(--color-primary) !important;
+    background: rgba(var(--color-primary-rgb), 0.04) !important;
+  }
+  :global([data-theme='dark']) & :global(.ant-btn-default) {
+    background: rgba(26, 33, 57, 0.6) !important;
+  }
+}
