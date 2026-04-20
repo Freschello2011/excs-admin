@@ -22,6 +22,7 @@ import WhiteboardLayoutEditor, {
   DEFAULT_LAYOUT_CONFIG, LayoutPreview,
 } from '@/components/ai/WhiteboardLayoutEditor';
 import HotwordExtensionsEditor from '@/components/ai/HotwordExtensionsEditor';
+import styles from './AiAvatarConfigPanel.module.scss';
 
 interface AiAvatarConfigPanelProps {
   exhibitId: number;
@@ -398,14 +399,14 @@ export default function AiAvatarConfigPanel({ exhibitId, hallId }: AiAvatarConfi
   const isFusionExhibit = avatarDetail?.exhibit_display_mode === 'simple_fusion';
 
   return (
-    <div style={{ display: 'flex', gap: 16 }}>
+    <div className={styles.root}>
       {/* ═══════════ Left: Config Area (50%) ═══════════ */}
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div className={styles.left}>
         {isFusionExhibit && (
           <Alert
             type="warning"
             showIcon
-            style={{ marginBottom: 12 }}
+            className={styles.fusionAlert}
             message="融合模式展项暂不支持 AI 互动"
             description="AI 互动依赖白板 + 数字人双区域布局，与融合模式矩阵拼接冲突。访客输入/激活均已禁用。"
           />
@@ -429,13 +430,13 @@ export default function AiAvatarConfigPanel({ exhibitId, hallId }: AiAvatarConfi
           {/* ─── 形象选择 ─── */}
           <Card
             size="small"
+            className={styles.glassCard}
             title={
               <Space>
                 <span className="material-symbols-outlined" style={{ fontSize: 18 }}>smart_toy</span>
                 <span>形象选择</span>
               </Space>
             }
-            style={{ marginBottom: 16 }}
           >
             <Form.Item name="template_id" style={{ marginBottom: 8 }}>
               <Select
@@ -453,33 +454,17 @@ export default function AiAvatarConfigPanel({ exhibitId, hallId }: AiAvatarConfi
               />
             </Form.Item>
             {selectedTemplate && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-                <div
-                  style={{
-                    width: 64, height: 48, borderRadius: 6,
-                    background: 'var(--ant-color-bg-layout)',
-                    overflow: 'hidden', flexShrink: 0,
-                  }}
-                >
+              <div className={styles.templatePick}>
+                <div className={styles.templateThumb}>
                   {selectedTemplate.thumbnail_url ? (
-                    <img
-                      src={selectedTemplate.thumbnail_url}
-                      alt={selectedTemplate.name}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    />
+                    <img src={selectedTemplate.thumbnail_url} alt={selectedTemplate.name} />
                   ) : (
-                    <div style={{
-                      width: '100%', height: '100%', display: 'flex',
-                      alignItems: 'center', justifyContent: 'center',
-                      color: 'var(--ant-color-text-quaternary)',
-                    }}>
-                      <span className="material-symbols-outlined" style={{ fontSize: 24 }}>smart_toy</span>
-                    </div>
+                    <span className="material-symbols-outlined">smart_toy</span>
                   )}
                 </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 500 }}>{selectedTemplate.name}</div>
-                  <div style={{ fontSize: 12, color: 'var(--ant-color-text-secondary)' }}>
+                <div className={styles.templateInfo}>
+                  <div className={styles.templateName}>{selectedTemplate.name}</div>
+                  <div className={styles.templateMeta}>
                     {selectedTemplate.status === 'ready' ? '雪碧图就绪' : selectedTemplate.status}
                     {' · '}已关联 {selectedTemplate.reference_count} 个展项
                   </div>
@@ -488,7 +473,7 @@ export default function AiAvatarConfigPanel({ exhibitId, hallId }: AiAvatarConfi
             )}
             <a
               onClick={() => window.open('#/ai-avatar-library', '_blank')}
-              style={{ fontSize: 13 }}
+              className={styles.templateLink}
             >
               前往形象库管理 →
             </a>
@@ -497,13 +482,13 @@ export default function AiAvatarConfigPanel({ exhibitId, hallId }: AiAvatarConfi
           {/* ─── 语音配置 ─── */}
           <Card
             size="small"
+            className={styles.glassCard}
             title={
               <Space>
                 <span className="material-symbols-outlined" style={{ fontSize: 18 }}>record_voice_over</span>
                 <span>语音配置</span>
               </Space>
             }
-            style={{ marginBottom: 16 }}
           >
             <Form.Item name="voice_id" label="声音" style={{ marginBottom: 12 }}>
               <Select
@@ -542,13 +527,13 @@ export default function AiAvatarConfigPanel({ exhibitId, hallId }: AiAvatarConfi
           {/* ─── 知识配置 ─── */}
           <Card
             size="small"
+            className={styles.glassCard}
             title={
               <Space>
                 <span className="material-symbols-outlined" style={{ fontSize: 18 }}>school</span>
                 <span>知识配置</span>
               </Space>
             }
-            style={{ marginBottom: 16 }}
           >
             <Tabs
               size="small"
@@ -682,24 +667,22 @@ export default function AiAvatarConfigPanel({ exhibitId, hallId }: AiAvatarConfi
           {/* ─── 智能体能力 ─── */}
           <Card
             size="small"
+            className={styles.glassCard}
             title={
               <Space>
                 <span className="material-symbols-outlined" style={{ fontSize: 18 }}>psychology</span>
                 <span>智能体能力</span>
               </Space>
             }
-            style={{ marginBottom: 16 }}
           >
             <Form.Item name="tools_enabled" label="工具能力" style={{ marginBottom: 12 }}>
               <Checkbox.Group style={{ width: '100%' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div className={styles.toolsList}>
                   {ALL_TOOLS.map((tool) => (
-                    <div key={tool.key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <label key={tool.key} className={styles.toolRow}>
                       <Checkbox value={tool.key}>{tool.label} ({tool.key})</Checkbox>
                       {tool.hint && (
-                        <span style={{ fontSize: 11, color: 'var(--ant-color-text-quaternary)' }}>
-                          {tool.hint}
-                        </span>
+                        <span className={styles.toolHint}>{tool.hint}</span>
                       )}
                       {tool.key === 'search_by_tag' && (
                         <Popover
@@ -711,7 +694,7 @@ export default function AiAvatarConfigPanel({ exhibitId, hallId }: AiAvatarConfi
                           <Button type="text" size="small" icon={<SettingOutlined />} />
                         </Popover>
                       )}
-                    </div>
+                    </label>
                   ))}
                 </div>
               </Checkbox.Group>
@@ -757,18 +740,15 @@ export default function AiAvatarConfigPanel({ exhibitId, hallId }: AiAvatarConfi
           {/* ─── 布局设置 (白板 v1.3) ─── */}
           <Card
             size="small"
+            className={styles.glassCard}
             title={
               <Space>
                 <span className="material-symbols-outlined" style={{ fontSize: 18 }}>dashboard</span>
                 <span>布局设置</span>
               </Space>
             }
-            style={{ marginBottom: 16 }}
           >
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              marginBottom: 12, gap: 12,
-            }}>
+            <div className={styles.layoutSwitch}>
               <Segmented
                 value={layoutMode}
                 onChange={(v) => {
@@ -801,8 +781,8 @@ export default function AiAvatarConfigPanel({ exhibitId, hallId }: AiAvatarConfi
             </div>
 
             {layoutMode === 'template' ? (
-              <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-                <div style={{ flex: 1, fontSize: 13, color: 'var(--ant-color-text-secondary)', lineHeight: 1.7 }}>
+              <div className={styles.layoutTemplateHint}>
+                <div className={styles.hintText}>
                   当前生效布局来自模板 <strong>{avatarDetail?.template_name ?? '-'}</strong> 的默认值。
                   如需针对本展项（屏幕比例 / 物理布局 / 内容性质）定制白板位置，切到"展项级覆盖"。
                 </div>
@@ -825,13 +805,13 @@ export default function AiAvatarConfigPanel({ exhibitId, hallId }: AiAvatarConfi
           {/* ─── 媒体参数 ─── */}
           <Card
             size="small"
+            className={styles.glassCard}
             title={
               <Space>
                 <span className="material-symbols-outlined" style={{ fontSize: 18 }}>slideshow</span>
                 <span>媒体参数</span>
               </Space>
             }
-            style={{ marginBottom: 16 }}
           >
             <div style={{ display: 'flex', gap: 16 }}>
               <Form.Item
@@ -856,13 +836,13 @@ export default function AiAvatarConfigPanel({ exhibitId, hallId }: AiAvatarConfi
           {/* ─── 本地热词拦截 ─── */}
           <Card
             size="small"
+            className={styles.glassCard}
             title={
               <Space>
                 <span className="material-symbols-outlined" style={{ fontSize: 18 }}>hearing</span>
                 <span>本地热词拦截</span>
               </Space>
             }
-            style={{ marginBottom: 16 }}
           >
             <Form.Item
               name="hotword_enabled"
@@ -888,6 +868,7 @@ export default function AiAvatarConfigPanel({ exhibitId, hallId }: AiAvatarConfi
             type="primary"
             size="large"
             block
+            className={styles.saveBtn}
             disabled={isFusionExhibit}
             onClick={handleSave}
             loading={updateMutation.isPending}
@@ -899,14 +880,11 @@ export default function AiAvatarConfigPanel({ exhibitId, hallId }: AiAvatarConfi
       </div>
 
       {/* ═══════════ Right: Preview Area (50%) — sticky sidebar ═══════════ */}
-      <div style={{
-        flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16,
-        position: 'sticky', top: 0, alignSelf: 'flex-start',
-        maxHeight: 'calc(100vh - 64px - 32px)', overflowY: 'auto',
-      }}>
+      <div className={styles.right}>
         {/* ─── Sprite Preview ─── */}
         <Card
           size="small"
+          className={styles.glassCard}
           title={
             <Space>
               <span className="material-symbols-outlined" style={{ fontSize: 18 }}>smart_toy</span>
@@ -923,18 +901,15 @@ export default function AiAvatarConfigPanel({ exhibitId, hallId }: AiAvatarConfi
               activeState={avatarState}
             />
           ) : (
-            <div style={{
-              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              height: 160, color: 'var(--ant-color-text-quaternary)', gap: 8,
-            }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 40 }}>smart_toy</span>
-              <span style={{ fontSize: 13 }}>请先选择形象模板</span>
+            <div className={styles.previewEmpty}>
+              <span className="material-symbols-outlined">smart_toy</span>
+              <span className={styles.hint}>请先选择形象模板</span>
             </div>
           )}
 
           {/* Manual state buttons (always visible when template selected) */}
           {selectedTemplateId > 0 && templateDetail && (
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 8 }}>
+            <div className={styles.stateBtns}>
               {(['idle', 'thinking', 'talking'] as const).map((state) => (
                 <Button
                   key={state}
@@ -952,6 +927,7 @@ export default function AiAvatarConfigPanel({ exhibitId, hallId }: AiAvatarConfi
         {/* ─── Chat Simulator ─── */}
         <Card
           size="small"
+          className={styles.glassCard}
           title={
             <Space>
               <span className="material-symbols-outlined" style={{ fontSize: 18 }}>chat</span>

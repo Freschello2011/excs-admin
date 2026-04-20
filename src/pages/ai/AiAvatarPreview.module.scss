@@ -1,14 +1,26 @@
-/* ==================== AI Avatar State Preview ==================== */
+/* ==================== AI Avatar State Preview · 紫玻璃版 ====================
+ * 直接替换：src/pages/ai/AiAvatarPreview.module.scss
+ *
+ * 变化：
+ *   - 所有 --ant-color-* 迁移到 --color-* 新 token
+ *   - 状态卡改浅紫玻璃（跟 ExhibitDetail 的 .kv 同款）
+ *   - 动画呼吸从"硬阴影扩张"改成"柔和光晕 + 缩放"
+ *   - 回流虚线走 --color-primary 半透明
+ *   - 暗色模式自动跟随
+ * ============================================================================ */
 
 .preview {
-  margin-top: 24px;
+  margin-top: 20px;
 }
 
 .previewTitle {
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 600;
   margin-bottom: 16px;
-  color: var(--ant-color-text);
+  color: var(--color-on-surface);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  opacity: 0.85;
 }
 
 /* ---- state flow row ---- */
@@ -20,110 +32,199 @@
   flex-wrap: nowrap;
 }
 
-/* ---- state card ---- */
+/* ---- state card（玻璃风） ---- */
 .stateCard {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   width: 140px;
-  min-height: 100px;
-  padding: 16px 12px;
-  border-radius: 12px;
-  border: 2px solid var(--ant-color-border);
-  background: var(--ant-color-bg-container);
-  transition: border-color 0.3s, box-shadow 0.3s;
+  min-height: 104px;
+  padding: 14px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 1px 2px rgba(24, 28, 60, 0.04),
+    0 4px 10px -3px rgba(80, 60, 170, 0.08);
+  transition: all 280ms cubic-bezier(0.4, 0, 0.2, 1);
   text-align: center;
   user-select: none;
+  position: relative;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 10px;
+    right: 10px;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.95) 50%,
+      transparent
+    );
+  }
+
+  :global([data-theme='dark']) & {
+    background: rgba(26, 33, 57, 0.72);
+    border-color: rgba(53, 62, 92, 0.6);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.05),
+      0 1px 2px rgba(0, 0, 0, 0.35),
+      0 4px 10px -3px rgba(40, 20, 90, 0.3);
+
+    &::before {
+      background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.08) 50%,
+        transparent
+      );
+    }
+  }
 }
 
 .stateIcon {
   font-size: 28px;
-  color: var(--ant-color-text-secondary);
+  color: var(--color-on-surface-variant);
   margin-bottom: 6px;
-  transition: color 0.3s;
+  transition: color 280ms, transform 280ms;
+  opacity: 0.8;
 }
 
 .stateName {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--ant-color-text);
-  margin-bottom: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-on-surface);
+  margin-bottom: 3px;
+  letter-spacing: 0.01em;
 }
 
 .videoName {
-  font-size: 12px;
-  color: var(--ant-color-text-quaternary);
+  font-size: 11px;
+  color: var(--color-outline);
   max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  letter-spacing: 0.01em;
 }
 
-/* active (simulating) state */
+/* ---- active state (simulating) ---- */
 .stateCard.active {
-  border-color: var(--ant-color-primary);
-  box-shadow: 0 0 0 3px var(--ant-color-primary-bg);
-  animation: cardPulse 1.5s ease-in-out infinite;
+  background: linear-gradient(
+    135deg,
+    rgba(var(--color-primary-rgb), 0.12),
+    oklch(0.55 0.16 230 / 0.06)
+  );
+  border-color: rgba(var(--color-primary-rgb), 0.45);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 0 0 4px rgba(var(--color-primary-rgb), 0.12),
+    0 8px 24px -6px rgba(var(--color-primary-rgb), 0.35);
+  transform: translateY(-2px);
+  animation: cardBreathe 1.6s ease-in-out infinite;
+
+  .stateIcon {
+    color: var(--color-primary);
+    opacity: 1;
+    transform: scale(1.08);
+  }
+
+  .stateName {
+    color: var(--color-primary);
+  }
+
+  :global([data-theme='dark']) & {
+    background: linear-gradient(
+      135deg,
+      rgba(var(--color-primary-rgb), 0.20),
+      oklch(0.60 0.14 230 / 0.10)
+    );
+    border-color: rgba(var(--color-primary-rgb), 0.55);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      0 0 0 4px rgba(var(--color-primary-rgb), 0.18),
+      0 8px 24px -6px rgba(var(--color-primary-rgb), 0.45);
+  }
 }
 
-.stateCard.active .stateIcon {
-  color: var(--ant-color-primary);
-}
-
-@keyframes cardPulse {
-  0%, 100% { box-shadow: 0 0 0 3px var(--ant-color-primary-bg); }
-  50%      { box-shadow: 0 0 0 6px var(--ant-color-primary-bg-hover); }
+@keyframes cardBreathe {
+  0%, 100% {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.9),
+      0 0 0 4px rgba(var(--color-primary-rgb), 0.12),
+      0 8px 24px -6px rgba(var(--color-primary-rgb), 0.35);
+  }
+  50% {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.9),
+      0 0 0 8px rgba(var(--color-primary-rgb), 0.18),
+      0 12px 32px -6px rgba(var(--color-primary-rgb), 0.45);
+  }
 }
 
 /* ---- arrows between cards ---- */
 .arrow {
   display: flex;
   align-items: center;
-  padding: 0 8px;
-  font-size: 20px;
-  color: var(--ant-color-text-quaternary);
+  padding: 0 10px;
+  font-size: 18px;
+  color: var(--color-outline);
   flex-shrink: 0;
   animation: arrowSlide 2s ease-in-out infinite;
+  opacity: 0.55;
 }
 
 @keyframes arrowSlide {
-  0%, 100% { opacity: 0.5; transform: translateX(0); }
-  50%      { opacity: 1; transform: translateX(3px); }
+  0%, 100% { opacity: 0.4; transform: translateX(0); }
+  50%      { opacity: 0.9; transform: translateX(3px); color: var(--color-primary); }
 }
 
 /* ---- return arrow (dashed path below cards) ---- */
 .returnArrow {
   display: flex;
   justify-content: center;
-  margin-top: 8px;
+  margin-top: 10px;
   position: relative;
 }
 
 .returnPath {
   width: 340px;
   height: 28px;
-  border: 2px dashed var(--ant-color-border);
+  border: 1.5px dashed rgba(var(--color-primary-rgb), 0.35);
   border-top: none;
   border-radius: 0 0 16px 16px;
   position: relative;
+
+  :global([data-theme='dark']) & {
+    border-color: rgba(var(--color-primary-rgb), 0.45);
+  }
 }
 
 .returnLabel {
   position: absolute;
-  bottom: -8px;
+  bottom: -9px;
   left: 50%;
   transform: translateX(-50%);
   font-size: 11px;
-  color: var(--ant-color-text-quaternary);
-  background: var(--ant-color-bg-layout);
-  padding: 0 8px;
+  color: var(--color-on-surface-variant);
+  background: var(--color-surface-container);
+  padding: 1px 10px;
   white-space: nowrap;
+  border-radius: 6px;
+  border: 1px solid var(--color-outline-variant);
+  letter-spacing: 0.02em;
 }
 
 /* ---- simulate button ---- */
 .simulateBtn {
   display: flex;
   justify-content: center;
-  margin-top: 20px;
+  margin-top: 22px;
 }
