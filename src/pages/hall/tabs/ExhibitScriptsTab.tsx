@@ -19,28 +19,27 @@ export default function ExhibitScriptsTab({ hallId, exhibitId, canManage }: Prop
   const [scripts, setScripts] = useState<ExhibitScript[]>([]);
   const [dirty, setDirty] = useState(false);
 
-  // Load exhibit data to get script_count, then initialize
-  const { data: exhibits = [] } = useQuery({
-    queryKey: queryKeys.exhibits(hallId),
-    queryFn: () => hallApi.getExhibits(hallId),
+  const { data: serverScripts } = useQuery({
+    queryKey: queryKeys.exhibitScripts(hallId, exhibitId),
+    queryFn: () => hallApi.getExhibitScripts(hallId, exhibitId),
     select: (res) => res.data.data,
+    enabled: Boolean(exhibitId),
   });
 
-  const exhibit = exhibits.find((e) => e.id === exhibitId);
-
   useEffect(() => {
-    if (exhibit) {
-      // Initialize with empty scripts based on count
-      if (exhibit.script_count > 0) {
-        setScripts(
-          Array.from({ length: exhibit.script_count }, (_, i) => ({ content: '', sort_order: i + 1 })),
-        );
-      } else {
-        setScripts([{ content: '', sort_order: 1 }]);
-      }
-      setDirty(false);
+    if (!serverScripts) return;
+    if (serverScripts.length > 0) {
+      setScripts(
+        serverScripts.map((s, i) => ({
+          content: s.content,
+          sort_order: s.sort_order ?? i + 1,
+        })),
+      );
+    } else {
+      setScripts([{ content: '', sort_order: 1 }]);
     }
-  }, [exhibit?.id, exhibit?.script_count]);
+    setDirty(false);
+  }, [serverScripts]);
 
   const saveMutation = useMutation({
     mutationFn: (data: ExhibitScript[]) =>
@@ -49,6 +48,7 @@ export default function ExhibitScriptsTab({ hallId, exhibitId, canManage }: Prop
       message.success('讲解词已保存');
       setDirty(false);
       queryClient.invalidateQueries({ queryKey: queryKeys.exhibits(hallId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.exhibitScripts(hallId, exhibitId) });
     },
   });
 

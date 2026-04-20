@@ -106,6 +106,11 @@ export const hallApi = {
     return request.put(`/api/v1/halls/${hallId}/exhibits/${exhibitId}/scripts`, { scripts });
   },
 
+  /** 11a. 获取讲解词 */
+  getExhibitScripts(hallId: number, exhibitId: number): Promise<AxiosResponse<ApiResponse<ExhibitScript[]>>> {
+    return request.get(`/api/v1/halls/${hallId}/exhibits/${exhibitId}/scripts`);
+  },
+
   /* ==================== Device ==================== */
 
   /** 12. 创建设备 */

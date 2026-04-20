@@ -9,6 +9,7 @@ export const queryKeys = {
   hallDetail: (id: number) => ['hall', id] as const,
   hallStatus: (id: number) => ['hall', id, 'status'] as const,
   exhibits: (hallId: number) => ['hall', hallId, 'exhibits'] as const,
+  exhibitScripts: (hallId: number, exhibitId: number) => ['hall', hallId, 'exhibits', exhibitId, 'scripts'] as const,
   devices: (params: Record<string, unknown>) => ['devices', params] as const,
   effectiveCommands: (deviceId: number) => ['devices', deviceId, 'effective-commands'] as const,
   appInstances: (hallId: number) => ['hall', hallId, 'app-instances'] as const,
