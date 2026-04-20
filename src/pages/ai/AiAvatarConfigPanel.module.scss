@@ -26,6 +26,14 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+
+  // Form 是 .left 的直接子，.left 的 gap 不传递到 Form 内部的 Card；
+  // 让 Form 本身也以 flex-column + gap 排列 Card + 保存按钮
+  :global(.ant-form) {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
 }
 
 .right {
