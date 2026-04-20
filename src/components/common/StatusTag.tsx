@@ -71,6 +71,8 @@ export default function StatusTag({ status, label }: StatusTagProps) {
         gap: 6,
         margin: 0,
         lineHeight: '18px',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
       }}
     >
       <span

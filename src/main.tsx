@@ -50,10 +50,11 @@ function Root() {
             Table: {
               cellPaddingBlock: 12,
               headerSplitColor: 'transparent',
-              headerBg: currentTheme === 'dark' ? 'rgba(26, 33, 57, 0.6)' : 'rgba(241, 241, 248, 0.8)',
-              headerColor: currentTheme === 'dark' ? '#E6E8F2' : '#0F1226',
+              // 低饱和表头——mockup thead: rgba(247,248,252,.6) + 浅灰字 + 11px/600/tracking
+              headerBg: currentTheme === 'dark' ? 'rgba(26, 33, 57, 0.5)' : 'rgba(247, 248, 252, 0.6)',
+              headerColor: currentTheme === 'dark' ? '#B4B8CC' : '#8A93A5',
               rowHoverBg: currentTheme === 'dark' ? 'rgba(166, 141, 255, 0.06)' : 'rgba(106, 78, 232, 0.04)',
-              borderColor: currentTheme === 'dark' ? '#353E5C' : '#E0E1EC',
+              borderColor: currentTheme === 'dark' ? '#353E5C' : 'rgba(220, 224, 236, 0.4)',
             },
             Menu: { itemSelectedBg: 'rgba(106, 78, 232, 0.12)' },
             Card: {
@@ -69,6 +70,17 @@ function Root() {
             Statistic: {
               titleFontSize: 13,
               contentFontSize: 28,
+            },
+            Tabs: {
+              itemColor: currentTheme === 'dark' ? '#B4B8CC' : '#4A4D63',
+              itemHoverColor: tokens.primary,
+              itemSelectedColor: tokens.primary,
+              itemActiveColor: tokens.primary,
+              inkBarColor: tokens.primary,
+              horizontalItemPadding: '10px 0',
+              horizontalItemGutter: 24,
+              titleFontSize: 13,
+              cardBg: 'transparent',
             },
           },
         }}

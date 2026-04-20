@@ -103,45 +103,68 @@ export default function ExhibitScriptsTab({ hallId, exhibitId, canManage }: Prop
       }
     >
       {scripts.map((script, idx) => (
-        <div key={idx} style={{ marginBottom: 12 }}>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-            <span style={{ minWidth: 28, lineHeight: '32px', color: 'var(--color-outline)' }}>
-              {idx + 1}.
-            </span>
-            <Input.TextArea
-              rows={3}
-              value={script.content}
-              onChange={(e) => updateScript(idx, e.target.value)}
-              placeholder="输入讲解内容..."
-              disabled={!canManage}
-            />
-            {canManage && (
-              <Space direction="vertical" size={2}>
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<ArrowUpOutlined />}
-                  onClick={() => moveScript(idx, 'up')}
-                  disabled={idx === 0}
-                />
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<ArrowDownOutlined />}
-                  onClick={() => moveScript(idx, 'down')}
-                  disabled={idx === scripts.length - 1}
-                />
-                <Button
-                  type="text"
-                  danger
-                  size="small"
-                  icon={<DeleteOutlined />}
-                  onClick={() => removeScript(idx)}
-                  disabled={scripts.length <= 1}
-                />
-              </Space>
-            )}
+        <div
+          key={idx}
+          style={{
+            display: 'flex',
+            gap: 12,
+            alignItems: 'flex-start',
+            padding: '14px 0',
+            borderBottom: idx < scripts.length - 1 ? '1px dashed var(--color-outline-variant)' : 'none',
+          }}
+        >
+          {/* 紫色圆角编号徽章 */}
+          <div
+            style={{
+              flexShrink: 0,
+              width: 28,
+              height: 28,
+              borderRadius: 8,
+              background: 'rgba(var(--color-primary-rgb), 0.12)',
+              color: 'var(--color-primary)',
+              fontSize: 12,
+              fontWeight: 600,
+              display: 'grid',
+              placeItems: 'center',
+              marginTop: 4,
+            }}
+          >
+            {idx + 1}
           </div>
+          <Input.TextArea
+            rows={3}
+            value={script.content}
+            onChange={(e) => updateScript(idx, e.target.value)}
+            placeholder="输入讲解内容..."
+            disabled={!canManage}
+            style={{ flex: 1 }}
+          />
+          {canManage && (
+            <Space direction="vertical" size={2}>
+              <Button
+                type="text"
+                size="small"
+                icon={<ArrowUpOutlined />}
+                onClick={() => moveScript(idx, 'up')}
+                disabled={idx === 0}
+              />
+              <Button
+                type="text"
+                size="small"
+                icon={<ArrowDownOutlined />}
+                onClick={() => moveScript(idx, 'down')}
+                disabled={idx === scripts.length - 1}
+              />
+              <Button
+                type="text"
+                danger
+                size="small"
+                icon={<DeleteOutlined />}
+                onClick={() => removeScript(idx)}
+                disabled={scripts.length <= 1}
+              />
+            </Space>
+          )}
         </div>
       ))}
 

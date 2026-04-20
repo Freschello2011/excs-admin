@@ -1,0 +1,411 @@
+// ExhibitDetailPage — 紫玻璃风，基本信息 + 页头
+// 全部走 global.scss 的 CSS 变量，跟随暗色模式自动切
+
+// ========== 外层玻璃胶囊 Tab 组（基本信息 / 设备·内容） ==========
+.outerTabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: 12px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  margin-bottom: 20px;
+
+  :global([data-theme='dark']) & {
+    background: rgba(26, 33, 57, 0.5);
+    border-color: rgba(53, 62, 92, 0.5);
+  }
+}
+
+.outerTab {
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-on-surface-variant);
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 180ms ease;
+  font-family: inherit;
+  line-height: 1.5;
+
+  &:hover {
+    color: var(--color-on-surface);
+  }
+
+  // 键盘 focus 焦点环（鼠标点击不显示）
+  &:focus {
+    outline: none;
+  }
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+}
+
+.outerTabActive {
+  background: #fff;
+  color: var(--color-primary);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    0 1px 2px rgba(24, 28, 60, 0.06),
+    0 4px 8px -2px rgba(80, 60, 170, 0.1);
+
+  &:hover {
+    color: var(--color-primary);
+  }
+
+  :global([data-theme='dark']) & {
+    background: var(--color-surface-container-high);
+    color: var(--color-primary);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.05),
+      0 1px 2px rgba(0, 0, 0, 0.35),
+      0 4px 8px -2px rgba(40, 20, 90, 0.25);
+  }
+}
+
+// ========== 页头（替代 AntD 5 已废弃的 PageHeader） ==========
+.pageHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.pageHeaderLeft {
+  min-width: 0;
+  flex: 1;
+}
+
+.pageHeaderTitle {
+  margin: 0 0 6px;
+  font-size: 26px;
+  letter-spacing: -0.02em;
+  color: var(--color-on-background);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pageHeaderDesc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-on-surface-variant);
+}
+
+.pageHeaderActions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+// 展示模式彩色胶囊（紫蓝渐变 + 浅薰衣草描边 — 对齐 preview .tag-mode）
+.tagMode {
+  background: linear-gradient(
+    135deg,
+    rgba(var(--color-primary-rgb), 0.14),
+    oklch(0.55 0.16 230 / 0.10)
+  );
+  color: var(--color-primary);
+  border: 1px solid oklch(0.85 0.08 280 / 0.5);
+  font-weight: 500;
+  padding: 3px 12px;
+  font-size: 12px;
+  border-radius: 999px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  line-height: 1.5;
+}
+
+// ========== KV 栅格（4 列 StatCard） ==========
+.kvGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.kv {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 12px;
+  padding: 16px 18px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 1px 2px rgba(24, 28, 60, 0.04),
+    0 4px 12px -4px rgba(80, 60, 170, 0.08);
+  position: relative;
+
+  // 顶部反光线
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 10px;
+    right: 10px;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.95) 50%,
+      transparent
+    );
+  }
+
+  :global([data-theme='dark']) & {
+    background: rgba(26, 33, 57, 0.72);
+    border-color: rgba(53, 62, 92, 0.6);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.05),
+      0 1px 2px rgba(0, 0, 0, 0.35),
+      0 4px 12px -4px rgba(40, 20, 90, 0.3);
+
+    &::before {
+      background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.08) 50%,
+        transparent
+      );
+    }
+  }
+}
+
+.kvLabel {
+  font-size: 11px;
+  color: var(--color-outline);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 500;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  :global(.anticon),
+  svg {
+    color: var(--color-primary);
+    font-size: 14px;
+  }
+}
+
+.kvValue {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--color-on-surface);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.kvValueGradient {
+  background: linear-gradient(135deg, #0f1626, #3a2f6b);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+
+  :global([data-theme='dark']) & {
+    background: linear-gradient(135deg, #e6e8f2, #c4b5fb);
+    -webkit-background-clip: text;
+    background-clip: text;
+  }
+}
+
+.kvUnit {
+  font-size: 13px;
+  color: var(--color-outline);
+  font-weight: 400;
+  margin-left: 3px;
+  -webkit-text-fill-color: var(--color-outline); // gradient 文本内的单位恢复普通色
+}
+
+.kvSub {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--color-on-surface-variant);
+}
+
+// ========== 配对码强调卡（紫蓝渐变） ==========
+.pairCard {
+  background: linear-gradient(
+    135deg,
+    rgba(var(--color-primary-rgb), 0.14),
+    oklch(0.55 0.16 230 / 0.08)
+  );
+  border: 1px solid rgba(var(--color-primary-rgb), 0.3);
+  border-radius: 12px;
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    0 4px 12px -4px rgba(80, 60, 170, 0.12);
+  position: relative;
+  margin-bottom: 16px;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 14px;
+    right: 14px;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.9) 50%,
+      transparent
+    );
+  }
+
+  :global([data-theme='dark']) & {
+    background: linear-gradient(
+      135deg,
+      rgba(var(--color-primary-rgb), 0.20),
+      oklch(0.60 0.14 230 / 0.12)
+    );
+    border-color: rgba(var(--color-primary-rgb), 0.4);
+
+    &::before {
+      background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.1) 50%,
+        transparent
+      );
+    }
+  }
+}
+
+.pairLeft {
+  min-width: 0;
+}
+
+.pairLabel {
+  font-size: 11px;
+  color: var(--color-primary);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.pairCode {
+  font-family: 'JetBrains Mono', Menlo, Consolas, 'SF Mono', monospace;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--color-on-surface);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+
+.pairTtl {
+  font-size: 12px;
+  color: var(--color-on-surface-variant);
+  margin-top: 4px;
+}
+
+.pairEmpty {
+  font-size: 14px;
+  color: var(--color-on-surface-variant);
+  font-weight: 500;
+}
+
+.pairActions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+// ========== 描述 + 元数据（2fr : 1fr） ==========
+.sectionRow {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+
+  @media (max-width: 960px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sectionCardTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-on-surface);
+  letter-spacing: -0.01em;
+  margin: 0 0 12px;
+}
+
+.descText {
+  font-size: 13px;
+  color: var(--color-on-surface);
+  line-height: 1.7;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.descEmpty {
+  color: var(--color-outline);
+  font-style: italic;
+}
+
+.metaRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px dashed var(--color-outline-variant);
+  font-size: 13px;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.metaKey {
+  color: var(--color-on-surface-variant);
+}
+
+.metaVal {
+  color: var(--color-on-surface);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+// ========== 响应式 ==========
+@media (max-width: 1080px) {
+  .kvGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .kvGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .pairCard {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

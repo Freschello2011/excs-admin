@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Button, Select, Space, Card, Empty, List, Radio, Popconfirm, Tag, Typography } from 'antd';
+import { Button, Select, Space, Card, Empty, List, Radio, Popconfirm, Typography, Row, Col } from 'antd';
 import { useMessage } from '@/hooks/useMessage';
 import { DeleteOutlined, ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
 import { contentApi } from '@/api/content';
@@ -121,10 +121,37 @@ export default function ExhibitSlideshowTab({ exhibitId, canManage }: Props) {
     return c?.filename ?? `#${contentId}`;
   };
 
+  // 紫色编号徽章（钉在 Card 左上）
+  const StepBadge = ({ n }: { n: number }) => (
+    <div
+      style={{
+        position: 'absolute',
+        top: -10,
+        left: 14,
+        width: 22,
+        height: 22,
+        borderRadius: '50%',
+        background: 'linear-gradient(135deg, oklch(0.58 0.18 280), oklch(0.50 0.18 280))',
+        color: '#fff',
+        fontSize: 11,
+        fontWeight: 600,
+        display: 'grid',
+        placeItems: 'center',
+        boxShadow: '0 2px 6px -1px rgba(60, 40, 130, 0.3)',
+        zIndex: 2,
+      }}
+    >
+      {n}
+    </div>
+  );
+
   return (
-    <div style={{ maxWidth: 800 }}>
-      {/* 背景视频选择 */}
-      <Card title="背景视频" size="small" style={{ marginBottom: 16 }}>
+    <div style={{ marginTop: 30 }}>
+      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+      {/* 1. 背景视频 */}
+      <Col xs={24} md={8}>
+      <Card title="背景视频" size="small" style={{ position: 'relative', height: '100%' }}>
+        <StepBadge n={1} />
         <Select
           style={{ width: '100%' }}
           placeholder="选择背景视频"
@@ -143,12 +170,14 @@ export default function ExhibitSlideshowTab({ exhibitId, canManage }: Props) {
           </Text>
         )}
       </Card>
+      </Col>
 
-      {/* 前景图片序列 */}
+      {/* 2. 前景图片序列 */}
+      <Col xs={24} md={10}>
       <Card
         title="前景图片序列"
         size="small"
-        style={{ marginBottom: 16 }}
+        style={{ position: 'relative', height: '100%' }}
         extra={
           canManage && (
             <Select
@@ -166,6 +195,7 @@ export default function ExhibitSlideshowTab({ exhibitId, canManage }: Props) {
           )
         }
       >
+        <StepBadge n={2} />
         {imageIds.length === 0 ? (
           <Empty description="请添加前景图片" image={Empty.PRESENTED_IMAGE_SIMPLE} />
         ) : (
@@ -206,7 +236,22 @@ export default function ExhibitSlideshowTab({ exhibitId, canManage }: Props) {
                 }
               >
                 <Space>
-                  <Tag>{index + 1}</Tag>
+                  <span
+                    style={{
+                      display: 'inline-grid',
+                      placeItems: 'center',
+                      width: 22,
+                      height: 22,
+                      borderRadius: 6,
+                      background: 'rgba(var(--color-primary-rgb), 0.12)',
+                      color: 'var(--color-primary)',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      lineHeight: 1,
+                    }}
+                  >
+                    {index + 1}
+                  </span>
                   <Text>{getContentName(contentId)}</Text>
                 </Space>
               </List.Item>
@@ -219,36 +264,40 @@ export default function ExhibitSlideshowTab({ exhibitId, canManage }: Props) {
           </Text>
         )}
       </Card>
+      </Col>
 
-      {/* 过渡方式 */}
-      <Card title="过渡方式" size="small" style={{ marginBottom: 16 }}>
+      {/* 3. 过渡方式 + 操作 */}
+      <Col xs={24} md={6}>
+      <Card title="过渡方式" size="small" style={{ position: 'relative', height: '100%' }}>
+        <StepBadge n={3} />
         <Radio.Group value={transition} onChange={(e) => setTransition(e.target.value)} disabled={!canManage}>
           <Radio.Button value="fade">淡入淡出</Radio.Button>
           <Radio.Button value="slide">左右滑动</Radio.Button>
         </Radio.Group>
-      </Card>
-
-      {/* 操作按钮 */}
-      {canManage && (
-        <Space>
-          <Button
-            type="primary"
-            onClick={() => saveMutation.mutate()}
-            loading={saveMutation.isPending}
-            disabled={!canSave}
-          >
-            保存配置
-          </Button>
-          <Popconfirm
-            title="确定删除图文汇报配置？"
-            onConfirm={() => deleteMutation.mutate()}
-          >
-            <Button danger loading={deleteMutation.isPending}>
-              删除配置
+        {canManage && (
+          <div style={{ marginTop: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <Button
+              type="primary"
+              size="small"
+              onClick={() => saveMutation.mutate()}
+              loading={saveMutation.isPending}
+              disabled={!canSave}
+            >
+              保存配置
             </Button>
-          </Popconfirm>
-        </Space>
-      )}
+            <Popconfirm
+              title="确定删除图文汇报配置？"
+              onConfirm={() => deleteMutation.mutate()}
+            >
+              <Button danger size="small" loading={deleteMutation.isPending}>
+                删除配置
+              </Button>
+            </Popconfirm>
+          </div>
+        )}
+      </Card>
+      </Col>
+      </Row>
     </div>
   );
 }

@@ -2,11 +2,12 @@ import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Table, Button, Modal, Form, Input, InputNumber, Select, Space,
-  Collapse, Popconfirm, Tag,
+  Collapse, Popconfirm,
 } from 'antd';
 import { useMessage } from '@/hooks/useMessage';
 import type { TableColumnsType } from 'antd';
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
+import StatusTag from '@/components/common/StatusTag';
 import { contentApi } from '@/api/content';
 import { queryKeys } from '@/api/queryKeys';
 import type { ContentTag, TagDimension, ExhibitContentItem } from '@/types/content';
@@ -189,12 +190,12 @@ export default function ExhibitTagsTab({ exhibitId, canManage }: Props) {
   }));
 
   const columns: TableColumnsType<ContentTag> = [
-    { title: '标签', dataIndex: 'tag', ellipsis: true },
+    { title: '标签', dataIndex: 'tag', width: 280, ellipsis: true },
     {
       title: '时间段',
-      width: 180,
+      width: 200,
       render: (_: unknown, record) => (
-        <span style={{ fontFamily: 'monospace' }}>
+        <span style={{ fontFamily: 'monospace', fontVariantNumeric: 'tabular-nums' }}>
           {formatMs(record.start_ms)} ~ {formatMs(record.end_ms)}
         </span>
       ),
@@ -202,16 +203,25 @@ export default function ExhibitTagsTab({ exhibitId, canManage }: Props) {
     {
       title: '来源',
       dataIndex: 'source',
-      width: 80,
+      width: 90,
       align: 'center',
-      render: (v: string) => <Tag color={v === 'ai' ? 'blue' : 'default'}>{v === 'ai' ? 'AI' : '手动'}</Tag>,
+      render: (v: string) => (
+        <StatusTag
+          status={v === 'ai' ? 'processing' : 'pending'}
+          label={v === 'ai' ? 'AI' : '手动'}
+        />
+      ),
     },
     {
       title: '置信度',
       dataIndex: 'confidence',
-      width: 80,
+      width: 90,
       align: 'center',
-      render: (v: number | undefined) => v !== undefined ? `${(v * 100).toFixed(0)}%` : '-',
+      render: (v: number | undefined) => (
+        v !== undefined ? (
+          <span style={{ fontFamily: 'monospace', fontVariantNumeric: 'tabular-nums' }}>{(v * 100).toFixed(0)}%</span>
+        ) : <span style={{ color: 'var(--color-outline)' }}>—</span>
+      ),
     },
     ...(canManage ? [{
       title: '操作',
@@ -291,7 +301,26 @@ export default function ExhibitTagsTab({ exhibitId, canManage }: Props) {
           const dimTags = tagsByDimension.get(dim) || [];
           return {
             key: dim,
-            label: `${DIMENSION_LABELS[dim]}（${dimTags.length}）`,
+            label: (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, fontWeight: 600 }}>
+                {DIMENSION_LABELS[dim]}
+                <span
+                  style={{
+                    background: 'rgba(var(--color-primary-rgb), 0.12)',
+                    color: 'var(--color-primary)',
+                    padding: '1px 8px',
+                    borderRadius: 9999,
+                    fontSize: 11,
+                    fontWeight: 500,
+                    lineHeight: 1.5,
+                    minWidth: 22,
+                    textAlign: 'center',
+                  }}
+                >
+                  {dimTags.length}
+                </span>
+              </span>
+            ),
             children: (
               <Table<ContentTag>
                 columns={columns}

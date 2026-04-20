@@ -1,9 +1,17 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Tabs, Button, Spin, Space, Breadcrumb, Descriptions, Tag } from 'antd';
+import { Tabs, Button, Spin, Space, App } from 'antd';
+import {
+  AppstoreOutlined,
+  DesktopOutlined,
+  FileImageOutlined,
+  FileTextOutlined,
+  UserOutlined,
+  TagOutlined,
+} from '@ant-design/icons';
 import dayjs from 'dayjs';
-import PageHeader from '@/components/common/PageHeader';
+import StatusTag from '@/components/common/StatusTag';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
 import { useAuthStore } from '@/stores/authStore';
@@ -13,6 +21,7 @@ import ExhibitTagsTab from './tabs/ExhibitTagsTab';
 import ExhibitDistributionTab from './tabs/ExhibitDistributionTab';
 import ExhibitScriptsTab from './tabs/ExhibitScriptsTab';
 import ExhibitSlideshowTab from './tabs/ExhibitSlideshowTab';
+import styles from './ExhibitDetailPage.module.scss';
 
 const DISPLAY_MODE_LABEL: Record<string, string> = {
   normal: '普通展项',
@@ -20,11 +29,44 @@ const DISPLAY_MODE_LABEL: Record<string, string> = {
   touch_interactive: '触摸互动',
 };
 
+// ========== StatCard (内部小组件，和 DashboardPage 保持风格一致) ==========
+interface KvCardProps {
+  label: string;
+  icon: React.ReactNode;
+  value: React.ReactNode;
+  unit?: string;
+  sub?: React.ReactNode;
+  gradient?: boolean;
+}
+
+function KvCard({ label, icon, value, unit, sub, gradient = true }: KvCardProps) {
+  return (
+    <div className={styles.kv}>
+      <div className={styles.kvLabel}>
+        {icon}
+        <span>{label}</span>
+      </div>
+      <div
+        className={
+          gradient && typeof value !== 'object'
+            ? `${styles.kvValue} ${styles.kvValueGradient}`
+            : styles.kvValue
+        }
+      >
+        {value}
+        {unit && <span className={styles.kvUnit}>{unit}</span>}
+      </div>
+      {sub && <div className={styles.kvSub}>{sub}</div>}
+    </div>
+  );
+}
+
 export default function ExhibitDetailPage() {
   const { hallId: hallIdStr, exhibitId: exhibitIdStr } = useParams<{ hallId: string; exhibitId: string }>();
   const hallId = Number(hallIdStr);
   const exhibitId = Number(exhibitIdStr);
   const navigate = useNavigate();
+  const { message } = App.useApp();
   const isAdmin = useAuthStore((s) => s.isAdmin);
   const hasPermission = useAuthStore((s) => s.hasHallPermission);
   const clearSelectedExhibit = useHallStore((s) => s.clearSelectedExhibit);
@@ -67,7 +109,7 @@ export default function ExhibitDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exhibit]);
 
-  // 顶栏 exhibit pill 的 X 被按 → store 外部清空 → 跳回列表（路径上的 /:exhibitId 也一并脱离）
+  // 顶栏 exhibit pill 的 X 被按 → store 外部清空 → 跳回列表
   const syncedRef = useRef(false);
   useEffect(() => {
     if (selectedExhibitId === exhibitId && exhibitId > 0) {
@@ -79,6 +121,17 @@ export default function ExhibitDetailPage() {
     }
   }, [selectedExhibitId, exhibitId, hallId, navigate]);
 
+  const currentCode = useMemo(() => {
+    if (!exhibit) return undefined;
+    return pairingCodes.find(
+      (c) =>
+        c.target_type === 'exhibit' &&
+        c.target_id === exhibitId &&
+        c.status === 'active' &&
+        dayjs(c.expires_at).isAfter(dayjs()),
+    );
+  }, [pairingCodes, exhibitId, exhibit]);
+
   if (isLoading) {
     return <Spin style={{ display: 'flex', justifyContent: 'center', marginTop: 120 }} />;
   }
@@ -87,39 +140,138 @@ export default function ExhibitDetailPage() {
     return <div style={{ textAlign: 'center', marginTop: 120, color: 'var(--color-outline)' }}>展项不存在</div>;
   }
 
-  const currentCode = pairingCodes.find(
-    (c) =>
-      c.target_type === 'exhibit' &&
-      c.target_id === exhibitId &&
-      c.status === 'active' &&
-      dayjs(c.expires_at).isAfter(dayjs()),
-  );
-
   const pairingCodesUrl = `/halls/${hallId}/exhibits?tab=pairing-codes`;
+  const modeLabel = DISPLAY_MODE_LABEL[exhibit.display_mode] ?? exhibit.display_mode;
 
-  const renderCurrentCode = () => {
-    if (!isAdmin()) {
-      return <span style={{ color: 'var(--color-outline)' }}>—</span>;
+  const copyPairCode = async () => {
+    if (!currentCode) return;
+    try {
+      await navigator.clipboard.writeText(currentCode.code);
+      message.success(`已复制配对码 ${currentCode.code}`);
+    } catch {
+      message.error('复制失败，请手动选择');
     }
-    if (currentCode) {
-      const hoursLeft = Math.max(1, Math.ceil(dayjs(currentCode.expires_at).diff(dayjs(), 'hour', true)));
-      return (
-        <Space size="middle">
-          <span style={{ fontFamily: 'monospace', fontSize: 18, letterSpacing: 2, fontWeight: 600 }}>
-            {currentCode.code}
-          </span>
-          <span style={{ color: 'var(--color-outline)' }}>过期 {hoursLeft} 小时后</span>
-          <Link to={pairingCodesUrl}>管理 →</Link>
-        </Space>
-      );
-    }
-    return (
-      <Space size="middle">
-        <span style={{ color: 'var(--color-outline)' }}>无有效配对码</span>
-        <Link to={pairingCodesUrl}>管理 →</Link>
-      </Space>
-    );
   };
+
+  // ========== 基本信息 Tab 内容 ==========
+  const renderInfoTab = () => (
+    <div style={{ marginTop: 8 }}>
+      {/* 4 格 KV */}
+      <div className={styles.kvGrid}>
+        <KvCard
+          label="绑定设备"
+          icon={<DesktopOutlined />}
+          value={exhibit.device_count}
+          unit="台"
+        />
+        <KvCard
+          label="内容文件"
+          icon={<FileImageOutlined />}
+          value={exhibit.content_count}
+          unit="项"
+        />
+        <KvCard
+          label="讲解词"
+          icon={<FileTextOutlined />}
+          value={exhibit.script_count}
+          unit="段"
+        />
+        <KvCard
+          label="数字人"
+          icon={<UserOutlined />}
+          value={
+            exhibit.has_ai_avatar ? (
+              <StatusTag status="active" label="已绑定" />
+            ) : (
+              <StatusTag status="off" label="未绑定" />
+            )
+          }
+          gradient={false}
+        />
+      </div>
+
+      {/* 配对码强调卡（仅 admin 可见） */}
+      {isAdmin() && (
+        <div className={styles.pairCard}>
+          {currentCode ? (
+            <>
+              <div className={styles.pairLeft}>
+                <div className={styles.pairLabel}>当前配对码</div>
+                <div className={styles.pairCode}>{currentCode.code}</div>
+                <div className={styles.pairTtl}>
+                  过期 {Math.max(1, Math.ceil(dayjs(currentCode.expires_at).diff(dayjs(), 'hour', true)))} 小时后
+                </div>
+              </div>
+              <Space className={styles.pairActions}>
+                <Button onClick={copyPairCode}>复制</Button>
+                <Button type="primary" ghost>
+                  <Link to={pairingCodesUrl}>管理配对码 →</Link>
+                </Button>
+              </Space>
+            </>
+          ) : (
+            <>
+              <div className={styles.pairLeft}>
+                <div className={styles.pairLabel}>配对码</div>
+                <div className={styles.pairEmpty}>暂无有效配对码</div>
+              </div>
+              <Space className={styles.pairActions}>
+                <Button type="primary" ghost>
+                  <Link to={pairingCodesUrl}>去生成 →</Link>
+                </Button>
+                <Button>
+                  <Link to={pairingCodesUrl}>显示全部配对码</Link>
+                </Button>
+              </Space>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* 描述 + 元数据 */}
+      <div className={styles.sectionRow}>
+        <div className="ant-card ant-card-bordered" style={{ padding: 20 }}>
+          <div className={styles.sectionCardTitle}>展项描述</div>
+          {exhibit.description ? (
+            <p className={styles.descText}>{exhibit.description}</p>
+          ) : (
+            <p className={`${styles.descText} ${styles.descEmpty}`}>暂未填写描述</p>
+          )}
+        </div>
+        <div className="ant-card ant-card-bordered" style={{ padding: 20 }}>
+          <div className={styles.sectionCardTitle}>元数据</div>
+          <div className={styles.metaRow}>
+            <span className={styles.metaKey}>展示模式</span>
+            <span className={styles.metaVal}>
+              <span className={styles.tagMode}>{modeLabel}</span>
+            </span>
+          </div>
+          <div className={styles.metaRow}>
+            <span className={styles.metaKey}>排序</span>
+            <span className={styles.metaVal}>{exhibit.sort_order}</span>
+          </div>
+          <div className={styles.metaRow}>
+            <span className={styles.metaKey}>
+              <TagOutlined /> AI 标签
+            </span>
+            <span className={styles.metaVal}>
+              {exhibit.enable_ai_tag ? (
+                <StatusTag status="active" label="启用" />
+              ) : (
+                <StatusTag status="off" label="关闭" />
+              )}
+            </span>
+          </div>
+          <div className={styles.metaRow}>
+            <span className={styles.metaKey}>
+              <AppstoreOutlined /> 名称
+            </span>
+            <span className={styles.metaVal}>{exhibit.name}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 
   const innerTabItems = [
     {
@@ -149,31 +301,85 @@ export default function ExhibitDetailPage() {
     },
   ];
 
-  const outerTabItems = [
-    {
-      key: 'info',
-      label: '基本信息',
-      children: (
-        <Descriptions column={1} bordered size="middle" style={{ marginTop: 8 }}>
-          <Descriptions.Item label="名称">{exhibit.name}</Descriptions.Item>
-          <Descriptions.Item label="展示模式">
-            <Tag>{DISPLAY_MODE_LABEL[exhibit.display_mode] ?? exhibit.display_mode}</Tag>
-          </Descriptions.Item>
-          <Descriptions.Item label="描述">{exhibit.description || '—'}</Descriptions.Item>
-          <Descriptions.Item label="排序">{exhibit.sort_order}</Descriptions.Item>
-          <Descriptions.Item label="AI 标签">{exhibit.enable_ai_tag ? '启用' : '关闭'}</Descriptions.Item>
-          <Descriptions.Item label="当前配对码">{renderCurrentCode()}</Descriptions.Item>
-          <Descriptions.Item label="设备数">{exhibit.device_count}</Descriptions.Item>
-          <Descriptions.Item label="内容文件数">{exhibit.content_count}</Descriptions.Item>
-          <Descriptions.Item label="讲解词条数">{exhibit.script_count}</Descriptions.Item>
-          <Descriptions.Item label="数字人">{exhibit.has_ai_avatar ? '已绑定' : '未绑定'}</Descriptions.Item>
-        </Descriptions>
-      ),
-    },
-    {
-      key: 'devContent',
-      label: '设备 / 内容',
-      children: (
+  const OUTER_TABS: { key: typeof outerTab; label: string }[] = [
+    { key: 'info', label: '基本信息' },
+    { key: 'devContent', label: '设备 / 内容' },
+  ];
+
+  return (
+    <div>
+      {/* 自写页头（AntD 5 已废弃 PageHeader） */}
+      <div className={styles.pageHeader}>
+        <div className={styles.pageHeaderLeft}>
+          <h1 className={styles.pageHeaderTitle}>
+            {exhibit.name}
+            <span className={styles.tagMode}>{modeLabel}</span>
+          </h1>
+          {exhibit.description && (
+            <p className={styles.pageHeaderDesc}>
+              {exhibit.description.length > 80
+                ? exhibit.description.slice(0, 80) + '…'
+                : exhibit.description}
+            </p>
+          )}
+        </div>
+        <div className={styles.pageHeaderActions}>
+          {exhibit.display_mode === 'touch_interactive' && (
+            <Button onClick={() => navigate(`/halls/${hallId}/exhibits/${exhibitId}/touch-nav`)}>
+              编辑触摸导航
+            </Button>
+          )}
+          <Button
+            onClick={() => {
+              clearSelectedExhibit();
+              navigate(`/halls/${hallId}/exhibits`);
+            }}
+          >
+            返回展项列表
+          </Button>
+        </div>
+      </div>
+
+      {/* 外层玻璃胶囊 Tab 组（键盘 ←→ 切换、Home/End 跳首尾） */}
+      <div className={styles.outerTabs} role="tablist" aria-label="展项详情 tab">
+        {OUTER_TABS.map((t, idx) => (
+          <button
+            key={t.key}
+            role="tab"
+            aria-selected={outerTab === t.key}
+            tabIndex={outerTab === t.key ? 0 : -1}
+            className={
+              outerTab === t.key
+                ? `${styles.outerTab} ${styles.outerTabActive}`
+                : styles.outerTab
+            }
+            onClick={() => setOuterTab(t.key)}
+            onKeyDown={(e) => {
+              const last = OUTER_TABS.length - 1;
+              let next: number | null = null;
+              if (e.key === 'ArrowRight') next = idx === last ? 0 : idx + 1;
+              else if (e.key === 'ArrowLeft') next = idx === 0 ? last : idx - 1;
+              else if (e.key === 'Home') next = 0;
+              else if (e.key === 'End') next = last;
+              if (next !== null) {
+                e.preventDefault();
+                setOuterTab(OUTER_TABS[next].key);
+                // focus 跟上（下一帧）
+                requestAnimationFrame(() => {
+                  const btns = e.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]');
+                  btns?.[next!]?.focus();
+                });
+              }
+            }}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {outerTab === 'info' ? (
+        renderInfoTab()
+      ) : (
         <Tabs
           activeKey={innerTab}
           onChange={setInnerTab}
@@ -181,41 +387,7 @@ export default function ExhibitDetailPage() {
           size="small"
           style={{ marginTop: 8 }}
         />
-      ),
-    },
-  ];
-
-  return (
-    <div>
-      <Breadcrumb
-        style={{ marginBottom: 12 }}
-        items={[
-          { title: <Link to={`/halls/${hallId}/exhibits`} onClick={clearSelectedExhibit}>展项管理</Link> },
-          { title: exhibit.name },
-        ]}
-      />
-
-      <PageHeader
-        title={exhibit.name}
-        description={DISPLAY_MODE_LABEL[exhibit.display_mode] ?? '普通展项'}
-        extra={
-          <Space>
-            {exhibit.display_mode === 'touch_interactive' && (
-              <Button onClick={() => navigate(`/halls/${hallId}/exhibits/${exhibitId}/touch-nav`)}>
-                编辑触摸导航
-              </Button>
-            )}
-            <Button onClick={() => { clearSelectedExhibit(); navigate(`/halls/${hallId}/exhibits`); }}>返回展项列表</Button>
-          </Space>
-        }
-      />
-
-      <Tabs
-        activeKey={outerTab}
-        onChange={(k) => setOuterTab(k as 'info' | 'devContent')}
-        items={outerTabItems}
-        style={{ marginTop: 8 }}
-      />
+      )}
     </div>
   );
 }

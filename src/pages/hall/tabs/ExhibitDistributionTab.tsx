@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { Table, Select, Progress, Button, Space, Typography } from 'antd';
+import { Table, Select, Progress, Button, Space, Typography, Card } from 'antd';
 import { useMessage } from '@/hooks/useMessage';
 import type { TableColumnsType } from 'antd';
 import { DownloadOutlined } from '@ant-design/icons';
@@ -126,10 +126,18 @@ export default function ExhibitDistributionTab({ hallId, exhibitId, canManage }:
       dataIndex: 'progress',
       width: 160,
       render: (v: number, record) => {
-        if (record.status === 'ready') return <Progress percent={100} size="small" />;
-        if (record.status === 'downloading') return <Progress percent={v} size="small" status="active" />;
-        if (record.status === 'failed') return <Progress percent={v} size="small" status="exception" />;
-        return <Progress percent={0} size="small" />;
+        // 紫蓝渐变（普通进行中）/ 绿（ready）/ 红（failed）
+        const purpleBlueGradient = { from: 'oklch(0.58 0.18 280)', to: 'oklch(0.55 0.16 230)' };
+        if (record.status === 'ready') {
+          return <Progress percent={100} size="small" strokeColor="var(--color-success)" />;
+        }
+        if (record.status === 'downloading') {
+          return <Progress percent={v} size="small" status="active" strokeColor={purpleBlueGradient} />;
+        }
+        if (record.status === 'failed') {
+          return <Progress percent={v} size="small" status="exception" />;
+        }
+        return <Progress percent={0} size="small" strokeColor={purpleBlueGradient} />;
       },
     },
     {
@@ -169,15 +177,17 @@ export default function ExhibitDistributionTab({ hallId, exhibitId, canManage }:
         </Typography.Text>
       </Space>
 
-      <Table<DistributionItem>
-        columns={columns}
-        dataSource={distributions}
-        loading={isLoading}
-        pagination={false}
-        rowKey="id"
-        size="middle"
-        locale={{ emptyText: '暂无分发记录' }}
-      />
+      <Card styles={{ body: { padding: 0 } }}>
+        <Table<DistributionItem>
+          columns={columns}
+          dataSource={distributions}
+          loading={isLoading}
+          pagination={false}
+          rowKey="id"
+          size="middle"
+          locale={{ emptyText: '暂无分发记录' }}
+        />
+      </Card>
     </div>
   );
 }
