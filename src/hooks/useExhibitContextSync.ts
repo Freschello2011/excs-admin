@@ -1,23 +1,31 @@
 import { useEffect, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useHallStore } from '@/stores/hallStore';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
 
 /**
- * 页面级"展项上下文"双向同步：
+ * 页面级"展项上下文"双向同步（仅列表/管理类路由）：
  * - URL `?exhibit=:id` ↔ `useHallStore.selectedExhibitId`
  * - 进入页面（深链）时读 URL → store；在本页通过顶栏 / 行内按钮切换展项时 store → URL
  * - 浏览器前进后退改变 URL 时，同步回 store
  * - 切换展厅（`setSelectedHall` 内部清空 exhibit）后自动把 `?exhibit` 从 URL 拿掉
  * - 若 URL 上的 exhibit 不属于当前展厅 → 视为无效深链，抹掉
  *
+ * 详情类路由（路径段带 `:exhibitId`，如 `/halls/:hallId/exhibits/:exhibitId`）
+ * 以路径段作为展项上下文的权威来源，由详情页自己读 useParams 同步 store；
+ * 此 hook 在这些路由上**不写入** `?exhibit=` query，避免与路径段冗余/发散。
+ *
  * 返回当前有效的 exhibitId（供页面决定显示列表 / 聚焦视图）。
  *
  * 复用 react-query 已有的 `queryKeys.exhibits(hallId)` 缓存，不会多拉一次列表。
  */
+const EXHIBIT_DETAIL_PATH_RE = /^\/halls\/\d+\/(?:exhibits|exhibit-management)\/\d+(?:\/|$)/;
+
 export function useExhibitContextSync(): number | undefined {
+  const location = useLocation();
+  const isDetailRoute = EXHIBIT_DETAIL_PATH_RE.test(location.pathname);
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedHallId = useHallStore((s) => s.selectedHallId);
   const selectedExhibitId = useHallStore((s) => s.selectedExhibitId);
@@ -43,6 +51,9 @@ export function useExhibitContextSync(): number | undefined {
   const hydratedRef = useRef(false);
 
   useEffect(() => {
+    // 详情路由：路径段 `:exhibitId` 是权威来源，此 hook 不读写 `?exhibit=`
+    if (isDetailRoute) return;
+
     const urlChanged = urlExhibitId !== prevUrlRef.current;
     const storeChanged = selectedExhibitId !== prevStoreRef.current;
     const isFirstRun = !hydratedRef.current;
@@ -108,6 +119,7 @@ export function useExhibitContextSync(): number | undefined {
       { replace: true },
     );
   }, [
+    isDetailRoute,
     urlExhibitId,
     selectedExhibitId,
     exhibits,

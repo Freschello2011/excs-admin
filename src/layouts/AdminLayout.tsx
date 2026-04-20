@@ -204,6 +204,23 @@ function isExhibitRequiredRoute(pathname: string): boolean {
   return false;
 }
 
+/**
+ * 展项详情类路由：路径段内含 `:exhibitId`，顶栏切换展项时应"平行跳"到同类型路由的新展项页，
+ * 而不是只改 `hallStore.selectedExhibitId` 让页面停留在旧展项。
+ *
+ * 触摸导航子页面（`/exhibits/:exhibitId/touch-nav`）→ 回退到展项详情页，
+ * 避免目标展项非 touch_interactive 模式时进入无效路由。
+ *
+ * 返回 null 表示当前不在展项详情路由（走 store-only 分支：仅 setSelectedExhibit）。
+ */
+function replaceExhibitInPath(pathname: string, newExhibitId: number): string | null {
+  let m = pathname.match(/^(\/halls\/\d+)\/exhibits\/\d+(?:\/[^?#]*)?$/);
+  if (m) return `${m[1]}/exhibits/${newExhibitId}`;
+  m = pathname.match(/^(\/halls\/\d+)\/exhibit-management\/\d+(?:\/[^?#]*)?$/);
+  if (m) return `${m[1]}/exhibit-management/${newExhibitId}`;
+  return null;
+}
+
 /** 当前路由所属区域（用于顶栏选择器状态） */
 type RouteRegion = 'overview' | 'hall' | 'platform';
 function resolveRouteRegion(pathname: string): RouteRegion {
@@ -661,6 +678,8 @@ export default function AdminLayout() {
                           className={`${styles['admin-layout__selector-option']} ${ex.id === selectedExhibitId ? styles['admin-layout__selector-option--selected'] : ''}`}
                           onClick={() => {
                             setSelectedExhibit(ex.id, ex.name);
+                            const target = replaceExhibitInPath(location.pathname, ex.id);
+                            if (target) navigate(target);
                             setShowExhibitDropdown(false);
                           }}
                         >
