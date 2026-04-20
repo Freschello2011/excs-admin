@@ -115,6 +115,10 @@
   --radius-md: 0.25rem;
   --radius-lg: 0.5rem;
   --radius-xl: 0.75rem;
+
+  /* Accent — neon cyan (sidebar style B) */
+  --color-accent-neon-cyan: #22D3EE;
+  --color-accent-neon-cyan-rgb: 34, 211, 238;
 }
 
 /* ---------- Dark Theme ---------- */
@@ -191,6 +195,10 @@
   --shadow-xl:
     0 8px 20px rgba(0, 0, 0, 0.45),
     0 28px 60px rgba(40, 20, 90, 0.4);
+
+  /* Accent — neon cyan (sidebar style B, dark variant) */
+  --color-accent-neon-cyan: #67E8F9;
+  --color-accent-neon-cyan-rgb: 103, 232, 249;
 }
 
 /* ---------- Global Reset & Base ---------- */
