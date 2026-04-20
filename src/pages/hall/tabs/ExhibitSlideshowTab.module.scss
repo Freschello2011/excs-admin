@@ -1,0 +1,51 @@
+// ExhibitSlideshowTab — StepBadge 跟随主题
+
+.stepBadge {
+  position: absolute;
+  top: -10px;
+  left: 14px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: linear-gradient(
+    135deg,
+    var(--color-primary),
+    var(--color-primary-deep)
+  );
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 2px 6px -1px rgba(var(--color-primary-rgb), 0.35);
+  z-index: 2;
+}
+
+.listStepChip {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: rgba(var(--color-primary-rgb), 0.12);
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+
+  :global([data-theme='dark']) & {
+    background: rgba(var(--color-primary-rgb), 0.20);
+  }
+}
+
+.cardWrap {
+  position: relative;
+  height: 100%;
+}
+
+.actionsRow {
+  margin-top: 16px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}

@@ -1,0 +1,66 @@
+// ExhibitTagsTab — 维度计数徽章 + source Tag
+
+.dimHeader {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+}
+
+.dimCount {
+  background: rgba(var(--color-primary-rgb), 0.12);
+  color: var(--color-primary);
+  padding: 1px 8px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 500;
+  min-width: 22px;
+  text-align: center;
+  line-height: 1.5;
+
+  :global([data-theme='dark']) & {
+    background: rgba(var(--color-primary-rgb), 0.20);
+  }
+}
+
+// AI / 手动 来源小 Tag — 薰衣草 / 中性
+.sourceTag {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 9999px;
+  line-height: 18px;
+  border: 1px solid;
+}
+
+.sourceTagAi {
+  background: rgba(var(--color-primary-rgb), 0.10);
+  color: var(--color-primary);
+  border-color: rgba(var(--color-primary-rgb), 0.25);
+}
+
+.sourceTagManual {
+  background: var(--color-surface-container);
+  color: var(--color-on-surface-variant);
+  border-color: var(--color-outline-variant);
+}
+
+.confidenceCell {
+  font-family: 'JetBrains Mono', Menlo, Consolas, 'SF Mono', monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.confidenceEmpty {
+  color: var(--color-outline);
+}
+
+.timeCell {
+  font-family: 'JetBrains Mono', Menlo, Consolas, 'SF Mono', monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.actionDanger {
+  color: var(--color-error);
+}

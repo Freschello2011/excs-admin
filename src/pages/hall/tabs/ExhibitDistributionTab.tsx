@@ -23,6 +23,13 @@ const STATUS_OPTIONS = [
   { value: 'failed', label: '失败' },
 ];
 
+// 紫蓝渐变常量 —— 跟 --color-primary / --color-primary-deep 对齐的 fallback
+// AntD Progress strokeColor 只能取静态值，不支持 var()，这里用 OKLCH 近似
+const PURPLE_BLUE_GRADIENT = {
+  from: 'oklch(0.58 0.18 280)',
+  to: 'oklch(0.55 0.16 230)',
+} as const;
+
 function formatFileSize(bytes: number | undefined | null): string {
   if (!bytes || bytes <= 0) return '-';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -30,11 +37,15 @@ function formatFileSize(bytes: number | undefined | null): string {
   return `${(bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0)} ${units[i]}`;
 }
 
+function hasActiveDistribution(items: DistributionItem[] | undefined): boolean {
+  if (!items || items.length === 0) return false;
+  return items.some((d) => d.status === 'downloading' || d.status === 'pending');
+}
+
 export default function ExhibitDistributionTab({ hallId, exhibitId, canManage }: Props) {
   const { message } = useMessage();
   const [statusFilter, setStatusFilter] = useState<DistributionStatus | 'all'>('all');
 
-  // Get exhibit content to know which content_ids belong to this exhibit
   const { data: contentItems = [] } = useQuery({
     queryKey: queryKeys.exhibitContent(exhibitId),
     queryFn: () => contentApi.getExhibitContent(exhibitId),
@@ -57,16 +68,11 @@ export default function ExhibitDistributionTab({ hallId, exhibitId, canManage }:
     queryFn: () => contentApi.getDistributions(params),
     select: (res) => res.data.data,
     refetchInterval: (query) => {
-      const raw = query.state.data;
-      const data = raw?.data?.data;
-      if (data && data.some((d: DistributionItem) => d.status === 'downloading' || d.status === 'pending')) {
-        return 5000;
-      }
-      return false;
+      const data = query.state.data?.data?.data;
+      return hasActiveDistribution(data) ? 5000 : false;
     },
   });
 
-  // Filter distributions to only those matching this exhibit's content
   const distributions = useMemo(() => {
     if (contentIds.size === 0) return allDistributions;
     return allDistributions.filter((d) => contentIds.has(d.content_id));
@@ -76,7 +82,6 @@ export default function ExhibitDistributionTab({ hallId, exhibitId, canManage }:
     mutationFn: (contentId: number) => contentApi.getDownloadUrl(contentId),
     onSuccess: (res) => {
       const { download_url, filename, file_size, sha256 } = res.data.data;
-      // 1. Download encrypted file
       const a = document.createElement('a');
       a.href = download_url;
       a.download = filename;
@@ -86,7 +91,6 @@ export default function ExhibitDistributionTab({ hallId, exhibitId, canManage }:
       a.click();
       document.body.removeChild(a);
 
-      // 2. Generate and download manifest.sha256
       if (sha256) {
         const manifestContent = `${sha256}  ${filename}\n`;
         const blob = new Blob([manifestContent], { type: 'text/plain' });
@@ -126,18 +130,16 @@ export default function ExhibitDistributionTab({ hallId, exhibitId, canManage }:
       dataIndex: 'progress',
       width: 160,
       render: (v: number, record) => {
-        // 紫蓝渐变（普通进行中）/ 绿（ready）/ 红（failed）
-        const purpleBlueGradient = { from: 'oklch(0.58 0.18 280)', to: 'oklch(0.55 0.16 230)' };
         if (record.status === 'ready') {
           return <Progress percent={100} size="small" strokeColor="var(--color-success)" />;
         }
         if (record.status === 'downloading') {
-          return <Progress percent={v} size="small" status="active" strokeColor={purpleBlueGradient} />;
+          return <Progress percent={v} size="small" status="active" strokeColor={PURPLE_BLUE_GRADIENT} />;
         }
         if (record.status === 'failed') {
           return <Progress percent={v} size="small" status="exception" />;
         }
-        return <Progress percent={0} size="small" strokeColor={purpleBlueGradient} />;
+        return <Progress percent={0} size="small" strokeColor={PURPLE_BLUE_GRADIENT} />;
       },
     },
     {

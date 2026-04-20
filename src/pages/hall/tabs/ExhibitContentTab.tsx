@@ -2,7 +2,10 @@ import React, { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button, Switch, Tooltip, Space, Popconfirm, Image, Input, Typography, Card } from 'antd';
 import { useMessage } from '@/hooks/useMessage';
-import { UploadOutlined, DeleteOutlined, FileImageOutlined, SoundOutlined, EditOutlined, CheckOutlined, CloseOutlined } from '@ant-design/icons';
+import {
+  UploadOutlined, DeleteOutlined, FileImageOutlined, SoundOutlined,
+  EditOutlined, CheckOutlined, CloseOutlined,
+} from '@ant-design/icons';
 import StatusTag from '@/components/common/StatusTag';
 import InlinePipeline from '@/components/content/InlinePipeline';
 import { contentApi } from '@/api/content';
@@ -10,6 +13,7 @@ import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
 import type { ExhibitContentItem } from '@/types/content';
 import type { ExhibitListItem } from '@/types/hall';
+import styles from './ExhibitContentTab.module.scss';
 
 interface Props {
   hallId: number;
@@ -42,6 +46,14 @@ function formatDuration(ms: number): string {
   return `${m}:${String(s % 60).padStart(2, '0')}`;
 }
 
+function hasActivePipeline(items: ExhibitContentItem[] | undefined): boolean {
+  if (!items || items.length === 0) return false;
+  return items.some((c) => {
+    const s = c.pipeline_status;
+    return s && s !== 'ready' && s !== 'completed' && s !== 'done' && s !== '' && s !== 'failed';
+  });
+}
+
 export default function ExhibitContentTab({ hallId, exhibitId, exhibit, canManage }: Props) {
   const { message } = useMessage();
   const queryClient = useQueryClient();
@@ -55,13 +67,8 @@ export default function ExhibitContentTab({ hallId, exhibitId, exhibit, canManag
     queryFn: () => contentApi.getExhibitContent(exhibitId),
     select: (res) => res.data.data,
     refetchInterval: (query) => {
-      const raw = query.state.data;
-      const data = raw?.data?.data;
-      if (data && data.some((c: ExhibitContentItem) => c.pipeline_status && c.pipeline_status !== 'ready' && c.pipeline_status !== 'completed' && c.pipeline_status !== 'done' && c.pipeline_status !== '' && c.pipeline_status !== 'failed')) {
-        // completed 状态仍展示已完成进度条，不参与轮询
-        return 2000;
-      }
-      return false;
+      const data = query.state.data?.data?.data;
+      return hasActivePipeline(data) ? 2000 : false;
     },
   });
 
@@ -84,15 +91,12 @@ export default function ExhibitContentTab({ hallId, exhibitId, exhibit, canManag
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (contentId: number) =>
-      contentApi.deleteContent(contentId),
+    mutationFn: (contentId: number) => contentApi.deleteContent(contentId),
     onSuccess: () => {
       message.success('文件已删除');
       queryClient.invalidateQueries({ queryKey: queryKeys.exhibitContent(exhibitId) });
     },
-    onError: () => {
-      message.error('删除失败');
-    },
+    onError: () => message.error('删除失败'),
   });
 
   const renameMutation = useMutation({
@@ -103,9 +107,7 @@ export default function ExhibitContentTab({ hallId, exhibitId, exhibit, canManag
       setRenamingContentId(null);
       queryClient.invalidateQueries({ queryKey: queryKeys.exhibitContent(exhibitId) });
     },
-    onError: () => {
-      message.error('重命名失败');
-    },
+    onError: () => message.error('重命名失败'),
   });
 
   const startRename = (contentId: number, currentName: string) => {
@@ -124,9 +126,7 @@ export default function ExhibitContentTab({ hallId, exhibitId, exhibit, canManag
     setRenameValue('');
   };
 
-  const handleFileSelect = () => {
-    fileInputRef.current?.click();
-  };
+  const handleFileSelect = () => fileInputRef.current?.click();
 
   const handleFilesChosen = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -187,7 +187,6 @@ export default function ExhibitContentTab({ hallId, exhibitId, exhibit, canManag
       });
 
       setUploadTasks((prev) => prev.map((t, i) => i === index ? { ...t, status: 'completing', progress: 100 } : t));
-
       await contentApi.uploadComplete(content_id, { content_id });
 
       setUploadTasks((prev) => prev.map((t, i) => i === index ? { ...t, status: 'done' } : t));
@@ -203,7 +202,6 @@ export default function ExhibitContentTab({ hallId, exhibitId, exhibit, canManag
   const hasActiveUpload = uploadTasks.some((t) => t.status === 'uploading' || t.status === 'completing');
 
   const renderFileRow = (item: ExhibitContentItem) => {
-    // 仅在未就绪时展示流水线（处理中 / 失败 / pending 都会显示；ready 全部隐藏）
     const showPipeline = item.status !== 'ready';
     const isRenaming = renamingContentId === item.content_id;
 
@@ -243,80 +241,41 @@ export default function ExhibitContentTab({ hallId, exhibitId, exhibit, canManag
     };
 
     return (
-      <div
-        key={item.content_id}
-        style={{
-          padding: '12px 14px',
-          borderRadius: 10,
-          transition: 'background 180ms',
-        }}
-        onMouseEnter={(e) => {
-          (e.currentTarget as HTMLDivElement).style.background = 'rgba(var(--color-primary-rgb), 0.04)';
-        }}
-        onMouseLeave={(e) => {
-          (e.currentTarget as HTMLDivElement).style.background = 'transparent';
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+      <div key={item.content_id} className={styles.fileRow}>
+        <div className={styles.fileRowInner}>
           {/* 缩略图 */}
-          <div style={{ flexShrink: 0 }}>
+          <div className={styles.thumbWrap}>
             {item.thumbnail_url ? (
               <Image
                 src={item.thumbnail_url}
                 width={64}
                 height={36}
-                style={{ objectFit: 'cover', borderRadius: 6 }}
+                className={styles.thumbImg}
                 fallback="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iMzYiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjM2IiBmaWxsPSIjZjBmMGYwIi8+PC9zdmc+"
                 preview={{ mask: false }}
               />
             ) : (
-              <div
-                style={{
-                  width: 64,
-                  height: 36,
-                  display: 'grid',
-                  placeItems: 'center',
-                  background: 'linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.15), rgba(var(--color-primary-rgb), 0.06))',
-                  color: 'var(--color-primary)',
-                  borderRadius: 6,
-                  boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.4)',
-                }}
-              >
-                <FileImageOutlined style={{ fontSize: 18 }} />
+              <div className={styles.thumbPlaceholder}>
+                <FileImageOutlined />
               </div>
             )}
           </div>
 
-          {/* 文件信息 — 双行：名称 + meta */}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            {/* 第一行：文件名 + 重命名笔 */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
-              {renderFilename()}
-            </div>
-            {/* 第二行：size · duration · sound · version · status */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                flexWrap: 'wrap',
-                fontSize: 11,
-                color: 'var(--color-outline)',
-              }}
-            >
+          {/* 文件信息 — 双行 */}
+          <div className={styles.fileInfo}>
+            <div className={styles.fileNameRow}>{renderFilename()}</div>
+            <div className={styles.fileMetaRow}>
               <span>{formatFileSize(item.file_size)}</span>
               {item.duration_ms > 0 && <span>{formatDuration(item.duration_ms)}</span>}
-              {item.has_audio && (
-                <SoundOutlined style={{ color: 'var(--color-primary)', fontSize: 12 }} />
-              )}
-              <span style={{ fontFamily: 'monospace', fontVariantNumeric: 'tabular-nums' }}>
+              {item.has_audio && <SoundOutlined className={styles.fileSoundIcon} />}
+              <span className={styles.fileVersion}>
                 {typeof item.version === 'string' && item.version.startsWith('v') ? item.version : `v${item.version}`}
               </span>
               <StatusTag status={item.status} />
             </div>
           </div>
 
-          {/* 水印开关（带 tooltip）*/}
+          {/* 水印开关 */}
           <Tooltip title={item.is_watermarked ? '已标记为水印文件' : '标记为水印文件'}>
             <Switch
               size="small"
@@ -327,7 +286,6 @@ export default function ExhibitContentTab({ hallId, exhibitId, exhibit, canManag
             />
           </Tooltip>
 
-          {/* 删除 */}
           {canManage && (
             <Popconfirm
               title="确认删除此文件？"
@@ -341,9 +299,8 @@ export default function ExhibitContentTab({ hallId, exhibitId, exhibit, canManag
           )}
         </div>
 
-        {/* Inline pipeline */}
         {showPipeline && (
-          <div style={{ marginTop: 4, marginLeft: 76 }}>
+          <div className={styles.pipelineSlot}>
             <InlinePipeline
               stages={item.pipeline_stages || []}
               overallProgress={item.overall_progress || 0}
@@ -359,30 +316,16 @@ export default function ExhibitContentTab({ hallId, exhibitId, exhibit, canManag
   return (
     <div>
       {/* 玻璃工具栏 */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 16,
-          marginBottom: 16,
-          flexWrap: 'wrap',
-          padding: '14px 18px',
-          background: 'rgba(255, 255, 255, 0.6)',
-          border: '1px solid var(--color-outline-variant)',
-          borderRadius: 12,
-          backdropFilter: 'blur(12px)',
-          WebkitBackdropFilter: 'blur(12px)',
-        }}
-      >
+      <div className={styles.glassToolbar}>
         {canManage && (
           <Button type="primary" icon={<UploadOutlined />} onClick={handleFileSelect} loading={hasActiveUpload}>
             上传文件
           </Button>
         )}
-        <div style={{ width: 1, height: 20, background: 'var(--color-outline-variant)' }} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div className={styles.toolbarDivider} />
+        <div className={styles.toolbarAiTag}>
           <Tooltip title="关闭后，新上传的视频将不再自动生成 AI 标签">
-            <span style={{ fontSize: 13, color: 'var(--color-on-surface-variant)' }}>AI 自动打标</span>
+            <span className={styles.toolbarAiTagLabel}>AI 自动打标</span>
           </Tooltip>
           <Switch
             checked={exhibit.enable_ai_tag}
@@ -391,63 +334,36 @@ export default function ExhibitContentTab({ hallId, exhibitId, exhibit, canManag
             disabled={!canManage}
           />
         </div>
-        <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--color-outline)' }}>
+        <span className={styles.toolbarSummary}>
           共 {items.length} 个文件{items.length > 0 && ` · 总计 ${formatFileSize(
             items.reduce((sum, it) => sum + (it.file_size || 0), 0)
           )}`}
         </span>
-        <input
-          ref={fileInputRef}
-          type="file"
-          style={{ display: 'none' }}
-          multiple
-          onChange={handleFilesChosen}
-        />
+        <input ref={fileInputRef} type="file" style={{ display: 'none' }} multiple onChange={handleFilesChosen} />
       </div>
 
-      {/* Upload progress */}
+      {/* 上传进度 */}
       {uploadTasks.length > 0 && (
-        <div
-          style={{
-            marginBottom: 16,
-            padding: 14,
-            background: 'rgba(var(--color-primary-rgb), 0.05)',
-            border: '1px solid rgba(var(--color-primary-rgb), 0.15)',
-            borderRadius: 12,
-          }}
-        >
-          <div style={{ marginBottom: 8, fontWeight: 600, fontSize: 13, color: 'var(--color-on-surface)' }}>
-            上传进度
-          </div>
+        <div className={styles.uploadPanel}>
+          <div className={styles.uploadPanelTitle}>上传进度</div>
           {uploadTasks.map((task, i) => (
-            <div key={i} style={{ marginBottom: 4, fontSize: 12 }}>
+            <div key={i} className={styles.uploadPanelRow}>
               <Space>
                 <span>{task.file.name}</span>
-                <span style={{ color: 'var(--color-on-surface-variant)' }}>({formatFileSize(task.file.size)})</span>
-                {task.status === 'uploading' && <span style={{ color: 'var(--color-primary)' }}>{task.progress}%</span>}
-                {task.status === 'completing' && <span style={{ color: 'var(--color-primary)' }}>通知后端...</span>}
-                {task.status === 'done' && <span style={{ color: 'var(--color-success)' }}>完成</span>}
-                {task.status === 'error' && <span style={{ color: 'var(--color-error)' }}>{task.error}</span>}
+                <span className={styles.uploadPanelMuted}>({formatFileSize(task.file.size)})</span>
+                {task.status === 'uploading' && <span className={styles.uploadPanelAccent}>{task.progress}%</span>}
+                {task.status === 'completing' && <span className={styles.uploadPanelAccent}>通知后端...</span>}
+                {task.status === 'done' && <span className={styles.uploadPanelSuccess}>完成</span>}
+                {task.status === 'error' && <span className={styles.uploadPanelError}>{task.error}</span>}
               </Space>
             </div>
           ))}
         </div>
       )}
 
-      {/* 玻璃卡包文件列表 */}
+      {/* 列表 */}
       {items.length === 0 ? (
-        <div
-          style={{
-            textAlign: 'center',
-            padding: 40,
-            color: 'var(--color-outline)',
-            background: 'rgba(var(--color-primary-rgb), 0.03)',
-            border: '1px dashed var(--color-outline-variant)',
-            borderRadius: 12,
-          }}
-        >
-          暂无内容文件，请上传
-        </div>
+        <div className={styles.emptyState}>暂无内容文件，请上传</div>
       ) : (
         <Card styles={{ body: { padding: 8 } }}>
           {items.map((item) => renderFileRow(item))}

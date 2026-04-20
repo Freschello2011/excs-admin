@@ -230,7 +230,7 @@ export default function ExhibitDetailPage() {
 
       {/* 描述 + 元数据 */}
       <div className={styles.sectionRow}>
-        <div className="ant-card ant-card-bordered" style={{ padding: 20 }}>
+        <div className={styles.sectionCard}>
           <div className={styles.sectionCardTitle}>展项描述</div>
           {exhibit.description ? (
             <p className={styles.descText}>{exhibit.description}</p>
@@ -238,7 +238,7 @@ export default function ExhibitDetailPage() {
             <p className={`${styles.descText} ${styles.descEmpty}`}>暂未填写描述</p>
           )}
         </div>
-        <div className="ant-card ant-card-bordered" style={{ padding: 20 }}>
+        <div className={styles.sectionCard}>
           <div className={styles.sectionCardTitle}>元数据</div>
           <div className={styles.metaRow}>
             <span className={styles.metaKey}>展示模式</span>

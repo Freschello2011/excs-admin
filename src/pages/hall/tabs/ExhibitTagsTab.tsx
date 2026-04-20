@@ -7,10 +7,10 @@ import {
 import { useMessage } from '@/hooks/useMessage';
 import type { TableColumnsType } from 'antd';
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
-import StatusTag from '@/components/common/StatusTag';
 import { contentApi } from '@/api/content';
 import { queryKeys } from '@/api/queryKeys';
 import type { ContentTag, TagDimension, ExhibitContentItem } from '@/types/content';
+import styles from './ExhibitTagsTab.module.scss';
 
 interface Props {
   hallId: number;
@@ -47,48 +47,35 @@ export default function ExhibitTagsTab({ exhibitId, canManage }: Props) {
   const [editingTag, setEditingTag] = useState<ContentTag | null>(null);
   const [form] = Form.useForm();
 
-  // Fetch exhibit content for file dropdown
   const { data: contentItems = [] } = useQuery({
     queryKey: queryKeys.exhibitContent(exhibitId),
     queryFn: () => contentApi.getExhibitContent(exhibitId),
     select: (res) => res.data.data,
   });
 
-  // Fetch tags
   const { data: tags = [], isLoading } = useQuery({
     queryKey: queryKeys.exhibitTags(exhibitId, { dimension: dimensionFilter, source: sourceFilter, content_id: contentFilter, keyword }),
     queryFn: () => contentApi.searchTags({ exhibit_id: exhibitId, keyword }),
     select: (res) => res.data.data,
   });
 
-  // Collect unique content_ids for retag
   const contentIds = useMemo(() => {
     const ids = new Set<number>();
     contentItems.forEach((c: ExhibitContentItem) => ids.add(c.content_id));
     return Array.from(ids);
   }, [contentItems]);
 
-  // Client-side filtering
   const filteredTags = useMemo(() => {
     let result = tags;
-    if (dimensionFilter !== 'all') {
-      result = result.filter((t) => t.dimension === dimensionFilter);
-    }
-    if (sourceFilter !== 'all') {
-      result = result.filter((t) => t.source === sourceFilter);
-    }
-    if (contentFilter !== 'all') {
-      result = result.filter((t) => t.content_id === contentFilter);
-    }
+    if (dimensionFilter !== 'all') result = result.filter((t) => t.dimension === dimensionFilter);
+    if (sourceFilter !== 'all') result = result.filter((t) => t.source === sourceFilter);
+    if (contentFilter !== 'all') result = result.filter((t) => t.content_id === contentFilter);
     return result;
   }, [tags, dimensionFilter, sourceFilter, contentFilter]);
 
-  // Group by dimension
   const tagsByDimension = useMemo(() => {
     const map = new Map<TagDimension, ContentTag[]>();
-    for (const dim of ALL_DIMENSIONS) {
-      map.set(dim, []);
-    }
+    for (const dim of ALL_DIMENSIONS) map.set(dim, []);
     for (const tag of filteredTags) {
       const dim = tag.dimension as TagDimension;
       const list = map.get(dim);
@@ -98,9 +85,8 @@ export default function ExhibitTagsTab({ exhibitId, canManage }: Props) {
   }, [filteredTags]);
 
   const createMutation = useMutation({
-    mutationFn: (data: { content_id: number; tag: string; start_ms: number; end_ms: number }) => {
-      return contentApi.createTag(data.content_id, data);
-    },
+    mutationFn: (data: { content_id: number; tag: string; start_ms: number; end_ms: number }) =>
+      contentApi.createTag(data.content_id, data),
     onSuccess: () => {
       message.success('标签创建成功');
       queryClient.invalidateQueries({ queryKey: queryKeys.exhibitTags(exhibitId) });
@@ -128,9 +114,7 @@ export default function ExhibitTagsTab({ exhibitId, canManage }: Props) {
 
   const retagMutation = useMutation({
     mutationFn: async () => {
-      for (const contentId of contentIds) {
-        await contentApi.retag(contentId);
-      }
+      for (const contentId of contentIds) await contentApi.retag(contentId);
     },
     onSuccess: () => {
       message.success('AI 标签任务已触发');
@@ -142,9 +126,7 @@ export default function ExhibitTagsTab({ exhibitId, canManage }: Props) {
   const openCreate = () => {
     setEditingTag(null);
     form.resetFields();
-    if (contentItems.length > 0) {
-      form.setFieldsValue({ content_id: contentItems[0].content_id });
-    }
+    if (contentItems.length > 0) form.setFieldsValue({ content_id: contentItems[0].content_id });
     setModalOpen(true);
   };
 
@@ -195,7 +177,7 @@ export default function ExhibitTagsTab({ exhibitId, canManage }: Props) {
       title: '时间段',
       width: 200,
       render: (_: unknown, record) => (
-        <span style={{ fontFamily: 'monospace', fontVariantNumeric: 'tabular-nums' }}>
+        <span className={styles.timeCell}>
           {formatMs(record.start_ms)} ~ {formatMs(record.end_ms)}
         </span>
       ),
@@ -206,10 +188,9 @@ export default function ExhibitTagsTab({ exhibitId, canManage }: Props) {
       width: 90,
       align: 'center',
       render: (v: string) => (
-        <StatusTag
-          status={v === 'ai' ? 'processing' : 'pending'}
-          label={v === 'ai' ? 'AI' : '手动'}
-        />
+        <span className={`${styles.sourceTag} ${v === 'ai' ? styles.sourceTagAi : styles.sourceTagManual}`}>
+          {v === 'ai' ? 'AI' : '手动'}
+        </span>
       ),
     },
     {
@@ -218,9 +199,9 @@ export default function ExhibitTagsTab({ exhibitId, canManage }: Props) {
       width: 90,
       align: 'center',
       render: (v: number | undefined) => (
-        v !== undefined ? (
-          <span style={{ fontFamily: 'monospace', fontVariantNumeric: 'tabular-nums' }}>{(v * 100).toFixed(0)}%</span>
-        ) : <span style={{ color: 'var(--color-outline)' }}>—</span>
+        v !== undefined
+          ? <span className={styles.confidenceCell}>{(v * 100).toFixed(0)}%</span>
+          : <span className={styles.confidenceEmpty}>—</span>
       ),
     },
     ...(canManage ? [{
@@ -230,7 +211,7 @@ export default function ExhibitTagsTab({ exhibitId, canManage }: Props) {
         <Space size="small">
           <a onClick={() => openEdit(record)}>编辑</a>
           <Popconfirm title="确定删除此标签？" onConfirm={() => deleteMutation.mutate(record.id)}>
-            <a style={{ color: 'var(--ant-color-error)' }}>删除</a>
+            <a className={styles.actionDanger}>删除</a>
           </Popconfirm>
         </Space>
       ),
@@ -239,7 +220,6 @@ export default function ExhibitTagsTab({ exhibitId, canManage }: Props) {
 
   return (
     <div>
-      {/* Filters */}
       <Space wrap style={{ marginBottom: 16 }}>
         <Select
           style={{ width: 130 }}
@@ -264,10 +244,7 @@ export default function ExhibitTagsTab({ exhibitId, canManage }: Props) {
           style={{ width: 180 }}
           value={contentFilter}
           onChange={setContentFilter}
-          options={[
-            { value: 'all', label: '全部文件' },
-            ...contentOptions,
-          ]}
+          options={[{ value: 'all', label: '全部文件' }, ...contentOptions]}
         />
         <Input.Search
           placeholder="搜索标签..."
@@ -294,7 +271,6 @@ export default function ExhibitTagsTab({ exhibitId, canManage }: Props) {
         )}
       </Space>
 
-      {/* Tags grouped by dimension */}
       <Collapse
         defaultActiveKey={ALL_DIMENSIONS}
         items={ALL_DIMENSIONS.map((dim) => {
@@ -302,23 +278,9 @@ export default function ExhibitTagsTab({ exhibitId, canManage }: Props) {
           return {
             key: dim,
             label: (
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, fontWeight: 600 }}>
+              <span className={styles.dimHeader}>
                 {DIMENSION_LABELS[dim]}
-                <span
-                  style={{
-                    background: 'rgba(var(--color-primary-rgb), 0.12)',
-                    color: 'var(--color-primary)',
-                    padding: '1px 8px',
-                    borderRadius: 9999,
-                    fontSize: 11,
-                    fontWeight: 500,
-                    lineHeight: 1.5,
-                    minWidth: 22,
-                    textAlign: 'center',
-                  }}
-                >
-                  {dimTags.length}
-                </span>
+                <span className={styles.dimCount}>{dimTags.length}</span>
               </span>
             ),
             children: (
@@ -336,7 +298,6 @@ export default function ExhibitTagsTab({ exhibitId, canManage }: Props) {
         })}
       />
 
-      {/* Create/Edit Modal */}
       <Modal
         title={editingTag ? '编辑标签' : '新建标签'}
         open={modalOpen}
