@@ -150,6 +150,16 @@ function buildMenuRegions(selectedHallId?: number): MenuRegion[] {
             { path: '/platform/releases', icon: 'system_update', label: '版本管理', requireActions: ['release.view', 'release.manage'] },
           ],
         },
+        {
+          key: 'authz',
+          label: '权限管理',
+          collapsible: true,
+          items: [
+            { path: '/platform/authz/role-templates', icon: 'manage_accounts', label: '角色模板', requireActions: ['user.grant', 'user.view'] },
+            { path: '/platform/authz/grants', icon: 'key', label: '授权总览', requireActions: ['user.grant', 'user.view'] },
+            { path: '/platform/authz/audit', icon: 'fact_check', label: '审计日志', requireActions: ['audit.view'] },
+          ],
+        },
       ],
     },
   ];
@@ -183,10 +193,16 @@ const titleMap: Record<string, string> = {
   '/platform/users': '用户管理',
   '/platform/sys-config': '系统参数配置',
   '/platform/releases': '版本管理',
+  '/platform/authz/role-templates': '角色模板',
+  '/platform/authz/grants': '授权总览',
+  '/platform/authz/audit': '审计日志',
 };
 
 /** Match dynamic hall-level routes for page title */
 function resolveTitleFromPath(pathname: string): string {
+  // Authz 动态路径优先（Phase 6）
+  if (/^\/platform\/authz\/role-templates\/(new|\d+\/edit)/.test(pathname)) return '编辑角色模板';
+  if (/^\/platform\/users\/\d+\/grant$/.test(pathname)) return '授权向导';
   // Dynamic hall-level routes — check first (before /halls catches all)
   if (/^\/halls\/\d+\/exhibits/.test(pathname)) return '展项管理';
   if (/^\/halls\/\d+\/exhibit-management/.test(pathname)) return '展项管理';
@@ -352,6 +368,7 @@ export default function AdminLayout() {
     'platform-data': true,
     analytics: true,
     'system-config': true,
+    authz: true,
   });
 
   /* Page title */

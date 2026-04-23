@@ -44,6 +44,11 @@ const AiStatsPage = lazy(() => import('@/pages/analytics/AiStatsPage'));
 const OssBrowserPage = lazy(() => import('@/pages/analytics/OssBrowserPage'));
 const CostPage = lazy(() => import('@/pages/analytics/CostPage'));
 const ReleasesPage = lazy(() => import('@/pages/sys-config/ReleasesPage'));
+const RoleTemplateListPage = lazy(() => import('@/pages/authz/RoleTemplateListPage'));
+const RoleTemplateEditPage = lazy(() => import('@/pages/authz/RoleTemplateEditPage'));
+const GrantListPage = lazy(() => import('@/pages/authz/GrantListPage'));
+const GrantWizardPage = lazy(() => import('@/pages/authz/GrantWizardPage'));
+const AuditLogPlaceholder = lazy(() => import('@/pages/authz/AuditLogPlaceholder'));
 const GatewaysPage = lazy(() => import('@/pages/smarthome/GatewaysPage'));
 const DeviceHealthPage = lazy(() => import('@/pages/smarthome/DeviceHealthPage'));
 const RulesPage = lazy(() => import('@/pages/smarthome/RulesPage'));
@@ -332,6 +337,31 @@ export const router = createBrowserRouter([
       {
         path: 'platform/releases',
         element: <RequireAdmin><SuspenseWrap><ReleasesPage /></SuspenseWrap></RequireAdmin>,
+      },
+      /* 权限管理（Phase 6）——不挂 RequireAdmin，靠菜单 requireActions 过滤 + 后端 403 interceptor 兜底 */
+      {
+        path: 'platform/authz/role-templates',
+        element: <SuspenseWrap><RoleTemplateListPage /></SuspenseWrap>,
+      },
+      {
+        path: 'platform/authz/role-templates/new',
+        element: <SuspenseWrap><RoleTemplateEditPage /></SuspenseWrap>,
+      },
+      {
+        path: 'platform/authz/role-templates/:id/edit',
+        element: <SuspenseWrap><RoleTemplateEditPage /></SuspenseWrap>,
+      },
+      {
+        path: 'platform/authz/grants',
+        element: <SuspenseWrap><GrantListPage /></SuspenseWrap>,
+      },
+      {
+        path: 'platform/users/:userId/grant',
+        element: <SuspenseWrap><GrantWizardPage /></SuspenseWrap>,
+      },
+      {
+        path: 'platform/authz/audit',
+        element: <SuspenseWrap><AuditLogPlaceholder /></SuspenseWrap>,
       },
       /* Legacy /users /sys-config /releases → /platform/* */
       {

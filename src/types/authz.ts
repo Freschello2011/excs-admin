@@ -95,3 +95,136 @@ export interface ExplainResult {
   /** Deny 时：建议申请途径 */
   apply_path?: string;
 }
+
+/* ==================== Phase 6：权限管理后台 ==================== */
+
+/** 风险等级 */
+export type RiskLevel = 'info' | 'low' | 'medium' | 'high' | 'critical';
+
+/** 账号类型（DDD §6.4 过期策略用） */
+export type AccountType = 'internal' | 'vendor' | 'customer';
+
+/** 授权状态 */
+export type GrantStatusType = 'active' | 'expired' | 'revoked';
+
+/** 角色模板状态 */
+export type TemplateStatus = 'active' | 'deprecated';
+
+/** Action 注册表条目（GET /authz/actions 的 list 项） */
+export interface ActionDef {
+  code: string;
+  domain: string;
+  name_zh: string;
+  scope_types: ScopeType[];
+  risk: RiskLevel;
+  covered_apis: string[];
+  require_reason?: boolean;
+  require_confirm?: boolean;
+}
+
+/** Action 列表响应 */
+export interface ActionListResponse {
+  total: number;
+  list: ActionDef[];
+}
+
+/** 角色模板（后端 RoleTemplate entity，action_codes JSON 自动还原为 string[]） */
+export interface RoleTemplate {
+  id: number;
+  code: string;
+  name_zh: string;
+  description?: string;
+  is_builtin: boolean;
+  has_critical: boolean;
+  action_codes: string[];
+  parent_template_id?: number;
+  version: number;
+  status: TemplateStatus;
+  created_by: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** 授权记录（后端 Grant entity） */
+export interface Grant {
+  id: number;
+  user_id: number;
+  role_template_id: number;
+  role_template_version: number;
+  scope_type: ScopeType;
+  scope_id: string;
+  excludes?: ResourceRef[] | null;
+  status: GrantStatusType;
+  granted_by: number;
+  granted_at: string;
+  expires_at?: string | null;
+  revoked_at?: string | null;
+  revoked_by?: number | null;
+  reason?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/** 用户视角授权视图 */
+export interface UserAuthzView {
+  user_id: number;
+  grants: Grant[];
+  action_set?: UserActionSet;
+}
+
+/** 资源视角授权视图 */
+export interface ResourceAuthzView {
+  resource_type: string;
+  resource_id: string;
+  direct_grants: Grant[];
+}
+
+/** 创建模板请求体 */
+export interface CreateRoleTemplateBody {
+  code: string;
+  name_zh: string;
+  description?: string;
+  action_codes: string[];
+}
+
+/** 更新模板请求体（code 不可变） */
+export interface UpdateRoleTemplateBody {
+  name_zh: string;
+  description?: string;
+  action_codes: string[];
+}
+
+/** 复制模板请求体 */
+export interface CopyRoleTemplateBody {
+  new_code: string;
+  new_name: string;
+}
+
+/** 创建授权请求体 */
+export interface CreateGrantBody {
+  user_id: number;
+  template_id: number;
+  scope_type: ScopeType;
+  scope_id: string;
+  excludes?: ResourceRef[];
+  expires_at?: string | null;
+  reason?: string;
+}
+
+/** 撤销授权请求体（body 可选） */
+export interface RevokeGrantBody {
+  reason?: string;
+}
+
+/** 续期授权请求体 */
+export interface ExtendGrantBody {
+  new_expires_at: string;
+}
+
+/** 授权列表 query */
+export interface ListGrantsQuery {
+  user_id?: number;
+  scope_type?: ScopeType;
+  scope_id?: string;
+  include_inactive?: boolean;
+}

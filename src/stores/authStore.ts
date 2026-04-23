@@ -147,3 +147,27 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
     localStorage.removeItem('excs-action-set');
   },
 }));
+
+/* ==================== 跨 Tab 同步（Phase 6.7） ====================
+ * 另一个 Tab 给当前用户授权后，会更新 localStorage 的 excs-action-set；
+ * 浏览器向其他 Tab 派发 storage 事件，这里监听后把新值灌回 store，
+ * 让侧栏 / <Can> 即时反应。同 Tab 的变更不会触发 storage 事件，
+ * 所以这段逻辑只覆盖"跨 Tab"场景。
+ */
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key !== 'excs-action-set' || e.storageArea !== localStorage) return;
+    try {
+      if (!e.newValue || e.newValue === 'null') {
+        useAuthStore.setState({ actionSet: null });
+        return;
+      }
+      const parsed = JSON.parse(e.newValue);
+      if (parsed && Array.isArray(parsed.entries)) {
+        useAuthStore.setState({ actionSet: parsed });
+      }
+    } catch {
+      // swallow：解析失败不干扰当前 Tab
+    }
+  });
+}

@@ -16,8 +16,9 @@ import {
   Col,
 } from 'antd';
 import { useMessage } from '@/hooks/useMessage';
-import { ArrowLeftOutlined, UserOutlined, DeleteOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, UserOutlined, DeleteOutlined, KeyOutlined } from '@ant-design/icons';
 import PageHeader from '@/components/common/PageHeader';
+import Can from '@/components/authz/Can';
 import { userApi } from '@/api/user';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
@@ -113,9 +114,20 @@ export default function UserDetailPage() {
       <PageHeader
         title="用户详情"
         extra={
-          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/users')}>
-            返回列表
-          </Button>
+          <Space>
+            <Can action="user.grant">
+              <Button
+                type="primary"
+                icon={<KeyOutlined />}
+                onClick={() => navigate(`/platform/users/${id}/grant`)}
+              >
+                + 授权
+              </Button>
+            </Can>
+            <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/platform/users')}>
+              返回列表
+            </Button>
+          </Space>
         }
       />
 
