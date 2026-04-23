@@ -43,7 +43,10 @@ function unwrap<T>(axiosRes: { data: ApiResponse<T> }): ApiResponse<T> {
 function loadActionSet(): UserActionSet | null {
   try {
     const raw = localStorage.getItem('excs-action-set');
-    return raw ? (JSON.parse(raw) as UserActionSet) : null;
+    if (!raw || raw === 'undefined' || raw === 'null') return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.entries)) return null;
+    return parsed as UserActionSet;
   } catch {
     return null;
   }
@@ -124,7 +127,7 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
   refreshActionSet: async () => {
     const axiosRes = await authApi.getMyActionSet();
     const res = unwrap<UserActionSet>(axiosRes);
-    if (res.code === 0) {
+    if (res.code === 0 && res.data) {
       set({ actionSet: res.data });
       localStorage.setItem('excs-action-set', JSON.stringify(res.data));
     }

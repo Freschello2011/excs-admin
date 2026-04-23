@@ -69,10 +69,29 @@ export interface PermissionDeniedBody {
   hint?: string;
 }
 
-/** Explain 响应（GET /authz/explain） */
-export interface ExplainResult {
+/** Permission decision（嵌在 ExplainResult.decision 里） */
+export interface PermissionDecision {
   allow: boolean;
   reason: string;
   source?: GrantRef;
-  hint?: string;
+}
+
+/** Explain 响应（GET /authz/explain，后端 ExplanationResult） */
+export interface ExplainResult {
+  decision: PermissionDecision;
+  /** Allow=true 时生效的授权记录（部分字段） */
+  matched_grant?: {
+    id: number;
+    user_id: number;
+    role_template_id: number;
+    scope_type: ScopeType;
+    scope_id: string;
+    status: string;
+    expires_at?: string;
+    reason?: string;
+  };
+  /** Deny 时：友好原因文案 */
+  suggestion?: string;
+  /** Deny 时：建议申请途径 */
+  apply_path?: string;
 }

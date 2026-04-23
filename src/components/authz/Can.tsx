@@ -39,13 +39,14 @@ export default function Can({
   const allowed = useCan(action, resource);
   const [hint, setHint] = useState<string>(DEFAULT_DENY_HINT);
 
-  // disable 模式下异步拉取 explain，拿到人类可读的 hint
+  // disable 模式下异步拉取 explain，拿到人类可读的 hint（suggestion + apply_path）
   useEffect(() => {
     if (allowed || mode !== 'disable') return;
     let cancelled = false;
     explain(action, resource).then((res) => {
-      if (cancelled) return;
-      if (res?.hint) setHint(res.hint);
+      if (cancelled || !res) return;
+      const parts = [res.suggestion, res.apply_path].filter(Boolean);
+      if (parts.length) setHint(parts.join(' · '));
     });
     return () => {
       cancelled = true;
