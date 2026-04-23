@@ -1,4 +1,4 @@
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Card,
@@ -14,11 +14,13 @@ import {
   Popconfirm,
   Row,
   Col,
+  Tabs,
 } from 'antd';
 import { useMessage } from '@/hooks/useMessage';
 import { ArrowLeftOutlined, UserOutlined, DeleteOutlined, KeyOutlined } from '@ant-design/icons';
 import PageHeader from '@/components/common/PageHeader';
 import Can from '@/components/authz/Can';
+import UserAuthzPanel from '@/components/authz/UserAuthzPanel';
 import { userApi } from '@/api/user';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
@@ -53,7 +55,9 @@ export default function UserDetailPage() {
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
   const id = Number(userId);
+  const activeTab = searchParams.get('tab') ?? 'basic';
 
   const { data: user, isLoading } = useQuery({
     queryKey: queryKeys.userDetail(id),
@@ -109,6 +113,89 @@ export default function UserDetailPage() {
   const existingHallIds = new Set(user.hall_permissions.map((hp) => hp.hall_id));
   const availableHalls = halls.filter((h) => !existingHallIds.has(h.id));
 
+  const basicTab = (
+    <Row gutter={24}>
+      {/* Left column: User info card */}
+      <Col xs={24} lg={8}>
+        <Card>
+          <div style={{ textAlign: 'center', marginBottom: 16 }}>
+            <Avatar
+              size={80}
+              src={user.avatar}
+              icon={<UserOutlined />}
+            />
+            <h3 style={{ marginTop: 12, marginBottom: 4 }}>{user.name}</h3>
+            <Tag color={ROLE_COLORS[user.role] || 'default'}>
+              {ROLE_OPTIONS.find((r) => r.value === user.role)?.label || user.role}
+            </Tag>
+          </div>
+          <Descriptions column={1} size="small">
+            <Descriptions.Item label="邮箱">{user.email || '-'}</Descriptions.Item>
+            <Descriptions.Item label="手机">{user.phone || '-'}</Descriptions.Item>
+            <Descriptions.Item label="状态">
+              <Tag color={user.status === 'active' ? 'green' : 'default'}>
+                {user.status === 'active' ? '正常' : user.status}
+              </Tag>
+            </Descriptions.Item>
+            <Descriptions.Item label="创建时间">
+              {dayjs(user.created_at).format('YYYY-MM-DD HH:mm')}
+            </Descriptions.Item>
+            <Descriptions.Item label="最后登录">
+              {user.last_login_at ? dayjs(user.last_login_at).format('YYYY-MM-DD HH:mm') : '-'}
+            </Descriptions.Item>
+          </Descriptions>
+        </Card>
+      </Col>
+
+      {/* Right column: Role assignment + hall permissions */}
+      <Col xs={24} lg={16}>
+        <Card title="角色分配" style={{ marginBottom: 16 }}>
+          <Space>
+            <span>当前角色：</span>
+            <Select
+              style={{ width: 160 }}
+              value={user.role}
+              options={ROLE_OPTIONS}
+              loading={roleMutation.isPending}
+              onChange={(v) => roleMutation.mutate(v)}
+            />
+          </Space>
+        </Card>
+
+        <Card title="展厅权限管理（legacy — Phase 5a 已迁移到 Grant）">
+          {user.hall_permissions.length === 0 && (
+            <p style={{ color: 'var(--color-outline)' }}>暂无展厅权限</p>
+          )}
+
+          {user.hall_permissions.map((hp) => (
+            <HallPermissionRow
+              key={hp.hall_id}
+              permission={hp}
+              loading={permMutation.isPending || revokeMutation.isPending}
+              onSave={(permissions) =>
+                permMutation.mutate({ hall_id: hp.hall_id, permissions })
+              }
+              onRevoke={() => revokeMutation.mutate(hp.hall_id)}
+            />
+          ))}
+
+          {availableHalls.length > 0 && (
+            <>
+              <Divider />
+              <AddHallPermission
+                halls={availableHalls}
+                loading={permMutation.isPending}
+                onAdd={(hallId, permissions) =>
+                  permMutation.mutate({ hall_id: hallId, permissions })
+                }
+              />
+            </>
+          )}
+        </Card>
+      </Col>
+    </Row>
+  );
+
   return (
     <div>
       <PageHeader
@@ -131,86 +218,29 @@ export default function UserDetailPage() {
         }
       />
 
-      <Row gutter={24}>
-        {/* Left column: User info card */}
-        <Col xs={24} lg={8}>
-          <Card>
-            <div style={{ textAlign: 'center', marginBottom: 16 }}>
-              <Avatar
-                size={80}
-                src={user.avatar}
-                icon={<UserOutlined />}
+      <Tabs
+        activeKey={activeTab}
+        onChange={(key) => {
+          if (key === 'basic') {
+            setSearchParams({});
+          } else {
+            setSearchParams({ tab: key });
+          }
+        }}
+        items={[
+          { key: 'basic', label: '基本信息', children: basicTab },
+          {
+            key: 'authz',
+            label: '权限',
+            children: (
+              <UserAuthzPanel
+                userId={id}
+                onNavigateGrantWizard={() => navigate(`/platform/users/${id}/grant`)}
               />
-              <h3 style={{ marginTop: 12, marginBottom: 4 }}>{user.name}</h3>
-              <Tag color={ROLE_COLORS[user.role] || 'default'}>
-                {ROLE_OPTIONS.find((r) => r.value === user.role)?.label || user.role}
-              </Tag>
-            </div>
-            <Descriptions column={1} size="small">
-              <Descriptions.Item label="邮箱">{user.email || '-'}</Descriptions.Item>
-              <Descriptions.Item label="手机">{user.phone || '-'}</Descriptions.Item>
-              <Descriptions.Item label="状态">
-                <Tag color={user.status === 'active' ? 'green' : 'default'}>
-                  {user.status === 'active' ? '正常' : user.status}
-                </Tag>
-              </Descriptions.Item>
-              <Descriptions.Item label="创建时间">
-                {dayjs(user.created_at).format('YYYY-MM-DD HH:mm')}
-              </Descriptions.Item>
-              <Descriptions.Item label="最后登录">
-                {user.last_login_at ? dayjs(user.last_login_at).format('YYYY-MM-DD HH:mm') : '-'}
-              </Descriptions.Item>
-            </Descriptions>
-          </Card>
-        </Col>
-
-        {/* Right column: Role assignment + hall permissions */}
-        <Col xs={24} lg={16}>
-          <Card title="角色分配" style={{ marginBottom: 16 }}>
-            <Space>
-              <span>当前角色：</span>
-              <Select
-                style={{ width: 160 }}
-                value={user.role}
-                options={ROLE_OPTIONS}
-                loading={roleMutation.isPending}
-                onChange={(v) => roleMutation.mutate(v)}
-              />
-            </Space>
-          </Card>
-
-          <Card title="展厅权限管理">
-            {user.hall_permissions.length === 0 && (
-              <p style={{ color: 'var(--color-outline)' }}>暂无展厅权限</p>
-            )}
-
-            {user.hall_permissions.map((hp) => (
-              <HallPermissionRow
-                key={hp.hall_id}
-                permission={hp}
-                loading={permMutation.isPending || revokeMutation.isPending}
-                onSave={(permissions) =>
-                  permMutation.mutate({ hall_id: hp.hall_id, permissions })
-                }
-                onRevoke={() => revokeMutation.mutate(hp.hall_id)}
-              />
-            ))}
-
-            {availableHalls.length > 0 && (
-              <>
-                <Divider />
-                <AddHallPermission
-                  halls={availableHalls}
-                  loading={permMutation.isPending}
-                  onAdd={(hallId, permissions) =>
-                    permMutation.mutate({ hall_id: hallId, permissions })
-                  }
-                />
-              </>
-            )}
-          </Card>
-        </Col>
-      </Row>
+            ),
+          },
+        ]}
+      />
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import dayjs, { Dayjs } from 'dayjs';
+import type { Dayjs } from 'dayjs';
 import {
   Alert,
   Button,
@@ -31,6 +31,7 @@ import { authzApi } from '@/api/authz';
 import { queryKeys } from '@/api/queryKeys';
 import type { CreateGrantBody, RoleTemplate, ScopeType } from '@/types/authz';
 import type { UserListItem } from '@/types/auth';
+import { makeDefaultExpiry } from '@/lib/authz/expiry';
 
 const { Text, Paragraph } = Typography;
 
@@ -49,12 +50,6 @@ interface WizardState {
   expiresAt: Dayjs | null;
   /** 操作原因 */
   reason: string;
-}
-
-function makeDefaultExpiry(hasCritical: boolean, isVendor: boolean): Dayjs | null {
-  if (isVendor) return dayjs().add(180, 'day');
-  if (hasCritical) return dayjs().add(90, 'day');
-  return null;
 }
 
 export default function GrantWizardPage() {
@@ -160,7 +155,7 @@ export default function GrantWizardPage() {
   useEffect(() => {
     if (expiryTouched) return;
     if (state.templateIds.length === 0) return;
-    const def = makeDefaultExpiry(hasCritical, isVendor);
+    const def = makeDefaultExpiry(hasCritical, isVendor ? 'vendor' : 'internal');
     setState((prev) => ({ ...prev, expiresAt: def }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasCritical, isVendor, state.templateIds.length]);

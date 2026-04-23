@@ -9,6 +9,7 @@ import {
   Modal,
   Select,
   Space,
+  Switch,
   Table,
   Tag,
   Tooltip,
@@ -19,6 +20,7 @@ import PageHeader from '@/components/common/PageHeader';
 import { useMessage } from '@/hooks/useMessage';
 import { useAuthStore } from '@/stores/authStore';
 import Can from '@/components/authz/Can';
+import RiskyActionButton from '@/components/authz/RiskyActionButton';
 import { authzApi } from '@/api/authz';
 import { hallApi } from '@/api/hall';
 import { userApi } from '@/api/user';
@@ -50,9 +52,10 @@ export default function GrantListPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | GrantStatusType>('active');
   const [scopeFilter, setScopeFilter] = useState<'all' | ScopeType>('all');
   const [userKeyword, setUserKeyword] = useState('');
+  /** Phase 7.6：仅显示 Phase 5a 迁移脚本产生的 Grant（reason 含 'migrate_hall_permissions'） */
+  const [phase5aOnly, setPhase5aOnly] = useState(false);
 
-  const [revoking, setRevoking] = useState<Grant | null>(null);
-  const [revokeReason, setRevokeReason] = useState('');
+  const [revokingId, setRevokingId] = useState<number | null>(null);
   const [extending, setExtending] = useState<Grant | null>(null);
   const [extendValue, setExtendValue] = useState<Dayjs | null>(null);
 
@@ -104,6 +107,10 @@ export default function GrantListPage() {
     return list.filter((g) => {
       if (statusFilter !== 'all' && g.status !== statusFilter) return false;
       if (scopeFilter !== 'all' && g.scope_type !== scopeFilter) return false;
+      if (phase5aOnly) {
+        const reason = g.reason ?? '';
+        if (!reason.includes('migrate_hall_permissions')) return false;
+      }
       if (userKeyword) {
         const u = userMap.get(g.user_id);
         const hay = [u?.name, u?.email, u?.phone, String(g.user_id)]
@@ -114,16 +121,15 @@ export default function GrantListPage() {
       }
       return true;
     });
-  }, [grants, statusFilter, scopeFilter, userKeyword, userMap]);
+  }, [grants, statusFilter, scopeFilter, userKeyword, userMap, phase5aOnly]);
 
   const revokeMutation = useMutation({
-    mutationFn: ({ id, reason }: { id: number; reason: string }) =>
+    mutationFn: ({ id, reason }: { id: number; reason?: string }) =>
       authzApi.revokeGrant(id, { reason }),
+    onMutate: ({ id }) => setRevokingId(id),
     onSuccess: async (_res, vars) => {
       message.success('授权已撤销');
       queryClient.invalidateQueries({ queryKey: ['authz', 'grants'] });
-      setRevoking(null);
-      setRevokeReason('');
       const g = grants?.find((x) => x.id === vars.id);
       if (g && g.user_id === currentUser?.id) {
         try {
@@ -132,8 +138,12 @@ export default function GrantListPage() {
           // swallow
         }
       }
+      setRevokingId(null);
     },
-    onError: (err: Error) => message.error(err.message || '撤销失败'),
+    onError: (err: Error) => {
+      message.error(err.message || '撤销失败');
+      setRevokingId(null);
+    },
   });
 
   const extendMutation = useMutation({
@@ -147,16 +157,6 @@ export default function GrantListPage() {
     },
     onError: (err: Error) => message.error(err.message || '续期失败'),
   });
-
-  function confirmRevoke() {
-    if (!revoking) return;
-    const template = templateMap.get(revoking.role_template_id);
-    if (template?.has_critical && revokeReason.trim().length < 5) {
-      message.warning('critical 授权撤销需至少 5 字原因');
-      return;
-    }
-    revokeMutation.mutate({ id: revoking.id, reason: revokeReason });
-  }
 
   function confirmExtend() {
     if (!extending || !extendValue) return;
@@ -268,17 +268,29 @@ export default function GrantListPage() {
                 </Button>
               </Can>
               <Can action="user.grant">
-                <Button
+                <RiskyActionButton
+                  action="user.grant"
                   size="small"
                   type="link"
                   danger
-                  onClick={() => {
-                    setRevoking(record);
-                    setRevokeReason('');
+                  loading={revokingId === record.id}
+                  confirmTitle={`撤销授权 #${record.id}`}
+                  confirmContent={(() => {
+                    const t = templateMap.get(record.role_template_id);
+                    const u = userMap.get(record.user_id);
+                    return t?.has_critical
+                      ? `被撤销用户：${u?.name ?? `#${record.user_id}`}；模板「${t.name_zh}」含 critical，需输入撤销原因（≥ 5 字）`
+                      : `被撤销用户：${u?.name ?? `#${record.user_id}`}；模板「${t?.name_zh ?? `#${record.role_template_id}`}」`;
+                  })()}
+                  forceRiskLevel={
+                    templateMap.get(record.role_template_id)?.has_critical ? 'critical' : 'high'
+                  }
+                  onConfirm={async (reason) => {
+                    await revokeMutation.mutateAsync({ id: record.id, reason });
                   }}
                 >
                   撤销
-                </Button>
+                </RiskyActionButton>
               </Can>
             </>
           )}
@@ -289,8 +301,6 @@ export default function GrantListPage() {
       ),
     },
   ];
-
-  const revokingTemplate = revoking ? templateMap.get(revoking.role_template_id) : null;
 
   return (
     <div>
@@ -338,6 +348,18 @@ export default function GrantListPage() {
           >
             刷新
           </Button>
+          <Tooltip title="仅显示 Phase 5a migrate_hall_permissions 脚本创建的 Grant，便于批量复核">
+            <Space>
+              <span style={{ fontSize: 12, color: 'var(--ant-color-text-tertiary)' }}>
+                仅 Phase 5 迁移
+              </span>
+              <Switch
+                size="small"
+                checked={phase5aOnly}
+                onChange={setPhase5aOnly}
+              />
+            </Space>
+          </Tooltip>
         </Space>
         <Can action="user.grant">
           <Button
@@ -358,35 +380,6 @@ export default function GrantListPage() {
         pagination={{ pageSize: 20, showTotal: (t) => `共 ${t} 条` }}
         size="middle"
       />
-
-      <Modal
-        title={`撤销授权 #${revoking?.id ?? ''}`}
-        open={!!revoking}
-        onCancel={() => {
-          setRevoking(null);
-          setRevokeReason('');
-        }}
-        onOk={confirmRevoke}
-        okText="确认撤销"
-        okButtonProps={{ danger: true, loading: revokeMutation.isPending }}
-      >
-        <p>
-          被撤销用户：
-          <strong>{revoking ? userMap.get(revoking.user_id)?.name : ''}</strong>
-        </p>
-        <p>模板：{revokingTemplate?.name_zh ?? `#${revoking?.role_template_id ?? ''}`}</p>
-        {revokingTemplate?.has_critical && (
-          <p style={{ color: 'var(--ant-color-error)' }}>
-            critical 模板：撤销原因必填（至少 5 字）
-          </p>
-        )}
-        <Input.TextArea
-          rows={3}
-          placeholder="撤销原因（审计用）"
-          value={revokeReason}
-          onChange={(e) => setRevokeReason(e.target.value)}
-        />
-      </Modal>
 
       <Modal
         title={`续期授权 #${extending?.id ?? ''}`}

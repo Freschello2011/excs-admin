@@ -9,6 +9,8 @@ import { queryKeys } from '@/api/queryKeys';
 import { useAuthStore } from '@/stores/authStore';
 import { useHallStore } from '@/stores/hallStore';
 import { useCan } from '@/lib/authz/can';
+import Can from '@/components/authz/Can';
+import HallAuthzPanel from '@/components/authz/HallAuthzPanel';
 import HallInfoTab from './tabs/HallInfoTab';
 import HallConfigTab from './tabs/HallConfigTab';
 
@@ -65,6 +67,13 @@ export default function HallDetailPage() {
       <div style={{ marginTop: 24 }}>
         <HallConfigTab hallId={hallId} hall={hall} canConfig={canConfig} />
       </div>
+
+      {/* 权限分布（Phase 7.2 按资源视角） */}
+      <Can action="user.view">
+        <div style={{ marginTop: 24 }}>
+          <HallAuthzPanel hallId={hallId} hallName={hall.name} />
+        </div>
+      </Can>
     </div>
   );
 }
