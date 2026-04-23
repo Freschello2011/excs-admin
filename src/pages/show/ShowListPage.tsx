@@ -14,7 +14,7 @@ import { showApi } from '@/api/show';
 import { hallApi } from '@/api/hall';
 import { contentApi } from '@/api/content';
 import { queryKeys } from '@/api/queryKeys';
-import { useAuthStore } from '@/stores/authStore';
+import { useCan } from '@/lib/authz/can';
 import { useHallStore } from '@/stores/hallStore';
 import type { ShowListItem, ShowStatus } from '@/types/show';
 import type { ExhibitListItem } from '@/types/hall';
@@ -29,9 +29,12 @@ const STATUS_OPTIONS = [
 export default function ShowListPage() {
   const { message } = useMessage();
   const queryClient = useQueryClient();
-  const isAdmin = useAuthStore((s) => s.isAdmin);
 
   const selectedHallId = useHallStore((s) => s.selectedHallId);
+  const canManage = useCan(
+    'show.control',
+    selectedHallId ? { type: 'hall', id: String(selectedHallId) } : undefined,
+  );
 
   const [status, setStatus] = useState<ShowStatus | 'all'>('all');
   const [page, setPage] = useState(1);
@@ -182,10 +185,6 @@ export default function ShowListPage() {
     setPage(p);
     setPageSize(ps);
   };
-
-  const canManage = selectedHallId
-    ? isAdmin() || useAuthStore.getState().hasHallPermission(selectedHallId, 'show_control')
-    : false;
 
   return (
     <div>

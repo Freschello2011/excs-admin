@@ -15,7 +15,7 @@ import StatusTag from '@/components/common/StatusTag';
 import { showApi } from '@/api/show';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
-import { useAuthStore } from '@/stores/authStore';
+import { useCan } from '@/lib/authz/can';
 import type { ShowTrack, ShowAction, TrackType } from '@/types/show';
 import type { DeviceListItem } from '@/types/hall';
 
@@ -43,7 +43,6 @@ export default function ShowDetailPage() {
   const showId = Number(showIdStr);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const isAdmin = useAuthStore((s) => s.isAdmin);
 
   const [trackModalOpen, setTrackModalOpen] = useState(false);
   const [actionModalOpen, setActionModalOpen] = useState(false);
@@ -74,9 +73,10 @@ export default function ShowDetailPage() {
     label: `${d.name}（${d.subcategory_name ?? d.model_name ?? ''}）`,
   }));
 
-  const canManage = show?.hall_id
-    ? isAdmin() || useAuthStore.getState().hasHallPermission(show.hall_id, 'show_control')
-    : false;
+  const canManage = useCan(
+    'show.control',
+    show?.hall_id ? { type: 'hall', id: String(show.hall_id) } : undefined,
+  );
 
   const invalidateShow = () => queryClient.invalidateQueries({ queryKey: queryKeys.showDetail(showId) });
 

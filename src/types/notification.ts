@@ -6,7 +6,12 @@ export type NotificationEventType =
   | 'distribution_failed'
   | 'service_expiring'
   | 'service_expired'
-  | 'app_offline';
+  | 'app_offline'
+  // NAS 归档模块（Phase 5 新增）
+  | 'nas_archived'
+  | 'nas_sync_failed'
+  | 'nas_agent_offline'
+  | 'nas_backlog_exceeded';
 
 /** Notification config item for a hall */
 export interface NotificationConfigItem {

@@ -8,6 +8,7 @@ import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
 import { useAuthStore } from '@/stores/authStore';
 import { useHallStore } from '@/stores/hallStore';
+import { useCan } from '@/lib/authz/can';
 import HallInfoTab from './tabs/HallInfoTab';
 import HallConfigTab from './tabs/HallConfigTab';
 
@@ -16,8 +17,7 @@ export default function HallDetailPage() {
   const hallId = Number(hallIdStr);
   const navigate = useNavigate();
   const isAdmin = useAuthStore((s) => s.isAdmin);
-  const hasPermission = useAuthStore((s) => s.hasHallPermission);
-  const canConfig = hasPermission(hallId, 'system_config') || isAdmin();
+  const canConfig = useCan('hall.update_config', { type: 'hall', id: String(hallId) });
   const setSelectedHall = useHallStore((s) => s.setSelectedHall);
 
   const { data: hall, isLoading } = useQuery({

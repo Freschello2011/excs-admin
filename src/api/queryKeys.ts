@@ -102,4 +102,8 @@ export const queryKeys = {
   operationStats: (params: Record<string, unknown>) => ['analytics', 'operation-stats', params] as const,
   aiStats: (params: Record<string, unknown>) => ['analytics', 'ai-stats', params] as const,
   ossBrowser: (params: Record<string, unknown>) => ['analytics', 'oss-browser', params] as const,
+
+  // NAS 归档
+  nasArchiveList: (params: Record<string, unknown>) => ['nas-archive', 'list', params] as const,
+  nasArchiveStats: () => ['nas-archive', 'stats'] as const,
 };

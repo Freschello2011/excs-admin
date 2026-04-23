@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Tooltip } from 'antd';
 import { useMessage } from '@/hooks/useMessage';
 import { useAuthStore } from '@/stores/authStore';
+import { hasAnyAction } from '@/lib/authz/can';
 import { useAppStore } from '@/stores/appStore';
 import { useBrandingStore } from '@/stores/brandingStore';
 import { useHallStore } from '@/stores/hallStore';
@@ -23,8 +24,8 @@ interface MenuItem {
   path: string;
   icon: string;
   label: string;
-  /** Permission required: 'admin' = admin only, string = hall permission key, undefined = all users */
-  permission?: string;
+  /** Phase 5b：命中任一 action（或超管 '*'）即可见；缺省对全部登录用户可见 */
+  requireActions?: string[];
 }
 
 interface MenuGroup {
@@ -85,7 +86,7 @@ function buildMenuRegions(selectedHallId?: number): MenuRegion[] {
               path: hallId ? `/halls/${hallId}/control-app` : '/control-app',
               icon: 'dashboard_customize',
               label: '中控 App',
-              permission: 'admin',
+              requireActions: ['panel.view', 'panel.edit'],
             },
             { path: '/contents', icon: 'folder_open', label: '内容总库' },
             { path: '/ai/avatars', icon: 'smart_toy', label: '数字人' },
@@ -97,11 +98,11 @@ function buildMenuRegions(selectedHallId?: number): MenuRegion[] {
           label: '智能家居',
           collapsible: true,
           items: [
-            { path: '/smarthome/gateways', icon: 'router', label: '网关管理', permission: 'admin' },
-            { path: '/smarthome/health', icon: 'monitor_heart', label: '设备全景', permission: 'admin' },
-            { path: '/smarthome/rules', icon: 'rule', label: '规则管理', permission: 'admin' },
-            { path: '/smarthome/trigger-logs', icon: 'receipt_long', label: '触发日志', permission: 'admin' },
-            { path: '/smarthome/alerts', icon: 'warning', label: '告警列表', permission: 'admin' },
+            { path: '/smarthome/gateways', icon: 'router', label: '网关管理', requireActions: ['smarthome.manage_gateway', 'smarthome.view'] },
+            { path: '/smarthome/health', icon: 'monitor_heart', label: '设备全景', requireActions: ['smarthome.view'] },
+            { path: '/smarthome/rules', icon: 'rule', label: '规则管理', requireActions: ['smarthome.manage_rule', 'smarthome.view'] },
+            { path: '/smarthome/trigger-logs', icon: 'receipt_long', label: '触发日志', requireActions: ['smarthome.view'] },
+            { path: '/smarthome/alerts', icon: 'warning', label: '告警列表', requireActions: ['smarthome.alert_ack', 'smarthome.view'] },
           ],
         },
       ],
@@ -117,10 +118,10 @@ function buildMenuRegions(selectedHallId?: number): MenuRegion[] {
           label: '平台数据配置',
           collapsible: true,
           items: [
-            { path: '/platform/device-models', icon: 'memory', label: '设备品牌型号', permission: 'admin' },
-            { path: '/platform/device-protocols', icon: 'api', label: '设备协议基线库', permission: 'admin' },
-            { path: '/platform/device-categories', icon: 'apps', label: '设备分类', permission: 'admin' },
-            { path: '/platform/ai-avatar-library', icon: 'view_cozy', label: 'AI 形象库', permission: 'admin' },
+            { path: '/platform/device-models', icon: 'memory', label: '设备品牌型号', requireActions: ['catalog.view', 'catalog.edit'] },
+            { path: '/platform/device-protocols', icon: 'api', label: '设备协议基线库', requireActions: ['catalog.view', 'catalog.edit'] },
+            { path: '/platform/device-categories', icon: 'apps', label: '设备分类', requireActions: ['catalog.view', 'catalog.edit'] },
+            { path: '/platform/ai-avatar-library', icon: 'view_cozy', label: 'AI 形象库', requireActions: ['catalog.view', 'catalog.edit'] },
           ],
         },
         {
@@ -128,14 +129,14 @@ function buildMenuRegions(selectedHallId?: number): MenuRegion[] {
           label: '监控与分析',
           collapsible: true,
           items: [
-            { path: '/analytics/overview', icon: 'monitoring', label: '运行概览', permission: 'admin' },
-            { path: '/analytics/content-stats', icon: 'bar_chart', label: '内容统计', permission: 'admin' },
-            { path: '/analytics/ai-stats', icon: 'smart_toy', label: 'AI 互动统计', permission: 'admin' },
-            { path: '/oss-stats', icon: 'cloud', label: 'OSS 存储统计', permission: 'admin' },
-            { path: '/analytics/oss-browser', icon: 'folder_open', label: 'OSS 存储浏览', permission: 'admin' },
-            { path: '/analytics/cost', icon: 'payments', label: '费用分析', permission: 'admin' },
-            { path: '/notifications', icon: 'notifications', label: '通知管理', permission: 'admin' },
-            { path: '/logs', icon: 'history', label: '操作日志', permission: 'admin' },
+            { path: '/analytics/overview', icon: 'monitoring', label: '运行概览', requireActions: ['analytics.view'] },
+            { path: '/analytics/content-stats', icon: 'bar_chart', label: '内容统计', requireActions: ['analytics.view'] },
+            { path: '/analytics/ai-stats', icon: 'smart_toy', label: 'AI 互动统计', requireActions: ['analytics.view'] },
+            { path: '/oss-stats', icon: 'cloud', label: '存储统计', requireActions: ['analytics.view'] },
+            { path: '/analytics/oss-browser', icon: 'folder_open', label: '存储浏览', requireActions: ['analytics.view'] },
+            { path: '/analytics/cost', icon: 'payments', label: '费用分析', requireActions: ['analytics.view'] },
+            { path: '/notifications', icon: 'notifications', label: '通知管理', requireActions: ['notification.view', 'notification.edit'] },
+            { path: '/logs', icon: 'history', label: '操作日志', requireActions: ['audit.view'] },
           ],
         },
         {
@@ -143,9 +144,9 @@ function buildMenuRegions(selectedHallId?: number): MenuRegion[] {
           label: '系统配置',
           collapsible: true,
           items: [
-            { path: '/platform/users', icon: 'group', label: '用户管理', permission: 'admin' },
-            { path: '/platform/sys-config', icon: 'settings', label: '系统参数配置', permission: 'admin' },
-            { path: '/platform/releases', icon: 'system_update', label: '版本管理', permission: 'admin' },
+            { path: '/platform/users', icon: 'group', label: '用户管理', requireActions: ['user.view', 'user.manage'] },
+            { path: '/platform/sys-config', icon: 'settings', label: '系统参数配置', requireActions: ['config.view', 'config.edit'] },
+            { path: '/platform/releases', icon: 'system_update', label: '版本管理', requireActions: ['release.view', 'release.manage'] },
           ],
         },
       ],
@@ -158,7 +159,7 @@ const titleMap: Record<string, string> = {
   '/halls': '展厅列表',
   '/devices': '设备管理',
   '/contents': '内容总库',
-  '/oss-stats': 'OSS 存储统计',
+  '/oss-stats': '存储统计',
   '/scenes': '场景管理',
   '/shows': '演出管理',
   '/ai/avatars': '数字人',
@@ -172,7 +173,7 @@ const titleMap: Record<string, string> = {
   '/analytics/overview': '运行概览',
   '/analytics/content-stats': '内容统计',
   '/analytics/ai-stats': 'AI 互动统计',
-  '/analytics/oss-browser': 'OSS 存储浏览',
+  '/analytics/oss-browser': '存储浏览',
   '/analytics/cost': '费用分析',
   '/platform/device-models': '设备品牌型号',
   '/platform/device-protocols': '设备协议基线库',
@@ -252,6 +253,8 @@ export default function AdminLayout() {
   const isAdmin = useAuthStore((s) => s.isAdmin);
   const logout = useAuthStore((s) => s.logout);
   const user = useAuthStore((s) => s.user);
+  // 订阅 actionSet 变更，触发 canSeeItem 重算（登录 / 切换用户 / 刷新 token 后）
+  useAuthStore((s) => s.actionSet);
 
   const theme = useAppStore((s) => s.theme);
   const toggleTheme = useAppStore((s) => s.toggleTheme);
@@ -370,13 +373,10 @@ export default function AdminLayout() {
     return location.pathname.startsWith(path);
   }
 
-  /* Check if user can see a menu item */
+  /** Phase 5b：按 requireActions 过滤菜单（命中任一 action 即可见；超管通配符自动放行） */
   function canSeeItem(item: MenuItem): boolean {
-    if (!item.permission) return true;
-    if (item.permission === 'admin') return isAdmin();
-    // Hall-level permission: user has it on any hall
-    if (!user?.hall_permissions) return false;
-    return user.hall_permissions.some((hp) => hp.permissions.includes(item.permission!));
+    if (!item.requireActions || item.requireActions.length === 0) return true;
+    return hasAnyAction(item.requireActions);
   }
 
   /* Click outside to close dropdowns */

@@ -3,6 +3,7 @@ import { Card, Select, Space, Statistic, Button, Popconfirm, Spin, Row, Col } fr
 import { useMessage } from '@/hooks/useMessage';
 import { DeleteOutlined, CloudOutlined, LockOutlined, FileImageOutlined } from '@ant-design/icons';
 import PageHeader from '@/components/common/PageHeader';
+import NASBucketCard from '@/components/nas/NASBucketCard';
 import { contentApi } from '@/api/content';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
@@ -85,8 +86,8 @@ export default function OSSStatsPage() {
   return (
     <div>
       <PageHeader
-        title="OSS 存储统计"
-        description="查看各展厅的 OSS 存储用量"
+        title="存储统计"
+        description="查看各展厅的 OSS 存储用量 + NAS 归档总量"
       />
 
       <Space wrap style={{ marginBottom: 24 }}>
@@ -108,7 +109,7 @@ export default function OSSStatsPage() {
         {isAdmin() && selectedHallId && (
           <Popconfirm
             title="确定触发过期内容清理？"
-            description="将清理所有 App 实例已确认就绪且超过保留天数的加密桶文件"
+            description="将清理加密桶中所有 App 实例已确认就绪且超过保留天数的文件（与 NAS 归档无关，NAS 归档永不随此删除）"
             onConfirm={() => cleanupMutation.mutate()}
           >
             <Button
@@ -122,40 +123,53 @@ export default function OSSStatsPage() {
         )}
       </Space>
 
-      {!selectedHallId ? (
-        <div style={{ textAlign: 'center', color: 'var(--color-outline)', padding: 60 }}>
-          请先选择展厅查看存储统计
-        </div>
-      ) : isLoading ? (
-        <Spin style={{ display: 'flex', justifyContent: 'center', marginTop: 60 }} />
-      ) : stats ? (
-        <Row gutter={[16, 16]}>
-          <Col xs={24} md={8}>
-            <BucketCard
-              title="原始桶 (excs-raw)"
-              icon={<CloudOutlined />}
-              stats={stats.raw_bucket}
-              color="#1677ff"
-            />
+      <Row gutter={[16, 16]}>
+        {/* NAS 归档是跨展厅聚合统计，独立于展厅选择始终展示 */}
+        {isAdmin() && (
+          <Col xs={24} md={12} lg={6}>
+            <NASBucketCard />
           </Col>
-          <Col xs={24} md={8}>
-            <BucketCard
-              title="加密桶 (excs-encrypted)"
-              icon={<LockOutlined />}
-              stats={stats.encrypted_bucket}
-              color="#52c41a"
-            />
+        )}
+
+        {!selectedHallId ? (
+          <Col xs={24} lg={isAdmin() ? 18 : 24}>
+            <div style={{ textAlign: 'center', color: 'var(--color-outline)', padding: 60 }}>
+              请先选择展厅查看 OSS 存储用量
+            </div>
           </Col>
-          <Col xs={24} md={8}>
-            <BucketCard
-              title="缩略图桶 (excs-thumbnail)"
-              icon={<FileImageOutlined />}
-              stats={stats.thumbnail_bucket}
-              color="#faad14"
-            />
+        ) : isLoading ? (
+          <Col xs={24} lg={isAdmin() ? 18 : 24}>
+            <Spin style={{ display: 'flex', justifyContent: 'center', marginTop: 60 }} />
           </Col>
-        </Row>
-      ) : null}
+        ) : stats ? (
+          <>
+            <Col xs={24} md={12} lg={6}>
+              <BucketCard
+                title="原始桶 (excs-raw)"
+                icon={<CloudOutlined />}
+                stats={stats.raw_bucket}
+                color="#1677ff"
+              />
+            </Col>
+            <Col xs={24} md={12} lg={6}>
+              <BucketCard
+                title="加密桶 (excs-encrypted)"
+                icon={<LockOutlined />}
+                stats={stats.encrypted_bucket}
+                color="#52c41a"
+              />
+            </Col>
+            <Col xs={24} md={12} lg={6}>
+              <BucketCard
+                title="缩略图桶 (excs-thumbnail)"
+                icon={<FileImageOutlined />}
+                stats={stats.thumbnail_bucket}
+                color="#faad14"
+              />
+            </Col>
+          </>
+        ) : null}
+      </Row>
     </div>
   );
 }

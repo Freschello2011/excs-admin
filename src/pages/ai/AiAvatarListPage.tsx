@@ -11,7 +11,7 @@ import StatusTag from '@/components/common/StatusTag';
 import { aiApi } from '@/api/ai';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
-import { useAuthStore } from '@/stores/authStore';
+import { useCan } from '@/lib/authz/can';
 import { useHallStore } from '@/stores/hallStore';
 import { useExhibitContextSync } from '@/hooks/useExhibitContextSync';
 import type { ExhibitListItem } from '@/types/hall';
@@ -20,10 +20,12 @@ import AiAvatarConfigPanel from './AiAvatarConfigPanel';
 export default function AiAvatarListPage() {
   const { message } = useMessage();
   const queryClient = useQueryClient();
-  const isAdmin = useAuthStore((s) => s.isAdmin);
 
   const selectedHallId = useHallStore((s) => s.selectedHallId);
   const storeExhibitId = useExhibitContextSync();
+  const hallResource = selectedHallId ? { type: 'hall', id: String(selectedHallId) } : undefined;
+  const canManage = useCan('ai.configure', hallResource);
+  const canControl = useCan('ai.control', hallResource);
 
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [selectedExhibitId, setSelectedExhibitId] = useState<number | null>(null);
@@ -64,14 +66,6 @@ export default function AiAvatarListPage() {
     setSelectedExhibitId(exhibitId);
     setDetailModalOpen(true);
   };
-
-  const canManage = selectedHallId
-    ? isAdmin() || useAuthStore.getState().hasHallPermission(selectedHallId, 'system_config')
-    : false;
-
-  const canControl = selectedHallId
-    ? isAdmin() || useAuthStore.getState().hasHallPermission(selectedHallId, 'device_control')
-    : false;
 
   const columns: TableColumnsType<ExhibitListItem> = [
     { title: '编号', dataIndex: 'id', width: 70 },

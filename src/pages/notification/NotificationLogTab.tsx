@@ -17,6 +17,11 @@ const EVENT_TYPE_OPTIONS = [
   { value: 'service_expiring', label: '服务即将到期' },
   { value: 'service_expired', label: '服务已过期' },
   { value: 'app_offline', label: '应用离线' },
+  // NAS 归档事件（Phase 5 新增，走 sys_configs.nas.alert_user_ids 接收人，hall_id=0）
+  { value: 'nas_archived', label: 'NAS 归档完成' },
+  { value: 'nas_sync_failed', label: 'NAS 归档失败' },
+  { value: 'nas_agent_offline', label: 'NAS Agent 离线' },
+  { value: 'nas_backlog_exceeded', label: 'OSS 积压超阈值' },
 ];
 
 const EVENT_LABELS: Record<string, string> = {
@@ -27,6 +32,10 @@ const EVENT_LABELS: Record<string, string> = {
   service_expiring: '服务即将到期',
   service_expired: '服务已过期',
   app_offline: '应用离线',
+  nas_archived: 'NAS 归档完成',
+  nas_sync_failed: 'NAS 归档失败',
+  nas_agent_offline: 'NAS Agent 离线',
+  nas_backlog_exceeded: 'OSS 积压超阈值',
 };
 
 const STATUS_COLORS: Record<string, string> = {

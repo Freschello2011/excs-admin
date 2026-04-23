@@ -23,7 +23,7 @@ export default function HallContextGuard({ children }: { children: React.ReactNo
   const selectedHallId = useHallStore((s) => s.selectedHallId);
   const setSelectedHall = useHallStore((s) => s.setSelectedHall);
 
-  const user = useAuthStore((s) => s.user);
+  const actionSet = useAuthStore((s) => s.actionSet);
   const isAdmin = useAuthStore((s) => s.isAdmin);
 
   const needsHallList = !urlHallId && selectedHallId === undefined;
@@ -39,9 +39,16 @@ export default function HallContextGuard({ children }: { children: React.ReactNo
 
   const accessibleHalls: HallListItem[] = useMemo(() => {
     if (isAdmin()) return allHalls;
-    const allowedIds = new Set(user?.hall_permissions?.map((hp) => hp.hall_id) ?? []);
+    // Phase 5b：从 action set 中归集 scope.type==='H' 的 hall_id
+    const allowedIds = new Set<number>();
+    for (const e of actionSet?.entries ?? []) {
+      if (e.scope.type === 'H' && e.scope.id) {
+        const id = Number(e.scope.id);
+        if (!Number.isNaN(id)) allowedIds.add(id);
+      }
+    }
     return allHalls.filter((h) => allowedIds.has(h.id));
-  }, [allHalls, isAdmin, user]);
+  }, [allHalls, isAdmin, actionSet]);
 
   // URL 中的 hallId 权威，自动同步到 store
   useEffect(() => {

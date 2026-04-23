@@ -11,7 +11,7 @@ import PageHeader from '@/components/common/PageHeader';
 import { commandApi } from '@/api/command';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
-import { useAuthStore } from '@/stores/authStore';
+import { useCan } from '@/lib/authz/can';
 import { useHallStore } from '@/stores/hallStore';
 import type { SceneListItem, SceneAction } from '@/types/command';
 import type { DeviceListItem } from '@/types/hall';
@@ -31,9 +31,12 @@ const ICON_OPTIONS = [
 export default function SceneListPage() {
   const { message } = useMessage();
   const queryClient = useQueryClient();
-  const isAdmin = useAuthStore((s) => s.isAdmin);
 
   const selectedHallId = useHallStore((s) => s.selectedHallId);
+  const canManage = useCan(
+    'scene.edit',
+    selectedHallId ? { type: 'hall', id: String(selectedHallId) } : undefined,
+  );
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingScene, setEditingScene] = useState<SceneListItem | null>(null);
@@ -197,10 +200,6 @@ export default function SceneListPage() {
       ),
     },
   ];
-
-  const canManage = selectedHallId
-    ? isAdmin() || useAuthStore.getState().hasHallPermission(selectedHallId, 'system_config')
-    : false;
 
   return (
     <div>

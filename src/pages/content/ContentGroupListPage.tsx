@@ -12,7 +12,7 @@ import StatusTag from '@/components/common/StatusTag';
 import { contentApi } from '@/api/content';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
-import { useAuthStore } from '@/stores/authStore';
+import { useCan } from '@/lib/authz/can';
 import { useHallStore } from '@/stores/hallStore';
 import type { ExhibitListItem } from '@/types/hall';
 
@@ -49,8 +49,11 @@ function formatDuration(ms: number): string {
 export default function ContentGroupListPage() {
   const { message } = useMessage();
   const queryClient = useQueryClient();
-  const isAdmin = useAuthStore((s) => s.isAdmin);
   const selectedHallId = useHallStore((s) => s.selectedHallId);
+  const canManage = useCan(
+    'content.edit',
+    selectedHallId ? { type: 'hall', id: String(selectedHallId) } : undefined,
+  );
 
   const [searchParams, setSearchParams] = useSearchParams();
   const bindParam = (searchParams.get('bind') ?? 'all') as BindFilter;
@@ -142,10 +145,6 @@ export default function ContentGroupListPage() {
     else nextParams.set('bind', next);
     setSearchParams(nextParams, { replace: true });
   };
-
-  const canManage = selectedHallId
-    ? isAdmin() || useAuthStore.getState().hasHallPermission(selectedHallId, 'content_manage')
-    : false;
 
   const columns: TableColumnsType<ContentRow> = [
     {

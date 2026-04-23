@@ -16,6 +16,7 @@ import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
 import { useAuthStore } from '@/stores/authStore';
 import { useHallStore } from '@/stores/hallStore';
+import { useCan } from '@/lib/authz/can';
 import ExhibitContentTab from './tabs/ExhibitContentTab';
 import ExhibitTagsTab from './tabs/ExhibitTagsTab';
 import ExhibitDistributionTab from './tabs/ExhibitDistributionTab';
@@ -68,7 +69,7 @@ export default function ExhibitDetailPage() {
   const navigate = useNavigate();
   const { message } = App.useApp();
   const isAdmin = useAuthStore((s) => s.isAdmin);
-  const hasPermission = useAuthStore((s) => s.hasHallPermission);
+  const canManage = useCan('content.edit', { type: 'hall', id: String(hallId) });
   const clearSelectedExhibit = useHallStore((s) => s.clearSelectedExhibit);
   const selectedExhibitId = useHallStore((s) => s.selectedExhibitId);
   const setSelectedExhibit = useHallStore((s) => s.setSelectedExhibit);
@@ -99,7 +100,6 @@ export default function ExhibitDetailPage() {
 
   const exhibit = exhibits.find((e) => e.id === exhibitId);
   const isLoading = hallLoading || exhibitsLoading;
-  const canManage = isAdmin() || hasPermission(hallId, 'content_manage');
 
   // 路径上的 exhibitId 同步到 store（方便顶栏 pill 显示与清除联动）
   useEffect(() => {

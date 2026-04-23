@@ -25,6 +25,15 @@ const ERROR_MESSAGES: Record<number, string> = {
   2002: '账户已禁用，请联系管理员',
 };
 
+/* ==================== 403 permission_denied 文案 ==================== */
+const PERMISSION_DENIED_FALLBACK: Record<string, string> = {
+  no_grants: '您尚未获得任何授权，请联系管理员',
+  action_not_granted: '您没有执行此操作的权限',
+  resource_out_of_scope: '您对该资源没有访问权限',
+  grant_expired: '授权已过期，请联系管理员续期',
+  user_suspended: '您的账号已被停用，请联系管理员',
+};
+
 /* ==================== Create Axios Instance ==================== */
 const request = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/',
@@ -138,6 +147,21 @@ request.interceptors.response.use(
       const resData = error.response.data;
 
       const silent = error.config?.skipErrorMessage;
+
+      // Phase 5b：后端 authz 403 结构化响应 {error:'permission_denied', action, reason, resource?, hint?}
+      if (status === 403 && resData && typeof resData === 'object' && resData.error === 'permission_denied') {
+        if (!silent) {
+          const reason = resData.reason as string | undefined;
+          const hint = (resData.hint as string | undefined) || PERMISSION_DENIED_FALLBACK[reason || ''] || '没有权限访问';
+          if (reason === 'user_suspended' || reason === 'no_grants') {
+            // 大弹窗性质的硬停——这里按 emitError 展示；后续若接入 Modal 再升级
+            emitError(hint);
+          } else {
+            emitError(hint);
+          }
+        }
+        return Promise.reject(error);
+      }
 
       // If the backend returned a structured JSON error, prefer its message
       if (resData && typeof resData === 'object' && resData.code && resData.message) {

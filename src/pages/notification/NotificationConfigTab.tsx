@@ -1,6 +1,7 @@
 import { useState, useRef, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
+  Alert,
   Table,
   Switch,
   Button,
@@ -93,6 +94,12 @@ export default function NotificationConfigTab() {
 
   return (
     <div>
+      <Alert
+        type="info"
+        showIcon
+        message="NAS 归档事件（nas_archived / nas_sync_failed / nas_agent_offline / nas_backlog_exceeded）是全局事件，接收人在「系统参数配置 → NAS 归档 → 告警接收人」配置，不在本页。"
+        style={{ marginBottom: 16 }}
+      />
       {!hallId ? (
         <Empty description="请先在顶栏选择展厅" />
       ) : (

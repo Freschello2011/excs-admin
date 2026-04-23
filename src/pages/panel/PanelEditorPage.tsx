@@ -33,7 +33,7 @@ import { panelApi } from '@/api/panel';
 import { hallApi } from '@/api/hall';
 import { commandApi } from '@/api/command';
 import { queryKeys } from '@/api/queryKeys';
-import { useAuthStore } from '@/stores/authStore';
+import { useCan } from '@/lib/authz/can';
 import type {
   PanelSection,
   PanelCard,
@@ -240,9 +240,7 @@ export default function PanelEditorPage() {
   const { message } = useMessage();
   const hallId = useHallStore((s) => s.selectedHallId) ?? 0;
   const queryClient = useQueryClient();
-  const isAdmin = useAuthStore((s) => s.isAdmin);
-  const hasPermission = useAuthStore((s) => s.hasHallPermission);
-  const canConfig = hasPermission(hallId, 'system_config') || isAdmin();
+  const canConfig = useCan('panel.edit', { type: 'hall', id: String(hallId) });
 
   /* ─── DnD sensors ─── */
   const sensors = useSensors(
@@ -288,7 +286,7 @@ export default function PanelEditorPage() {
   const sections = panel?.sections ?? [];
 
   /* ─── Preview state ─── */
-  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(true);
   const [hoveredCardId, setHoveredCardId] = useState<number | null>(null);
   const editorCardRefs = useRef<Record<number, HTMLDivElement | null>>({});
 

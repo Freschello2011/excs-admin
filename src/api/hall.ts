@@ -223,4 +223,9 @@ export const hallApi = {
   switchControlAppHall(hallId: number, sessionId: number, data: SwitchControlHallBody): Promise<AxiosResponse<ApiResponse<void>>> {
     return request.post(`/api/v1/halls/${hallId}/control-app-sessions/${sessionId}/switch-hall`, data);
   },
+
+  /** 27. 清理离线中控会话（last_active_at 超 5 分钟） */
+  cleanupStaleControlSessions(hallId: number): Promise<AxiosResponse<ApiResponse<{ deleted: number }>>> {
+    return request.delete(`/api/v1/halls/${hallId}/control-app-sessions/stale`);
+  },
 };

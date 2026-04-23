@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Tabs, Form, Input, Button, Card, Alert, Space, Spin } from 'antd';
 import { useMessage } from '@/hooks/useMessage';
 import { SaveOutlined, UndoOutlined, ClockCircleOutlined, EyeInvisibleOutlined, EyeTwoTone } from '@ant-design/icons';
@@ -7,6 +7,7 @@ import { sysConfigApi } from '@/api/sysConfig';
 import { queryKeys } from '@/api/queryKeys';
 import PageHeader from '@/components/common/PageHeader';
 import BrandingForm from './BrandingForm';
+import NASConfigTab from './NASConfigTab';
 import type { ConfigItem } from '@/types/sysConfig';
 
 /** Tab 中文标签映射（有序） */
@@ -22,6 +23,7 @@ const GROUP_TABS: { key: string; label: string }[] = [
   { key: 'general', label: '通用配置' },
   { key: 'smarthome', label: '智能家居' },
   { key: 'sms', label: '短信服务' },
+  { key: 'nas', label: 'NAS 归档' },
 ];
 
 /** 分组配置表单 */
@@ -180,11 +182,13 @@ function GroupConfigForm({ group }: { group: string }) {
 export default function SysConfigPage() {
   const [activeTab, setActiveTab] = useState('branding');
 
-  const tabItems = GROUP_TABS.map(({ key, label }) => ({
-    key,
-    label,
-    children: key === 'branding' ? <BrandingForm /> : <GroupConfigForm group={key} />,
-  }));
+  const tabItems = GROUP_TABS.map(({ key, label }) => {
+    let children: ReactNode;
+    if (key === 'branding') children = <BrandingForm />;
+    else if (key === 'nas') children = <NASConfigTab />;
+    else children = <GroupConfigForm group={key} />;
+    return { key, label, children };
+  });
 
   return (
     <div>

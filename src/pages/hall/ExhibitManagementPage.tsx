@@ -2,6 +2,7 @@ import { Navigate, useSearchParams } from 'react-router-dom';
 import { Tabs } from 'antd';
 import { useAuthStore } from '@/stores/authStore';
 import { useHallStore } from '@/stores/hallStore';
+import { useCan } from '@/lib/authz/can';
 import { useExhibitContextSync } from '@/hooks/useExhibitContextSync';
 import ExhibitTab from './tabs/ExhibitTab';
 import PairingCodeTab from './tabs/PairingCodeTab';
@@ -11,7 +12,6 @@ type OuterTab = 'list' | 'pairing-codes';
 
 export default function ExhibitManagementPage() {
   const isAdmin = useAuthStore((s) => s.isAdmin);
-  const hasPermission = useAuthStore((s) => s.hasHallPermission);
   const hallId = useHallStore((s) => s.selectedHallId);
   const effectiveExhibitId = useExhibitContextSync();
 
@@ -23,7 +23,7 @@ export default function ExhibitManagementPage() {
     return <Navigate to={`/halls/${hallId}/exhibit-management/${effectiveExhibitId}`} replace />;
   }
 
-  const canConfig = hallId ? (hasPermission(hallId, 'system_config') || isAdmin()) : false;
+  const canConfig = useCan('exhibit.edit', hallId ? { type: 'hall', id: String(hallId) } : undefined);
 
   const handleTabChange = (v: string) => {
     const next = new URLSearchParams(searchParams);
