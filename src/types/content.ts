@@ -1,7 +1,36 @@
 /* ==================== Enums ==================== */
 
 export type EncryptionMode = 'standard' | 'fuse' | 'none';
-export type ContentStatus = 'uploading' | 'processing' | 'ready' | 'error';
+// Phase 10：扩展 5 个生命周期状态（PRD §7.2）；老代码常见的 'processing' / 'ready' / 'error'
+// 仅来自老流水线路径，新 vendor 路径只用 pending_accept / bound / rejected / withdrawn / archived。
+export type ContentStatus =
+  | 'uploading'
+  | 'processing'
+  | 'ready'
+  | 'error'
+  | 'pending_accept'
+  | 'bound'
+  | 'rejected'
+  | 'withdrawn'
+  | 'archived';
+
+// Phase 10：驳回原因码（PRD §7.5 6 码之一）
+export type ContentRejectReason =
+  | 'spec_mismatch'
+  | 'poor_quality'
+  | 'wrong_content'
+  | 'file_corrupted'
+  | 'bad_naming'
+  | 'other';
+
+export const REJECT_REASON_LABEL: Record<ContentRejectReason, string> = {
+  spec_mismatch: '规格不符',
+  poor_quality: '画质不够',
+  wrong_content: '内容错误',
+  file_corrupted: '文件损坏',
+  bad_naming: '命名规范不符',
+  other: '其他',
+};
 export type TagSource = 'ai' | 'manual';
 export type PipelineStageStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
 export type TagDimension = 'visual_element' | 'scene' | 'theme' | 'mood';
@@ -31,15 +60,22 @@ export interface PipelineStage {
 
 export type TaggingStatus = '' | 'pending' | 'processing' | 'done' | 'failed';
 
-/** Flat content list item (replaces ContentGroupListItem) */
+/** Flat content list item (replaces ContentGroupListItem)
+ *  Phase 10: hall_id 改为可空（vendor pending_accept 时尚未归属 hall）；新增 vendor_id /
+ *  content_version / parent_content_id / reject_reasons / hall_name 等字段。
+ */
 export interface ContentListItem {
   id: number;
-  hall_id: number;
+  hall_id?: number | null;
+  hall_name?: string;
+  vendor_id?: number | null;
   exhibit_id: number | null;
   name: string;
   type: string;
   encryption_mode: EncryptionMode;
   version: number;
+  content_version?: number;
+  parent_content_id?: number | null;
   status: ContentStatus;
   pipeline_status: string;
   tagging_status: TaggingStatus;
@@ -47,6 +83,9 @@ export interface ContentListItem {
   file_size: number;
   has_audio: boolean;
   thumbnail_url?: string;
+  reject_reasons?: ContentRejectReason[];
+  reject_note?: string;
+  reviewed_at?: string;
   created_at: string;
 }
 

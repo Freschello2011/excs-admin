@@ -68,4 +68,20 @@ export const userApi = {
   importSSOUser(data: ImportSSOUserBody): Promise<AxiosResponse<ApiResponse<UserDetail>>> {
     return request.post('/api/v1/auth/users/import-sso', data);
   },
+
+  /** 9. 停用 / 恢复用户（v1.1 · PRD §8.8 / DDD §8.1bis） */
+  patchStatus(
+    userId: number,
+    body: { status: 'active' | 'suspended'; reason?: string },
+  ): Promise<AxiosResponse<ApiResponse<void>>> {
+    return request.patch(`/api/v1/auth/users/${userId}/status`, body);
+  },
+
+  /** 10. 软删用户（v1.1 · DDD §9.12，status → archived） */
+  deleteUser(
+    userId: number,
+    body: { reason: string },
+  ): Promise<AxiosResponse<ApiResponse<void>>> {
+    return request.delete(`/api/v1/auth/users/${userId}`, { data: body });
+  },
 };

@@ -168,4 +168,130 @@ export const authzApi = {
     }
     return request.get('/api/v1/authz/explain', { params });
   },
+
+  /* ---------------- Phase 11.4：审计日志查询 / 导出 ---------------- */
+
+  queryAuditLogs(
+    params: AuditLogQueryParams,
+  ): Promise<AxiosResponse<ApiResponse<AuditLogListResponse>>> {
+    return request.get('/api/v1/authz/audit-logs', { params });
+  },
+
+  /* ---------------- Phase 11.7：合规报表 ---------------- */
+
+  reportGrantChanges(
+    days = 30,
+  ): Promise<AxiosResponse<ApiResponse<ReportCounts>>> {
+    return request.get('/api/v1/authz/reports/grant-changes', { params: { days } });
+  },
+
+  reportRiskyActions(
+    days = 30,
+  ): Promise<AxiosResponse<ApiResponse<ReportCounts>>> {
+    return request.get('/api/v1/authz/reports/risky-actions', { params: { days } });
+  },
+
+  reportVendorUploads(
+    days = 30,
+  ): Promise<AxiosResponse<ApiResponse<VendorUploadCounts>>> {
+    return request.get('/api/v1/authz/reports/vendor-uploads', { params: { days } });
+  },
+
+  reportGrantDistribution(): Promise<AxiosResponse<ApiResponse<GrantDistribution>>> {
+    return request.get('/api/v1/authz/reports/grant-distribution');
+  },
+
+  reportGrantsExpiring(
+    days = 30,
+  ): Promise<AxiosResponse<ApiResponse<GrantsExpiringReport>>> {
+    return request.get('/api/v1/authz/reports/grants-expiring', { params: { days } });
+  },
+
+  exportAuditLogsUrl(params: AuditLogQueryParams): string {
+    const q = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') {
+        q.append(k, String(v));
+      }
+    });
+    return `/api/v1/authz/audit-logs/export?${q.toString()}`;
+  },
 };
+
+/* ==================== Phase 11.4 类型 ==================== */
+
+export interface AuditLogQueryParams {
+  actor_user_id?: number;
+  action_code?: string;
+  resource_type?: string;
+  resource_id?: string;
+  status?: 'success' | 'failure';
+  from?: string; // RFC3339
+  to?: string; // RFC3339
+  page_size?: number;
+  offset?: number;
+}
+
+export interface AuditLogRow {
+  id: number;
+  occurred_at: string;
+  actor_user_id: number;
+  actor_account_type: 'internal' | 'vendor';
+  actor_ip: string;
+  action_code: string;
+  resource_type?: string;
+  resource_id?: string;
+  before_value?: unknown;
+  after_value?: unknown;
+  reason?: string;
+  request_id?: string;
+  status: 'success' | 'failure';
+  error_msg?: string;
+}
+
+export interface AuditLogListResponse {
+  list: AuditLogRow[];
+  total: number;
+  limit: number;
+  offset: number;
+  archive_used: boolean;
+}
+
+export interface DatePointInt {
+  date: string;
+  value: number;
+}
+
+export interface KeyCount {
+  key: string;
+  count: number;
+}
+
+export interface ReportCounts {
+  total: number;
+  per_day?: DatePointInt[];
+  per_kind?: KeyCount[];
+}
+
+export interface VendorUploadCounts {
+  total: number;
+  per_day: DatePointInt[];
+}
+
+export interface GrantDistribution {
+  per_template: KeyCount[];
+}
+
+export interface GrantExpiringSummary {
+  id: number;
+  user_id: number;
+  template_code: string;
+  expires_at: string;
+  scope_type: string;
+  scope_id?: string;
+}
+
+export interface GrantsExpiringReport {
+  total: number;
+  list: GrantExpiringSummary[];
+}

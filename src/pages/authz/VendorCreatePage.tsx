@@ -7,6 +7,7 @@ import PageHeader from '@/components/common/PageHeader';
 import { useMessage } from '@/hooks/useMessage';
 import { vendorApi } from '@/api/vendor';
 import { makeDefaultExpiry } from '@/lib/authz/expiry';
+import InitialPasswordModal from '@/components/authz/InitialPasswordModal';
 import type { CreateVendorBody, Vendor } from '@/types/authz';
 
 const { Text, Paragraph } = Typography;
@@ -39,14 +40,19 @@ export default function VendorCreatePage() {
   const { message } = useMessage();
   const [form] = Form.useForm<FormValues>();
   const [createdVendor, setCreatedVendor] = useState<Vendor | null>(null);
+  const [initialPassword, setInitialPassword] = useState<string>('');
+  const [pwdModalOpen, setPwdModalOpen] = useState(false);
 
   const createMutation = useMutation({
     mutationFn: (body: CreateVendorBody) => vendorApi.create(body),
     onSuccess: (res) => {
-      const v = res.data.data;
-      if (v) {
-        setCreatedVendor(v);
-        message.success('供应商已创建，邀请链接已生成');
+      const resp = res.data.data;
+      if (resp?.vendor) {
+        setCreatedVendor(resp.vendor);
+        setInitialPassword(resp.initial_password ?? '');
+        // 自动弹出密码 Modal（Phase 9 最关键的交付点）
+        setPwdModalOpen(true);
+        message.success('供应商已创建');
       }
     },
     onError: (err: Error) => {
@@ -87,12 +93,15 @@ export default function VendorCreatePage() {
                 <Text code>{createdVendor.primary_user_id}</Text>
               </Text>
               <Text type="secondary">
-                邀请链接已通过 Redis 生成（TTL 24h）；请从 SSO 管理后台查询该账号的初始密码并一同发给主账号。
+                主账号初始密码已在弹窗中显示（仅本次可见）。如不慎关闭，请通过 SSO 管理后台重置密码。
               </Text>
             </Space>
           }
           extra={[
-            <Button key="detail" type="primary" onClick={() => navigate(`/platform/authz/vendors/${createdVendor.id}`)}>
+            <Button key="pwd" type="primary" onClick={() => setPwdModalOpen(true)}>
+              再次查看初始密码
+            </Button>,
+            <Button key="detail" onClick={() => navigate(`/platform/authz/vendors/${createdVendor.id}`)}>
               查看供应商详情
             </Button>,
             <Button
@@ -107,12 +116,19 @@ export default function VendorCreatePage() {
               key="another"
               onClick={() => {
                 setCreatedVendor(null);
+                setInitialPassword('');
                 form.resetFields();
               }}
             >
               继续创建
             </Button>,
           ]}
+        />
+        <InitialPasswordModal
+          open={pwdModalOpen}
+          password={initialPassword}
+          phone={createdVendor.contact_phone}
+          onClose={() => setPwdModalOpen(false)}
         />
       </div>
     );

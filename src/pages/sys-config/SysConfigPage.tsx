@@ -24,6 +24,9 @@ const GROUP_TABS: { key: string; label: string }[] = [
   { key: 'smarthome', label: '智能家居' },
   { key: 'sms', label: '短信服务' },
   { key: 'nas', label: 'NAS 归档' },
+  { key: 'platform', label: '平台监控' },
+  { key: 'aliyun', label: '阿里云监控' },
+  { key: 'dashboard', label: '仪表盘' },
 ];
 
 /** 分组配置表单 */

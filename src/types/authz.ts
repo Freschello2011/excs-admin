@@ -310,3 +310,18 @@ export interface InviteInfo {
   has_initial_password: boolean;
   created_at: number; // unix seconds
 }
+
+/**
+ * Phase 9：POST /authz/vendors 响应体（vendor + 一次性 initial_password）。
+ * 管理员前端须立即展示/复制，不存库，不二次查询。
+ */
+export interface CreateVendorResponse {
+  vendor: Vendor;
+  initial_password: string;
+}
+
+/** Phase 9：POST /authz/vendors/:id/members/invite 响应体（member + 一次性 initial_password）。 */
+export interface InviteMemberResponse {
+  member: VendorMember;
+  initial_password: string;
+}

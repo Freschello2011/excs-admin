@@ -35,12 +35,12 @@ import { authzApi } from '@/api/authz';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
 import { useAuthStore } from '@/stores/authStore';
+import { useScopeGroups } from '@/lib/authz/useScopeGroups';
 import type {
   Grant,
   GrantStatusType,
   RoleTemplate,
   ScopeType,
-  UserActionEntry,
 } from '@/types/authz';
 
 const { Text } = Typography;
@@ -112,27 +112,9 @@ export default function UserAuthzPanel({ userId, onNavigateGrantWizard }: Props)
   const grants = view?.grants ?? [];
   const activeGrants = grants.filter((g) => g.status === 'active');
 
-  /** 按 scope 聚合：把 action_set.entries 按 scope 分组 */
-  const scopeGroups = useMemo(() => {
-    if (!view?.action_set) return [];
-    const groups = new Map<string, UserActionEntry[]>();
-    for (const entry of view.action_set.entries) {
-      const key = `${entry.scope.type}:${entry.scope.id || ''}`;
-      const arr = groups.get(key) ?? [];
-      arr.push(entry);
-      groups.set(key, arr);
-    }
-    return Array.from(groups.entries()).map(([key, entries]) => {
-      const [scopeType, scopeId] = key.split(':');
-      const actionsSet = new Set(entries.map((e) => e.action_code));
-      return {
-        key,
-        scopeType: scopeType as ScopeType,
-        scopeId,
-        actions: Array.from(actionsSet).sort(),
-      };
-    });
-  }, [view?.action_set]);
+  // 按 scope 聚合：已抽到 @/lib/authz/useScopeGroups 共用（PRD §8.8.8）。
+  // Part 0 0-grant 白屏兜底在 hook 内部实现（entries ?? []）。
+  const scopeGroups = useScopeGroups(view?.action_set?.entries);
 
   const revokeMutation = useMutation({
     mutationFn: ({ id, reason }: { id: number; reason?: string }) =>

@@ -15,13 +15,16 @@ import {
   Typography,
   DatePicker,
 } from 'antd';
+import { Select } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import type { TableColumnsType } from 'antd';
 import PageHeader from '@/components/common/PageHeader';
 import { useMessage } from '@/hooks/useMessage';
 import Can from '@/components/authz/Can';
 import RiskyActionButton from '@/components/authz/RiskyActionButton';
+import InitialPasswordModal from '@/components/authz/InitialPasswordModal';
 import { vendorApi } from '@/api/vendor';
+import { hallApi } from '@/api/hall';
 import type { VendorMember, VendorStatus } from '@/types/authz';
 
 const { Text, Paragraph } = Typography;
@@ -43,6 +46,10 @@ export default function VendorDetailPage() {
   const [inviteForm] = Form.useForm<{ name: string; phone: string; email?: string }>();
   const [extendOpen, setExtendOpen] = useState(false);
   const [extendValue, setExtendValue] = useState<Dayjs | null>(null);
+  // Phase 9：邀请成功后一次性展示 SSO 初始密码
+  const [invitedPassword, setInvitedPassword] = useState<string>('');
+  const [invitedPhone, setInvitedPhone] = useState<string>('');
+  const [pwdModalOpen, setPwdModalOpen] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['authz', 'vendor', id],
@@ -53,11 +60,15 @@ export default function VendorDetailPage() {
 
   const inviteMutation = useMutation({
     mutationFn: (body: { name: string; phone: string; email?: string }) => vendorApi.inviteMember(id, body),
-    onSuccess: () => {
-      message.success('子账号已创建，邀请链接已生成');
+    onSuccess: (res, vars) => {
+      const resp = res.data.data;
+      message.success('子账号已创建');
       qc.invalidateQueries({ queryKey: ['authz', 'vendor', id] });
       setInviteOpen(false);
       inviteForm.resetFields();
+      setInvitedPassword(resp?.initial_password ?? '');
+      setInvitedPhone(vars.phone);
+      setPwdModalOpen(true);
     },
     onError: (err: Error) => {
       message.error(err.message || '邀请失败');
@@ -109,6 +120,24 @@ export default function VendorDetailPage() {
     onError: (err: Error) => {
       message.error(err.message || '转移失败');
     },
+  });
+
+  // Phase 10：默认归属展厅编辑
+  const { data: allHalls = [] } = useQuery({
+    queryKey: ['halls', { all: true }],
+    queryFn: () => hallApi.getHalls({}),
+    select: (res) => res.data.data?.list ?? [],
+  });
+  const [scopeEditing, setScopeEditing] = useState(false);
+  const [scopeValue, setScopeValue] = useState<number[]>([]);
+  const updateVendorMutation = useMutation({
+    mutationFn: (body: { default_hall_scope: number[] }) => vendorApi.update(id, body),
+    onSuccess: () => {
+      message.success('默认归属展厅已保存');
+      qc.invalidateQueries({ queryKey: ['authz', 'vendor', id] });
+      setScopeEditing(false);
+    },
+    onError: (err: Error) => message.error(err.message || '保存失败'),
   });
 
   if (!Number.isFinite(id)) {
@@ -264,6 +293,50 @@ export default function VendorDetailPage() {
             {vendor.notes || '-'}
           </Descriptions.Item>
         </Descriptions>
+        {/* Phase 10：默认归属展厅（绑定 Modal 的"建议展厅"过滤条件；不作为硬约束） */}
+        <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--ant-color-border-secondary)' }}>
+          <Space align="start" size={16}>
+            <span style={{ color: 'var(--ant-color-text-secondary)', width: 110, display: 'inline-block' }}>默认归属展厅</span>
+            {scopeEditing ? (
+              <Space wrap>
+                <Select
+                  mode="multiple"
+                  value={scopeValue}
+                  onChange={setScopeValue}
+                  options={allHalls.map((h: { id: number; name: string }) => ({ value: h.id, label: h.name }))}
+                  style={{ minWidth: 320 }}
+                  placeholder="选一个或多个展厅（可留空=总库可见）"
+                />
+                <Button type="primary" loading={updateVendorMutation.isPending} onClick={() => updateVendorMutation.mutate({ default_hall_scope: scopeValue })}>
+                  保存
+                </Button>
+                <Button onClick={() => setScopeEditing(false)}>取消</Button>
+              </Space>
+            ) : (
+              <Space wrap>
+                {(vendor.default_hall_scope && vendor.default_hall_scope.length > 0) ? (
+                  vendor.default_hall_scope.map((hid) => {
+                    const h = allHalls.find((x: { id: number; name: string }) => x.id === hid);
+                    return <Tag key={hid}>{h?.name ?? `hall#${hid}`}</Tag>;
+                  })
+                ) : (
+                  <Text type="secondary">未设置（总库所有展厅均可见）</Text>
+                )}
+                <Can action="vendor.manage" mode="hide">
+                  <Button
+                    size="small"
+                    onClick={() => {
+                      setScopeValue(vendor.default_hall_scope ?? []);
+                      setScopeEditing(true);
+                    }}
+                  >
+                    编辑
+                  </Button>
+                </Can>
+              </Space>
+            )}
+          </Space>
+        </div>
       </Card>
 
       <Card
@@ -323,6 +396,14 @@ export default function VendorDetailPage() {
           </Form.Item>
         </Form>
       </Modal>
+
+      {/* Phase 9：邀请成功后一次性展示子账号 SSO 初始密码 */}
+      <InitialPasswordModal
+        open={pwdModalOpen}
+        password={invitedPassword}
+        phone={invitedPhone}
+        onClose={() => setPwdModalOpen(false)}
+      />
 
       {/* 延期 Modal */}
       <Modal

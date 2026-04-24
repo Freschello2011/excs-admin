@@ -35,6 +35,17 @@ export const authApi = {
     return request.get('/api/v1/authz/me/action-set');
   },
 
+  /** Phase 11.9：自助改密（含首登强制改密流）。失败返 400 + 错误消息 */
+  changePassword(
+    oldPassword: string,
+    newPassword: string,
+  ): Promise<AxiosResponse<ApiResponse<{ ok: boolean }>>> {
+    return request.post('/api/v1/auth/change-password', {
+      old_password: oldPassword,
+      new_password: newPassword,
+    });
+  },
+
   /** 解释某个 action 的允许/拒绝原因（"为什么能/不能" 弹窗） */
   explainPermission(
     userId: number,

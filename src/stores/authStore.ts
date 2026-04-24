@@ -28,6 +28,8 @@ interface AuthActions {
   refreshAccessToken: () => Promise<string>;
   /** 拉取 /authz/me/action-set 并写入 store；登录 / 刷新 token / 切换用户后调用 */
   refreshActionSet: () => Promise<void>;
+  /** Phase 11.9：部分字段更新 user（用于 ForceChangePasswordModal 改密成功后清 must_change_pwd） */
+  setUser: (u: LoginUser) => void;
   logout: () => void;
   clearAuth: () => void;
 }
@@ -131,6 +133,11 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
       set({ actionSet: res.data });
       localStorage.setItem('excs-action-set', JSON.stringify(res.data));
     }
+  },
+
+  setUser: (u: LoginUser) => {
+    set({ user: u });
+    localStorage.setItem('excs-user', JSON.stringify(u));
   },
 
   logout: () => {

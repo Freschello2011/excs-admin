@@ -5,6 +5,7 @@ import { Tooltip } from 'antd';
 import { useMessage } from '@/hooks/useMessage';
 import { useAuthStore } from '@/stores/authStore';
 import { hasAnyAction } from '@/lib/authz/can';
+import ForceChangePasswordModal from '@/components/auth/ForceChangePasswordModal';
 import { useAppStore } from '@/stores/appStore';
 import { useBrandingStore } from '@/stores/brandingStore';
 import { useHallStore } from '@/stores/hallStore';
@@ -13,6 +14,7 @@ import { queryKeys } from '@/api/queryKeys';
 import type { HallListItem, ExhibitListItem } from '@/types/hall';
 import CreateHallModal from '@/components/common/CreateHallModal';
 import CreateExhibitModal from '@/components/common/CreateExhibitModal';
+import NotificationBell from '@/components/notification/NotificationBell';
 import styles from './AdminLayout.module.scss';
 
 const SIDEBAR_WIDTH = 256;
@@ -159,6 +161,7 @@ function buildMenuRegions(selectedHallId?: number): MenuRegion[] {
             { path: '/platform/authz/grants', icon: 'key', label: '授权总览', requireActions: ['user.grant', 'user.view'] },
             { path: '/platform/authz/vendors', icon: 'business_center', label: '供应商管理', requireActions: ['vendor.view', 'vendor.manage'] },
             { path: '/platform/authz/audit', icon: 'fact_check', label: '审计日志', requireActions: ['audit.view'] },
+            { path: '/platform/authz/reports', icon: 'insights', label: '合规报表', requireActions: ['audit.view'] },
           ],
         },
       ],
@@ -198,6 +201,7 @@ const titleMap: Record<string, string> = {
   '/platform/authz/grants': '授权总览',
   '/platform/authz/vendors': '供应商管理',
   '/platform/authz/audit': '审计日志',
+  '/platform/authz/reports': '合规报表',
 };
 
 /** Match dynamic hall-level routes for page title */
@@ -753,9 +757,10 @@ export default function AdminLayout() {
                 {theme === 'light' ? 'dark_mode' : 'light_mode'}
               </span>
             </button>
-            <button className={styles['admin-layout__topbar-icon-btn']} onClick={() => navigate('/notifications')}>
-              <span className="material-symbols-outlined">notifications</span>
-            </button>
+            <NotificationBell
+              viewAllPath="/notifications"
+              buttonClassName={styles['admin-layout__topbar-icon-btn']}
+            />
             <button className={styles['admin-layout__topbar-icon-btn']}>
               <span className="material-symbols-outlined">help</span>
             </button>
@@ -836,6 +841,9 @@ export default function AdminLayout() {
           onCancel={() => setShowCreateExhibitModal(false)}
         />
       )}
+
+      {/* Phase 11.9：首登强制改密 Modal（全局挂载；只有 user.must_change_pwd=true 时显示） */}
+      <ForceChangePasswordModal />
     </div>
   );
 }

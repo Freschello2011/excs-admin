@@ -64,8 +64,10 @@ function checkActionSet(
   action: string,
   resource?: ResourceRef,
 ): boolean {
-  if (!set || !set.entries.length) return false;
-  for (const e of set.entries) {
+  // 防御 entries=null（后端已兜底为 []，仍留护栏防脏数据 / 未来 schema 漂移）
+  const entries = set?.entries ?? [];
+  if (!entries.length) return false;
+  for (const e of entries) {
     if (e.action_code !== action && e.action_code !== '*') continue;
     if (scopeMatches(e, resource)) return true;
   }
@@ -90,8 +92,8 @@ export function useCan(action: string, resource?: ResourceRef): boolean {
 /** 判定当前用户是否持有某 action 的任一授权（presence check，忽略 scope） */
 export function hasAnyAction(actions: string[]): boolean {
   const set = useAuthStore.getState().actionSet;
-  if (!set) return false;
-  for (const e of set.entries) {
+  const entries = set?.entries ?? [];
+  for (const e of entries) {
     if (e.action_code === '*') return true;
     if (actions.includes(e.action_code)) return true;
   }

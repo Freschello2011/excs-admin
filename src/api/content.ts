@@ -5,6 +5,7 @@ import type {
   ContentListItem,
   ContentListParams,
   ContentDetail,
+  ContentRejectReason,
   RequestUploadBody,
   RequestUploadResult,
   UploadCompleteBody,
@@ -178,5 +179,46 @@ export const contentApi = {
   /** 删除图文汇报配置 */
   deleteSlideshow(exhibitId: number): Promise<AxiosResponse<ApiResponse<null>>> {
     return request.delete(`/api/v1/exhibits/${exhibitId}/slideshow`);
+  },
+
+  /* ==================== Phase 10 — 内容生命周期（驳回 / 撤回 / 未绑定池） ==================== */
+
+  /** 管理员驳回内容（status pending_accept → rejected） */
+  rejectContent(contentId: number, body: { reasons: ContentRejectReason[]; note: string }): Promise<AxiosResponse<ApiResponse<null>>> {
+    return request.post(`/api/v1/contents/${contentId}/reject`, body);
+  },
+
+  /** 供应商撤回自己的 pending_accept 内容 */
+  withdrawContent(contentId: number): Promise<AxiosResponse<ApiResponse<null>>> {
+    return request.post(`/api/v1/contents/${contentId}/withdraw`);
+  },
+
+  /** 管理员"仅未绑定"Tab 用：支持 status / vendor_ids / hall_id 多维过滤 */
+  adminListContents(params: {
+    status?: string;
+    vendor_ids?: string;
+    hall_id?: number;
+    types?: string;
+    page?: number;
+    page_size?: number;
+  }): Promise<AxiosResponse<ApiResponse<{ list: ContentDetail[]; total: number; page: number; page_size: number }>>> {
+    return request.get('/api/v1/admin/contents', { params });
+  },
+
+  /* ==================== Phase 10 — 供应商工作台 ==================== */
+
+  /** 供应商："我的内容" 列表（后端自动按 caller.vendor_id 过滤） */
+  vendorListMyContents(params?: { status?: string; page?: number; page_size?: number }): Promise<AxiosResponse<ApiResponse<{ list: ContentDetail[]; total: number; page: number; page_size: number }>>> {
+    return request.get('/api/v1/vendor/my-contents', { params });
+  },
+
+  /** 供应商：获取上传凭证（hall_id 从 caller.vendor_id 推导，不需前端传） */
+  vendorRequestUpload(body: RequestUploadBody): Promise<AxiosResponse<ApiResponse<RequestUploadResult>>> {
+    return request.post('/api/v1/vendor/contents/upload', body);
+  },
+
+  /** 供应商：基于被驳回的内容提交新版本（返回新版本的上传凭证） */
+  vendorResubmit(parentContentId: number, body: RequestUploadBody): Promise<AxiosResponse<ApiResponse<RequestUploadResult>>> {
+    return request.post(`/api/v1/vendor/contents/${parentContentId}/resubmit`, body);
   },
 };

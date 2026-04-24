@@ -6,21 +6,25 @@ import {
 } from 'antd';
 import { useMessage } from '@/hooks/useMessage';
 import type { TableColumnsType } from 'antd';
-import { LinkOutlined, FileImageOutlined, SoundOutlined, DeleteOutlined } from '@ant-design/icons';
+import { LinkOutlined, FileImageOutlined, SoundOutlined, DeleteOutlined, StopOutlined } from '@ant-design/icons';
 import PageHeader from '@/components/common/PageHeader';
 import StatusTag from '@/components/common/StatusTag';
+import RejectContentModal from '@/components/content/RejectContentModal';
 import { contentApi } from '@/api/content';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
 import { useCan } from '@/lib/authz/can';
 import { useHallStore } from '@/stores/hallStore';
 import type { ExhibitListItem } from '@/types/hall';
+import type { ContentRejectReason } from '@/types/content';
 
-type BindFilter = 'all' | 'bound' | 'unbound';
+// Phase 10：4 态 Tab（老 BindFilter 的 bound/unbound/all 保留兼容，新增 pending_accept 与 archived）
+type BindFilter = 'all' | 'pending_accept' | 'bound' | 'archived';
 
 interface ContentRow {
   id: number;
-  hall_id: number;
+  hall_id: number | null;
+  vendor_id?: number | null;
   exhibit_id: number | null;
   name: string;
   type: string;
@@ -57,11 +61,13 @@ export default function ContentGroupListPage() {
 
   const [searchParams, setSearchParams] = useSearchParams();
   const bindParam = (searchParams.get('bind') ?? 'all') as BindFilter;
-  const bindFilter: BindFilter = bindParam === 'bound' || bindParam === 'unbound' ? bindParam : 'all';
+  const validBinds: BindFilter[] = ['all', 'pending_accept', 'bound', 'archived'];
+  const bindFilter: BindFilter = validBinds.includes(bindParam) ? bindParam : 'all';
 
   const [bindModalOpen, setBindModalOpen] = useState(false);
   const [bindingItem, setBindingItem] = useState<ContentRow | null>(null);
   const [bindExhibitId, setBindExhibitId] = useState<number | null>(null);
+  const [rejectItem, setRejectItem] = useState<ContentRow | null>(null);
 
   // 全量内容（hall 维度）— 后端分页，这里取较大 page_size 作为内容总库视图
   const { data: rawList = [], isLoading } = useQuery({
@@ -88,10 +94,19 @@ export default function ContentGroupListPage() {
   const filteredItems = useMemo(() => {
     return rawList.filter((item) => {
       if (bindFilter === 'all') return true;
-      if (bindFilter === 'bound') return item.exhibit_id != null;
-      return item.exhibit_id == null;
+      if (bindFilter === 'pending_accept') return item.status === 'pending_accept';
+      if (bindFilter === 'archived') return item.status === 'archived';
+      // bound Tab：已绑定到展项 或 status=bound
+      return item.status === 'bound' || (item.exhibit_id != null && item.status !== 'archived' && item.status !== 'pending_accept');
     });
   }, [rawList, bindFilter]);
+
+  const counts = useMemo(() => ({
+    all: rawList.length,
+    pending: rawList.filter((i) => i.status === 'pending_accept').length,
+    bound: rawList.filter((i) => i.status === 'bound' || (i.exhibit_id != null && i.status !== 'archived' && i.status !== 'pending_accept')).length,
+    archived: rawList.filter((i) => i.status === 'archived').length,
+  }), [rawList]);
 
   const bindMutation = useMutation({
     mutationFn: ({ contentId, exhibitId }: { contentId: number; exhibitId: number }) =>
@@ -120,6 +135,17 @@ export default function ContentGroupListPage() {
       queryClient.invalidateQueries({ queryKey: ['contents'] });
     },
     onError: () => message.error('删除失败'),
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: (args: { contentId: number; reasons: ContentRejectReason[]; note: string }) =>
+      contentApi.rejectContent(args.contentId, { reasons: args.reasons, note: args.note }),
+    onSuccess: () => {
+      message.success('已驳回，供应商将收到通知');
+      setRejectItem(null);
+      queryClient.invalidateQueries({ queryKey: ['contents'] });
+    },
+    onError: (err: Error) => message.error(err.message || '驳回失败'),
   });
 
   const openBind = (item: ContentRow) => {
@@ -209,12 +235,22 @@ export default function ContentGroupListPage() {
     },
     {
       title: '操作',
-      width: 200,
+      width: 260,
       render: (_: unknown, record) => (
         <Space size="small">
           {canManage && (
             <>
-              {record.exhibit_id == null ? (
+              {/* Phase 10：pending_accept 显示 [绑定展项] + [驳回]；其他状态走原有解绑/删除 */}
+              {record.status === 'pending_accept' ? (
+                <>
+                  <Button type="link" size="small" icon={<LinkOutlined />} onClick={() => openBind(record)}>
+                    绑定展项
+                  </Button>
+                  <Button type="link" size="small" danger icon={<StopOutlined />} onClick={() => setRejectItem(record)}>
+                    驳回
+                  </Button>
+                </>
+              ) : record.exhibit_id == null ? (
                 <Button type="link" size="small" icon={<LinkOutlined />} onClick={() => openBind(record)}>
                   绑定展项
                 </Button>
@@ -225,7 +261,7 @@ export default function ContentGroupListPage() {
               )}
               <Popconfirm
                 title="确认删除此文件？"
-                description="删除后 OSS 文件和关联标签将一并清除"
+                description="删除后 OSS 文件和关联标签将一并清除；已绑定内容走归档，保留原 OSS 对象"
                 onConfirm={() => deleteMutation.mutate(record.id)}
                 okText="删除"
                 okButtonProps={{ danger: true }}
@@ -256,14 +292,15 @@ export default function ContentGroupListPage() {
         <>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <Space align="center" size="small">
-              <span style={{ fontSize: 13, color: 'var(--color-on-surface-variant)' }}>显示绑定状态</span>
+              <span style={{ fontSize: 13, color: 'var(--color-on-surface-variant)' }}>内容状态</span>
               <Segmented
                 value={bindFilter}
                 onChange={(v) => handleBindFilterChange(v as BindFilter)}
                 options={[
-                  { value: 'all', label: `全部 · ${rawList.length}` },
-                  { value: 'bound', label: `仅已绑定 · ${rawList.filter((i) => i.exhibit_id != null).length}` },
-                  { value: 'unbound', label: `仅未绑定 · ${rawList.filter((i) => i.exhibit_id == null).length}` },
+                  { value: 'all', label: `全部 · ${counts.all}` },
+                  { value: 'pending_accept', label: `仅未绑定 · ${counts.pending}` },
+                  { value: 'bound', label: `已绑定 · ${counts.bound}` },
+                  { value: 'archived', label: `已归档 · ${counts.archived}` },
                 ]}
               />
             </Space>
@@ -279,6 +316,15 @@ export default function ContentGroupListPage() {
           />
         </>
       )}
+
+      {/* Phase 10：驳回弹窗（PRD §7.5 至少 1 原因码 / 5 字 note 客户端校验） */}
+      <RejectContentModal
+        open={!!rejectItem}
+        contentName={rejectItem?.name}
+        confirmLoading={rejectMutation.isPending}
+        onSubmit={(body) => rejectItem && rejectMutation.mutate({ contentId: rejectItem.id, ...body })}
+        onCancel={() => setRejectItem(null)}
+      />
 
       {/* Bind to exhibit modal */}
       <Modal

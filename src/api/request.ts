@@ -32,6 +32,10 @@ const PERMISSION_DENIED_FALLBACK: Record<string, string> = {
   resource_out_of_scope: '您对该资源没有访问权限',
   grant_expired: '授权已过期，请联系管理员续期',
   user_suspended: '您的账号已被停用，请联系管理员',
+  // Phase 11.0.1：action 标了 InternalOnly，vendor account_type 被拦
+  internal_only: '此操作仅限内部员工',
+  // Phase 11.6：critical action 未填 reason
+  reason_required: '该操作为高风险操作，必须填写操作原因',
 };
 
 /* ==================== Create Axios Instance ==================== */

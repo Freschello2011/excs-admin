@@ -48,12 +48,17 @@ const RoleTemplateListPage = lazy(() => import('@/pages/authz/RoleTemplateListPa
 const RoleTemplateEditPage = lazy(() => import('@/pages/authz/RoleTemplateEditPage'));
 const GrantListPage = lazy(() => import('@/pages/authz/GrantListPage'));
 const GrantWizardPage = lazy(() => import('@/pages/authz/GrantWizardPage'));
-const AuditLogPlaceholder = lazy(() => import('@/pages/authz/AuditLogPlaceholder'));
+const AuditLogListPage = lazy(() => import('@/pages/authz/AuditLogListPage'));
+const AuditReportPage = lazy(() => import('@/pages/authz/AuditReportPage'));
 const VendorListPage = lazy(() => import('@/pages/authz/VendorListPage'));
 const VendorCreatePage = lazy(() => import('@/pages/authz/VendorCreatePage'));
 const VendorDetailPage = lazy(() => import('@/pages/authz/VendorDetailPage'));
 const AcceptInvitePage = lazy(() => import('@/pages/auth/AcceptInvitePage'));
-const VendorPlaceholderPage = lazy(() => import('@/pages/authz/VendorPlaceholderPage'));
+const VendorLayout = lazy(() => import('@/layouts/VendorLayout'));
+const MyContentsPage = lazy(() => import('@/pages/vendor/MyContentsPage'));
+const TeamMembersPage = lazy(() => import('@/pages/vendor/TeamMembersPage'));
+const VendorMessagesPage = lazy(() => import('@/pages/vendor/MessagesPage'));
+const VendorSettingsPage = lazy(() => import('@/pages/vendor/SettingsPage'));
 const GatewaysPage = lazy(() => import('@/pages/smarthome/GatewaysPage'));
 const DeviceHealthPage = lazy(() => import('@/pages/smarthome/DeviceHealthPage'));
 const RulesPage = lazy(() => import('@/pages/smarthome/RulesPage'));
@@ -130,6 +135,27 @@ export const router = createBrowserRouter([
   {
     path: '/invite/:token',
     element: <SuspenseWrap><AcceptInvitePage /></SuspenseWrap>,
+  },
+
+  /* ─── Phase 9：供应商专属子树（独立 layout，不挂在 AdminLayout 下） ─── */
+  {
+    path: '/vendor',
+    element: (
+      <RequireAuth>
+        <ErrorBoundary>
+          <SuspenseWrap>
+            <VendorLayout />
+          </SuspenseWrap>
+        </ErrorBoundary>
+      </RequireAuth>
+    ),
+    children: [
+      { index: true, element: <Navigate to="/vendor/contents" replace /> },
+      { path: 'contents', element: <SuspenseWrap><MyContentsPage /></SuspenseWrap> },
+      { path: 'team', element: <SuspenseWrap><TeamMembersPage /></SuspenseWrap> },
+      { path: 'messages', element: <SuspenseWrap><VendorMessagesPage /></SuspenseWrap> },
+      { path: 'settings', element: <SuspenseWrap><VendorSettingsPage /></SuspenseWrap> },
+    ],
   },
 
   /* ─── Admin routes (AdminLayout) ─── */
@@ -372,7 +398,11 @@ export const router = createBrowserRouter([
       },
       {
         path: 'platform/authz/audit',
-        element: <SuspenseWrap><AuditLogPlaceholder /></SuspenseWrap>,
+        element: <SuspenseWrap><AuditLogListPage /></SuspenseWrap>,
+      },
+      {
+        path: 'platform/authz/reports',
+        element: <SuspenseWrap><AuditReportPage /></SuspenseWrap>,
       },
       /* 供应商管理（Phase 8） */
       {
@@ -386,11 +416,6 @@ export const router = createBrowserRouter([
       {
         path: 'platform/authz/vendors/:id',
         element: <SuspenseWrap><VendorDetailPage /></SuspenseWrap>,
-      },
-      /* 供应商登录后的占位页（Phase 9 建 /vendor 专用 UI） */
-      {
-        path: 'vendor',
-        element: <SuspenseWrap><VendorPlaceholderPage /></SuspenseWrap>,
       },
       /* Legacy /users /sys-config /releases → /platform/* */
       {

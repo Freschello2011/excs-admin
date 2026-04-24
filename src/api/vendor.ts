@@ -10,11 +10,12 @@ import type { ApiResponse } from '@/types/api';
 import type {
   Vendor,
   VendorDetailResponse,
-  VendorMember,
   CreateVendorBody,
   UpdateVendorBody,
   InviteMemberBody,
   InviteInfo,
+  CreateVendorResponse,
+  InviteMemberResponse,
 } from '@/types/authz';
 
 interface ListWrap<T> {
@@ -32,7 +33,7 @@ export const vendorApi = {
     return request.get(`/api/v1/authz/vendors/${id}`);
   },
 
-  create(body: CreateVendorBody): Promise<AxiosResponse<ApiResponse<Vendor>>> {
+  create(body: CreateVendorBody): Promise<AxiosResponse<ApiResponse<CreateVendorResponse>>> {
     return request.post('/api/v1/authz/vendors', body);
   },
 
@@ -63,7 +64,7 @@ export const vendorApi = {
 
   /* ---------------- 子账号 ---------------- */
 
-  inviteMember(id: number, body: InviteMemberBody): Promise<AxiosResponse<ApiResponse<VendorMember>>> {
+  inviteMember(id: number, body: InviteMemberBody): Promise<AxiosResponse<ApiResponse<InviteMemberResponse>>> {
     return request.post(`/api/v1/authz/vendors/${id}/members/invite`, body);
   },
 

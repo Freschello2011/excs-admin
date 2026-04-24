@@ -55,12 +55,27 @@ export const queryKeys = {
   notificationConfigs: (hallId: number) => ['notifications', hallId] as const,
   notificationLogs: (params: Record<string, unknown>) => ['notification-logs', params] as const,
 
+  // user-messages (Phase 9 站内消息)
+  userMessages: (params: Record<string, unknown>) => ['user-messages', params] as const,
+  userMessagesUnreadCount: ['user-messages', 'unread-count'] as const,
+
   // operation logs
   operationLogs: (params: Record<string, unknown>) => ['operation-logs', params] as const,
 
   // dashboard
   dashboardStats: ['dashboard', 'stats'] as const,
   dashboardData: ['dashboard', 'data'] as const,
+
+  // platform-monitor（Step 5，Tab A / B / C）
+  platformDashboard: ['platform', 'dashboard'] as const,
+  platformBusinessTodos: ['platform', 'business', 'todos'] as const,
+  platformBusinessRunning: (period: string) => ['platform', 'business', 'running', period] as const,
+  platformBusinessStorage: ['platform', 'business', 'storage'] as const,
+  platformBusinessCost: (period: string) => ['platform', 'business', 'cost', period] as const,
+  platformBusinessAi: (period: string) => ['platform', 'business', 'ai-interaction', period] as const,
+  platformAuditSummary: ['platform', 'audit', 'summary'] as const,
+  platformAuditAuthz: (limit: number) => ['platform', 'audit', 'authz', limit] as const,
+  platformAuditAppOps: (limit: number) => ['platform', 'audit', 'app-ops', limit] as const,
 
   // panel
   panel: (hallId: number) => ['panel', hallId] as const,
