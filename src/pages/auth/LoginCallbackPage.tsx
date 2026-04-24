@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { useBrandingStore } from '@/stores/brandingStore';
 import { redirectToSSO } from '@/api/request';
+import { resolveAccountType } from '@/types/auth';
 
 export default function LoginCallbackPage() {
   const [searchParams] = useSearchParams();
@@ -52,7 +53,11 @@ export default function LoginCallbackPage() {
 
     handleLoginCallback(code)
       .then(() => {
-        navigate('/dashboard', { replace: true });
+        // Phase 8 起按账号类型分流：vendor → /vendor，其余（internal/customer）→ /dashboard。
+        // user 在 handleLoginCallback 内已写入 localStorage；从 store 取最新值即可。
+        const u = useAuthStore.getState().user;
+        const accountType = resolveAccountType(u);
+        navigate(accountType === 'vendor' ? '/vendor' : '/dashboard', { replace: true });
       })
       .catch((err) => {
         setError(err?.message || '登录失败，请重试');

@@ -228,3 +228,85 @@ export interface ListGrantsQuery {
   scope_id?: string;
   include_inactive?: boolean;
 }
+
+/* ==================== Phase 8：供应商管理 ==================== */
+
+/** 供应商状态 */
+export type VendorStatus = 'active' | 'suspended' | 'archived';
+
+/** 供应商（与 02-server/internal/domain/authz.Vendor 对齐；default_hall_scope 后端是 JSON，前端当 number[]） */
+export interface Vendor {
+  id: number;
+  tenant_id: number;
+  code: string;
+  name: string;
+  primary_user_id: number;
+  status: VendorStatus;
+  default_hall_scope?: number[] | null;
+  contact_name?: string;
+  contact_phone?: string;
+  contact_email?: string;
+  grant_expires_at: string;
+  notes?: string;
+  created_by: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** 供应商下一条账号（members 接口返回项） */
+export interface VendorMember {
+  user_id: number;
+  name: string;
+  email?: string;
+  phone?: string;
+  is_primary: boolean;
+  suspended: boolean;
+}
+
+/** GET /authz/vendors/:id 响应（vendor + members 合并视图） */
+export interface VendorDetailResponse {
+  vendor: Vendor;
+  members: VendorMember[];
+}
+
+/** 创建供应商请求体 */
+export interface CreateVendorBody {
+  code: string;
+  name: string;
+  contact_name: string;
+  contact_phone: string;
+  contact_email?: string;
+  default_hall_scope?: number[];
+  grant_expires_at?: string;
+  notes?: string;
+}
+
+/** 更新供应商请求体（partial） */
+export interface UpdateVendorBody {
+  name?: string;
+  contact_name?: string;
+  contact_phone?: string;
+  contact_email?: string;
+  default_hall_scope?: number[];
+  notes?: string;
+}
+
+/** 邀请子账号请求体 */
+export interface InviteMemberBody {
+  name: string;
+  phone: string;
+  email?: string;
+}
+
+/** 邀请 token 返回（AcceptInvitePage 用；字段做了脱敏） */
+export interface InviteInfo {
+  sso_user_id: number;
+  excs_user_id: number;
+  vendor_id: number;
+  nickname: string;
+  phone: string; // 脱敏
+  email: string; // 脱敏
+  is_primary: boolean;
+  has_initial_password: boolean;
+  created_at: number; // unix seconds
+}

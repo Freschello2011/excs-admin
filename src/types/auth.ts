@@ -12,7 +12,14 @@ export interface MqttInfo {
   password: string;
 }
 
-/** User info returned inside login response */
+/** User info returned inside login response
+ *
+ * Phase 8 命名并存策略（见 steps §8.6）：
+ *   - user_type 是 Phase 5b/6/7 的历史字段（employee | supplier），保留向后兼容；
+ *   - account_type 是 SSO 落地后的权威字段（internal | vendor | customer），新代码优先读；
+ *   - tenant_id 伴随 account_type 引入，customer 账号必填，其余可空。
+ * Phase 9 vendor 模块稳定 2 周后再统一移除 user_type。
+ */
 export interface LoginUser {
   id: number;
   sso_user_id: number;
@@ -22,7 +29,22 @@ export interface LoginUser {
   avatar: string;
   role: 'admin' | 'technician' | 'narrator' | 'producer';
   user_type: 'employee' | 'supplier';
+  account_type?: 'internal' | 'vendor' | 'customer';
+  tenant_id?: number | null;
   hall_permissions: HallPermission[];
+}
+
+/**
+ * resolveAccountType —— Phase 8 兼容读取：优先用 account_type，缺省时从 user_type 兜底推断。
+ *   - account_type 存在且有值：直接返回
+ *   - user_type === 'supplier' → 'vendor'
+ *   - 其他或未登录 → 'internal'
+ */
+export function resolveAccountType(user: Partial<LoginUser> | null | undefined): 'internal' | 'vendor' | 'customer' {
+  if (!user) return 'internal';
+  if (user.account_type) return user.account_type;
+  if (user.user_type === 'supplier') return 'vendor';
+  return 'internal';
 }
 
 /** POST /api/v1/auth/login response data */

@@ -49,6 +49,11 @@ const RoleTemplateEditPage = lazy(() => import('@/pages/authz/RoleTemplateEditPa
 const GrantListPage = lazy(() => import('@/pages/authz/GrantListPage'));
 const GrantWizardPage = lazy(() => import('@/pages/authz/GrantWizardPage'));
 const AuditLogPlaceholder = lazy(() => import('@/pages/authz/AuditLogPlaceholder'));
+const VendorListPage = lazy(() => import('@/pages/authz/VendorListPage'));
+const VendorCreatePage = lazy(() => import('@/pages/authz/VendorCreatePage'));
+const VendorDetailPage = lazy(() => import('@/pages/authz/VendorDetailPage'));
+const AcceptInvitePage = lazy(() => import('@/pages/auth/AcceptInvitePage'));
+const VendorPlaceholderPage = lazy(() => import('@/pages/authz/VendorPlaceholderPage'));
 const GatewaysPage = lazy(() => import('@/pages/smarthome/GatewaysPage'));
 const DeviceHealthPage = lazy(() => import('@/pages/smarthome/DeviceHealthPage'));
 const RulesPage = lazy(() => import('@/pages/smarthome/RulesPage'));
@@ -119,6 +124,12 @@ export const router = createBrowserRouter([
   {
     path: '/control-callback',
     element: <ControlAppCallbackPage />,
+  },
+
+  /* ─── Authz Phase 8：邀请接受页（公开，无需登录） */
+  {
+    path: '/invite/:token',
+    element: <SuspenseWrap><AcceptInvitePage /></SuspenseWrap>,
   },
 
   /* ─── Admin routes (AdminLayout) ─── */
@@ -362,6 +373,24 @@ export const router = createBrowserRouter([
       {
         path: 'platform/authz/audit',
         element: <SuspenseWrap><AuditLogPlaceholder /></SuspenseWrap>,
+      },
+      /* 供应商管理（Phase 8） */
+      {
+        path: 'platform/authz/vendors',
+        element: <SuspenseWrap><VendorListPage /></SuspenseWrap>,
+      },
+      {
+        path: 'platform/authz/vendors/new',
+        element: <SuspenseWrap><VendorCreatePage /></SuspenseWrap>,
+      },
+      {
+        path: 'platform/authz/vendors/:id',
+        element: <SuspenseWrap><VendorDetailPage /></SuspenseWrap>,
+      },
+      /* 供应商登录后的占位页（Phase 9 建 /vendor 专用 UI） */
+      {
+        path: 'vendor',
+        element: <SuspenseWrap><VendorPlaceholderPage /></SuspenseWrap>,
       },
       /* Legacy /users /sys-config /releases → /platform/* */
       {

@@ -157,6 +157,7 @@ function buildMenuRegions(selectedHallId?: number): MenuRegion[] {
           items: [
             { path: '/platform/authz/role-templates', icon: 'manage_accounts', label: '角色模板', requireActions: ['user.grant', 'user.view'] },
             { path: '/platform/authz/grants', icon: 'key', label: '授权总览', requireActions: ['user.grant', 'user.view'] },
+            { path: '/platform/authz/vendors', icon: 'business_center', label: '供应商管理', requireActions: ['vendor.view', 'vendor.manage'] },
             { path: '/platform/authz/audit', icon: 'fact_check', label: '审计日志', requireActions: ['audit.view'] },
           ],
         },
@@ -195,6 +196,7 @@ const titleMap: Record<string, string> = {
   '/platform/releases': '版本管理',
   '/platform/authz/role-templates': '角色模板',
   '/platform/authz/grants': '授权总览',
+  '/platform/authz/vendors': '供应商管理',
   '/platform/authz/audit': '审计日志',
 };
 
@@ -203,6 +205,8 @@ function resolveTitleFromPath(pathname: string): string {
   // Authz 动态路径优先（Phase 6）
   if (/^\/platform\/authz\/role-templates\/(new|\d+\/edit)/.test(pathname)) return '编辑角色模板';
   if (/^\/platform\/users\/\d+\/grant$/.test(pathname)) return '授权向导';
+  if (/^\/platform\/authz\/vendors\/new$/.test(pathname)) return '新建供应商';
+  if (/^\/platform\/authz\/vendors\/\d+$/.test(pathname)) return '供应商详情';
   // Dynamic hall-level routes — check first (before /halls catches all)
   if (/^\/halls\/\d+\/exhibits/.test(pathname)) return '展项管理';
   if (/^\/halls\/\d+\/exhibit-management/.test(pathname)) return '展项管理';
