@@ -6,8 +6,10 @@
  *   - high     → 弹 Modal 简单确认（无 reason）
  *   - 其它     → 直接 onConfirm(undefined)
  *
- * 不自取元数据 —— 复用 `useAuthzMetaStore.loadActions()` 的 TTL 10 分钟缓存，
- * 避免重复请求 `/authz/actions`。
+ * 使用 antd 的 `modal.confirm()` 命令式 API（走 App.useApp hook）—— 避免在表格行内联
+ * `<Modal>` 时的 leave 动画卡住问题（v6 CSS-in-JS 在行再挂载时会打断）。
+ *
+ * Action 元数据复用 `useAuthzMetaStore.loadActions()` 的 TTL 10 分钟缓存，不新建 store。
  *
  * 与 `<Can>` 的配合：本组件只负责「风险 gate」。前端是否有权仍由外层 `<Can>` / `can()` 控制。
  *
@@ -20,8 +22,8 @@
  *     撤销授权
  *   </RiskyActionButton>
  */
-import { useEffect, useMemo, useState } from 'react';
-import { Button, Input, Modal } from 'antd';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Button, Input } from 'antd';
 import type { ButtonProps } from 'antd';
 import { useMessage } from '@/hooks/useMessage';
 import { useAuthzMetaStore } from '@/stores/authzMetaStore';
@@ -69,12 +71,10 @@ export default function RiskyActionButton({
   loading: loadingProp,
   ...btnProps
 }: RiskyActionButtonProps) {
-  const { message } = useMessage();
+  const { message, modal } = useMessage();
   const actions = useAuthzMetaStore((s) => s.actions);
   const loadActions = useAuthzMetaStore((s) => s.loadActions);
 
-  const [open, setOpen] = useState(false);
-  const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -93,87 +93,103 @@ export default function RiskyActionButton({
       : registryRisk;
   }, [actions, action, forceRiskLevel]);
 
-  const needsReason = actualRisk === 'critical';
-  const needsConfirm = actualRisk === 'critical' || actualRisk === 'high';
+  /** 保持最新的 props / state 引用给 modal.confirm 回调使用（confirm 是命令式，回调闭包快照） */
+  const latestRef = useRef({
+    onConfirm,
+    reasonMinLength,
+    actualRisk,
+    setSubmitting,
+    message,
+    confirmContent,
+  });
+  latestRef.current = {
+    onConfirm,
+    reasonMinLength,
+    actualRisk,
+    setSubmitting,
+    message,
+    confirmContent,
+  };
+
+  function handleClick() {
+    const risk = actualRisk;
+    const needsReason = risk === 'critical';
+    const needsConfirm = risk === 'critical' || risk === 'high';
+
+    if (!needsConfirm) {
+      void runOnConfirm(undefined);
+      return;
+    }
+
+    const defaultTitle =
+      risk === 'critical' ? '高风险操作确认' : '请确认操作';
+
+    if (!needsReason) {
+      modal.confirm({
+        title: confirmTitle ?? defaultTitle,
+        content: confirmContent ?? '确认执行此操作？',
+        okText: '确认执行',
+        cancelText: '取消',
+        onOk: () => runOnConfirm(undefined),
+      });
+      return;
+    }
+
+    // critical：reason 输入框 —— 用受控 ref 拿值（modal.confirm 回调拿不到 React state）
+    let reasonVal = '';
+    modal.confirm({
+      title: confirmTitle ?? defaultTitle,
+      content: (
+        <div>
+          <div style={{ marginBottom: 12 }}>
+            {confirmContent ?? '此操作风险较高且会写入审计日志。请说明操作原因：'}
+          </div>
+          <Input.TextArea
+            rows={3}
+            autoFocus
+            placeholder={`操作原因（≥ ${reasonMinLength} 字，审计必填）`}
+            onChange={(e) => {
+              reasonVal = e.target.value;
+            }}
+            maxLength={500}
+            showCount
+          />
+        </div>
+      ),
+      okText: '确认执行',
+      cancelText: '取消',
+      okButtonProps: { danger: true },
+      onOk: () => {
+        if (reasonVal.trim().length < reasonMinLength) {
+          message.warning(`请输入至少 ${reasonMinLength} 字的操作原因（审计用）`);
+          // 返回 rejected Promise 阻止关闭
+          return Promise.reject(new Error('reason too short'));
+        }
+        return runOnConfirm(reasonVal.trim());
+      },
+    });
+  }
 
   async function runOnConfirm(r?: string) {
     setSubmitting(true);
     try {
       await onConfirm(r);
-      setOpen(false);
-      setReason('');
     } catch (err) {
       const msg = err instanceof Error ? err.message : '操作失败';
       message.error(msg);
+      throw err;
     } finally {
       setSubmitting(false);
     }
   }
 
-  function handleClick() {
-    if (!needsConfirm) {
-      runOnConfirm(undefined);
-      return;
-    }
-    setOpen(true);
-  }
-
-  function handleOk() {
-    if (needsReason) {
-      if (reason.trim().length < reasonMinLength) {
-        message.warning(`请输入至少 ${reasonMinLength} 字的操作原因（审计用）`);
-        return;
-      }
-      runOnConfirm(reason.trim());
-      return;
-    }
-    runOnConfirm(undefined);
-  }
-
-  const defaultTitle = actualRisk === 'critical' ? '高风险操作确认' : '请确认操作';
-  const defaultContent =
-    actualRisk === 'critical'
-      ? '此操作风险较高且会写入审计日志。请说明操作原因：'
-      : '确认执行此操作？';
-
   return (
-    <>
-      <Button
-        {...btnProps}
-        loading={loadingProp || submitting}
-        onClick={handleClick}
-      >
-        {children}
-      </Button>
-      <Modal
-        open={open}
-        title={confirmTitle ?? defaultTitle}
-        onOk={handleOk}
-        onCancel={() => {
-          setOpen(false);
-          setReason('');
-        }}
-        okText="确认执行"
-        okButtonProps={{
-          danger: actualRisk === 'critical',
-          loading: submitting,
-        }}
-        destroyOnHidden
-      >
-        <div style={{ marginBottom: needsReason ? 12 : 0 }}>
-          {confirmContent ?? defaultContent}
-        </div>
-        {needsReason && (
-          <Input.TextArea
-            rows={3}
-            placeholder={`操作原因（≥ ${reasonMinLength} 字，审计必填）`}
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            maxLength={500}
-            showCount
-          />
-        )}
-      </Modal>
-    </>
+    <Button
+      {...btnProps}
+      loading={loadingProp || submitting}
+      onClick={handleClick}
+    >
+      {children}
+    </Button>
   );
 }
