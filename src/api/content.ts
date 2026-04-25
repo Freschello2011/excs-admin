@@ -205,6 +205,11 @@ export const contentApi = {
     return request.get('/api/v1/admin/contents', { params });
   },
 
+  /** Phase 12：内容版本链（按"新→旧"DESC，含传入 contentID 自身） */
+  getVersionChain(contentId: number): Promise<AxiosResponse<ApiResponse<ContentDetail[]>>> {
+    return request.get(`/api/v1/contents/${contentId}/versions`);
+  },
+
   /* ==================== Phase 10 — 供应商工作台 ==================== */
 
   /** 供应商："我的内容" 列表（后端自动按 caller.vendor_id 过滤） */

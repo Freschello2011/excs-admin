@@ -3,7 +3,7 @@
  *
  * 视觉/IA 变化：
  *   - antd <Tabs> → PillTabs（与全站对齐）
- *   - 拆 3 Tab：基本信息 / 团队成员 / 上传内容（占位 Phase 12）
+ *   - 拆 3 Tab：基本信息 / 团队成员 / 上传内容（Phase 12 实装：5 状态 Statistic + 表格 + 行级操作）
  *   - 「基本信息」 Tab 增主账号摘要卡：姓名/邮箱/手机/user_id 链接到 /platform/authz/users/:id?tab=authz +
  *     团队成员数 Statistic
  *   - vendor 级操作（延期 / 停用 / 编辑默认范围）顶栏；member 级（邀请 / 转移 / 停用）团队 Tab 内
@@ -21,7 +21,6 @@ import {
   Form,
   Input,
   Modal,
-  Result,
   Select,
   Space,
   Statistic,
@@ -45,6 +44,7 @@ import Can from '@/components/authz/Can';
 import RiskyActionButton from '@/components/authz/RiskyActionButton';
 import InitialPasswordModal from '@/components/authz/InitialPasswordModal';
 import ExpiryTag from '@/components/authz/common/ExpiryTag';
+import VendorUploadsTab from '@/components/authz/VendorUploadsTab';
 import { vendorApi } from '@/api/vendor';
 import { hallApi } from '@/api/hall';
 import type { VendorMember, VendorStatus } from '@/types/authz';
@@ -502,22 +502,7 @@ export default function VendorDetailPage() {
           </Card>
         )}
 
-        {activeTab === 'contents' && (
-          <Card size="small">
-            <Result
-              status="info"
-              icon={<UploadOutlined style={{ color: 'var(--ant-color-primary)' }} />}
-              title="上传内容浏览（Phase 12 计划）"
-              subTitle={
-                <span>
-                  本 Tab 将展示该供应商上传的全部内容（按状态分组：待接收 / 已绑定 / 已驳回 / 已撤回 / 已归档）。
-                  <br />
-                  当前可在 <Link to="/contents?vendor_id={id}">内容总库</Link> 按 vendor_id 过滤查看（手动）。
-                </span>
-              }
-            />
-          </Card>
-        )}
+        {activeTab === 'contents' && <VendorUploadsTab vendorId={id} />}
       </div>
 
       {/* 邀请子账号 Modal */}

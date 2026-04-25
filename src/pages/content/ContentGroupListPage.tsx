@@ -1,39 +1,52 @@
+/**
+ * ContentGroupListPage —— 内容总库（Phase 12 升级）。
+ *
+ * 变化：
+ *   - Segmented → PillTabs（与 Vendor / Authz 全栈对齐）
+ *   - 4 Tab → 5 Tab：全部 / 待接收 / 已绑定 / 已驳回 / 已撤回 / 已归档
+ *   - 加 vendor 下拉筛选（vendor_ids）+ keyword 搜索（前端过滤）
+ *   - URL ?status=&vendor_id=&keyword= 全同步
+ *   - 后端从 listContents(hall) 改为 adminListContents(vendor_ids/status/hall)
+ *     —— 真正"内容总库"维度（非 hall 维度），未选展厅时也能查
+ *   - StatusTag → ContentStatusTag 共用组件
+ *   - 详情按钮触发 ContentDetailDrawer（版本链 + 操作历史）
+ */
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Table, Select, Button, Modal, Popconfirm, Image, Typography, Space, Segmented, Tag,
+  Table, Select, Button, Modal, Popconfirm, Image, Typography, Space, Input, Tag,
 } from 'antd';
 import { useMessage } from '@/hooks/useMessage';
 import type { TableColumnsType } from 'antd';
-import { LinkOutlined, FileImageOutlined, SoundOutlined, DeleteOutlined, StopOutlined } from '@ant-design/icons';
+import {
+  LinkOutlined, FileImageOutlined, SoundOutlined, DeleteOutlined, StopOutlined,
+  HistoryOutlined,
+} from '@ant-design/icons';
 import PageHeader from '@/components/common/PageHeader';
-import StatusTag from '@/components/common/StatusTag';
+import PillTabs, { type PillTab } from '@/components/common/PillTabs';
+import ContentStatusTag from '@/components/content/ContentStatusTag';
 import RejectContentModal from '@/components/content/RejectContentModal';
+import ContentDetailDrawer from '@/components/content/ContentDetailDrawer';
 import { contentApi } from '@/api/content';
 import { hallApi } from '@/api/hall';
-import { queryKeys } from '@/api/queryKeys';
+import { vendorApi } from '@/api/vendor';
 import { useCan } from '@/lib/authz/can';
 import { useHallStore } from '@/stores/hallStore';
 import type { ExhibitListItem } from '@/types/hall';
-import type { ContentRejectReason } from '@/types/content';
+import type { ContentDetail, ContentRejectReason, ContentStatus } from '@/types/content';
+import type { Vendor } from '@/types/authz';
 
-// Phase 10：4 态 Tab（老 BindFilter 的 bound/unbound/all 保留兼容，新增 pending_accept 与 archived）
-type BindFilter = 'all' | 'pending_accept' | 'bound' | 'archived';
+type StatusFilter = 'all' | 'pending_accept' | 'bound' | 'rejected' | 'withdrawn' | 'archived';
 
-interface ContentRow {
-  id: number;
-  hall_id: number | null;
-  vendor_id?: number | null;
-  exhibit_id: number | null;
-  name: string;
-  type: string;
-  status: string;
-  duration_ms: number;
-  file_size: number;
-  has_audio: boolean;
-  thumbnail_url?: string;
-}
+const TABS: PillTab<StatusFilter>[] = [
+  { key: 'all', label: '全部' },
+  { key: 'pending_accept', label: '待接收' },
+  { key: 'bound', label: '已绑定' },
+  { key: 'rejected', label: '已驳回' },
+  { key: 'withdrawn', label: '已撤回' },
+  { key: 'archived', label: '已归档' },
+];
 
 function formatFileSize(bytes: number | undefined | null): string {
   if (!bytes || bytes <= 0) return '-';
@@ -54,32 +67,63 @@ export default function ContentGroupListPage() {
   const { message } = useMessage();
   const queryClient = useQueryClient();
   const selectedHallId = useHallStore((s) => s.selectedHallId);
-  const canManage = useCan(
-    'content.edit',
-    selectedHallId ? { type: 'hall', id: String(selectedHallId) } : undefined,
-  );
+  const canManage = useCan('content.edit');
 
   const [searchParams, setSearchParams] = useSearchParams();
-  const bindParam = (searchParams.get('bind') ?? 'all') as BindFilter;
-  const validBinds: BindFilter[] = ['all', 'pending_accept', 'bound', 'archived'];
-  const bindFilter: BindFilter = validBinds.includes(bindParam) ? bindParam : 'all';
 
+  // ---- URL 同步参数 ----
+  const validStatus: StatusFilter[] = ['all', 'pending_accept', 'bound', 'rejected', 'withdrawn', 'archived'];
+  const statusParam = searchParams.get('status') as StatusFilter | null;
+  const status: StatusFilter = statusParam && validStatus.includes(statusParam) ? statusParam : 'all';
+  const vendorIdParam = searchParams.get('vendor_id');
+  const vendorIdFilter = vendorIdParam ? Number(vendorIdParam) : undefined;
+  const keyword = searchParams.get('keyword') ?? '';
+  // 'all' = 全展厅；具体 hallId = 仅该展厅；'current' = 沿用顶栏选中的 hall
+  const hallScope = searchParams.get('hall_scope') ?? 'all';
+
+  const updateParam = (patches: Record<string, string | null>) => {
+    const next = new URLSearchParams(searchParams);
+    Object.entries(patches).forEach(([k, v]) => {
+      if (v == null || v === '' || v === 'all') next.delete(k);
+      else next.set(k, v);
+    });
+    setSearchParams(next, { replace: true });
+  };
+
+  // ---- 模态状态 ----
   const [bindModalOpen, setBindModalOpen] = useState(false);
-  const [bindingItem, setBindingItem] = useState<ContentRow | null>(null);
+  const [bindingItem, setBindingItem] = useState<ContentDetail | null>(null);
   const [bindExhibitId, setBindExhibitId] = useState<number | null>(null);
-  const [rejectItem, setRejectItem] = useState<ContentRow | null>(null);
+  const [rejectItem, setRejectItem] = useState<ContentDetail | null>(null);
+  const [drawerContentId, setDrawerContentId] = useState<number | null>(null);
 
-  // 全量内容（hall 维度）— 后端分页，这里取较大 page_size 作为内容总库视图
+  // ---- 数据：内容总库 admin 维度（vendor_ids / status / hall_id 多维过滤） ----
+  const queryParams = useMemo(() => {
+    const p: Parameters<typeof contentApi.adminListContents>[0] = {
+      page: 1,
+      page_size: 500,
+    };
+    if (status !== 'all') p.status = status;
+    if (vendorIdFilter) p.vendor_ids = String(vendorIdFilter);
+    if (hallScope === 'current' && selectedHallId) p.hall_id = selectedHallId;
+    return p;
+  }, [status, vendorIdFilter, hallScope, selectedHallId]);
+
   const { data: rawList = [], isLoading } = useQuery({
-    queryKey: queryKeys.contents({ hall_id: selectedHallId ?? 0, page: 1, page_size: 500 }),
-    queryFn: () => contentApi.listContents({ hall_id: selectedHallId!, page: 1, page_size: 500 }),
-    select: (res) => (res.data.data?.list ?? []) as unknown as ContentRow[],
-    enabled: !!selectedHallId,
+    queryKey: ['admin', 'contents', queryParams],
+    queryFn: () => contentApi.adminListContents(queryParams),
+    select: (res) => (res.data.data?.list ?? []) as ContentDetail[],
   });
 
-  // Exhibits — 用于绑定 modal + 展示 exhibit 名称
+  // ---- 辅助数据 ----
+  const { data: vendors = [] } = useQuery({
+    queryKey: ['authz', 'vendors', 'all'],
+    queryFn: () => vendorApi.list(),
+    select: (res) => (res.data.data?.list ?? []) as Vendor[],
+  });
+
   const { data: exhibits = [] } = useQuery({
-    queryKey: queryKeys.exhibits(selectedHallId!),
+    queryKey: ['halls', selectedHallId, 'exhibits'],
     queryFn: () => hallApi.getExhibits(selectedHallId!),
     select: (res) => res.data.data,
     enabled: !!selectedHallId,
@@ -91,29 +135,36 @@ export default function ContentGroupListPage() {
     return m;
   }, [exhibits]);
 
-  const filteredItems = useMemo(() => {
-    return rawList.filter((item) => {
-      if (bindFilter === 'all') return true;
-      if (bindFilter === 'pending_accept') return item.status === 'pending_accept';
-      if (bindFilter === 'archived') return item.status === 'archived';
-      // bound Tab：已绑定到展项 或 status=bound
-      return item.status === 'bound' || (item.exhibit_id != null && item.status !== 'archived' && item.status !== 'pending_accept');
-    });
-  }, [rawList, bindFilter]);
+  const vendorNameMap = useMemo(() => {
+    const m = new Map<number, string>();
+    vendors.forEach((v) => m.set(v.id, v.name));
+    return m;
+  }, [vendors]);
 
+  // 关键词前端过滤
+  const filteredItems = useMemo(() => {
+    if (!keyword) return rawList;
+    const lk = keyword.toLowerCase();
+    return rawList.filter((x) => x.name.toLowerCase().includes(lk));
+  }, [rawList, keyword]);
+
+  // ---- 状态计数（不受 keyword 影响，所有 5 状态） ----
   const counts = useMemo(() => ({
     all: rawList.length,
-    pending: rawList.filter((i) => i.status === 'pending_accept').length,
-    bound: rawList.filter((i) => i.status === 'bound' || (i.exhibit_id != null && i.status !== 'archived' && i.status !== 'pending_accept')).length,
+    pending_accept: rawList.filter((i) => i.status === 'pending_accept').length,
+    bound: rawList.filter((i) => i.status === 'bound').length,
+    rejected: rawList.filter((i) => i.status === 'rejected').length,
+    withdrawn: rawList.filter((i) => i.status === 'withdrawn').length,
     archived: rawList.filter((i) => i.status === 'archived').length,
   }), [rawList]);
 
+  // ---- mutations ----
   const bindMutation = useMutation({
     mutationFn: ({ contentId, exhibitId }: { contentId: number; exhibitId: number }) =>
       contentApi.bindToExhibit(contentId, exhibitId),
     onSuccess: () => {
       message.success('绑定成功');
-      queryClient.invalidateQueries({ queryKey: ['contents'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'contents'] });
       closeBind();
     },
     onError: () => message.error('绑定失败'),
@@ -123,7 +174,7 @@ export default function ContentGroupListPage() {
     mutationFn: (contentId: number) => contentApi.unbindContent(contentId),
     onSuccess: () => {
       message.success('已解绑');
-      queryClient.invalidateQueries({ queryKey: ['contents'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'contents'] });
     },
     onError: () => message.error('解绑失败'),
   });
@@ -132,7 +183,7 @@ export default function ContentGroupListPage() {
     mutationFn: (contentId: number) => contentApi.deleteContent(contentId),
     onSuccess: () => {
       message.success('文件已删除');
-      queryClient.invalidateQueries({ queryKey: ['contents'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'contents'] });
     },
     onError: () => message.error('删除失败'),
   });
@@ -143,12 +194,13 @@ export default function ContentGroupListPage() {
     onSuccess: () => {
       message.success('已驳回，供应商将收到通知');
       setRejectItem(null);
-      queryClient.invalidateQueries({ queryKey: ['contents'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'contents'] });
     },
     onError: (err: Error) => message.error(err.message || '驳回失败'),
   });
 
-  const openBind = (item: ContentRow) => {
+  // ---- handlers ----
+  const openBind = (item: ContentDetail) => {
     setBindingItem(item);
     setBindExhibitId(null);
     setBindModalOpen(true);
@@ -165,14 +217,8 @@ export default function ContentGroupListPage() {
     bindMutation.mutate({ contentId: bindingItem.id, exhibitId: bindExhibitId });
   };
 
-  const handleBindFilterChange = (next: BindFilter) => {
-    const nextParams = new URLSearchParams(searchParams);
-    if (next === 'all') nextParams.delete('bind');
-    else nextParams.set('bind', next);
-    setSearchParams(nextParams, { replace: true });
-  };
-
-  const columns: TableColumnsType<ContentRow> = [
+  // ---- 表格列 ----
+  const columns: TableColumnsType<ContentDetail> = [
     {
       title: '缩略图',
       width: 80,
@@ -197,23 +243,41 @@ export default function ContentGroupListPage() {
       dataIndex: 'name',
       render: (name: string, record) => (
         <Space size={4}>
-          <Typography.Text ellipsis style={{ maxWidth: 260 }}>{name}</Typography.Text>
+          <Typography.Text ellipsis style={{ maxWidth: 240 }}>{name}</Typography.Text>
           {record.has_audio && <SoundOutlined style={{ color: 'var(--ant-color-primary)', fontSize: 13 }} />}
+          {record.content_version && record.content_version > 1 && (
+            <Tag color="purple">v{record.content_version}</Tag>
+          )}
         </Space>
       ),
     },
     {
-      title: '绑定展项',
-      width: 180,
+      title: '供应商',
+      width: 140,
+      render: (_: unknown, record) =>
+        record.vendor_id ? (
+          <Tag color="cyan">{vendorNameMap.get(record.vendor_id) ?? `#${record.vendor_id}`}</Tag>
+        ) : <Tag>内部</Tag>,
+    },
+    {
+      title: '展厅 / 展项',
+      width: 200,
       render: (_: unknown, record) => {
-        if (record.exhibit_id == null) return <Tag>未绑定</Tag>;
-        return <Tag color="blue">{exhibitNameMap.get(record.exhibit_id) ?? `#${record.exhibit_id}`}</Tag>;
+        const hallText = record.hall_name ?? (record.hall_id ? `#${record.hall_id}` : '-');
+        return (
+          <Space size={4}>
+            <Tag color="blue">{hallText}</Tag>
+            {record.exhibit_id != null && (
+              <Tag color="geekblue">{exhibitNameMap.get(record.exhibit_id) ?? `#${record.exhibit_id}`}</Tag>
+            )}
+          </Space>
+        );
       },
     },
     {
       title: '类型',
       dataIndex: 'type',
-      width: 80,
+      width: 70,
     },
     {
       title: '大小',
@@ -223,53 +287,52 @@ export default function ContentGroupListPage() {
     },
     {
       title: '时长',
-      dataIndex: 'duration_ms',
+      dataIndex: 'duration',
       width: 80,
       render: (v: number) => (v > 0 ? formatDuration(v) : '-'),
     },
     {
       title: '状态',
       dataIndex: 'status',
-      width: 80,
-      render: (s: string) => <StatusTag status={s} />,
+      width: 90,
+      render: (s: ContentStatus) => <ContentStatusTag status={s} />,
     },
     {
       title: '操作',
-      width: 260,
+      width: 280,
+      fixed: 'right',
       render: (_: unknown, record) => (
         <Space size="small">
+          <Button type="link" size="small" icon={<HistoryOutlined />} onClick={() => setDrawerContentId(record.id)}>
+            详情
+          </Button>
           {canManage && (
             <>
-              {/* Phase 10：pending_accept 显示 [绑定展项] + [驳回]；其他状态走原有解绑/删除 */}
               {record.status === 'pending_accept' ? (
                 <>
                   <Button type="link" size="small" icon={<LinkOutlined />} onClick={() => openBind(record)}>
-                    绑定展项
+                    绑定
                   </Button>
                   <Button type="link" size="small" danger icon={<StopOutlined />} onClick={() => setRejectItem(record)}>
                     驳回
                   </Button>
                 </>
-              ) : record.exhibit_id == null ? (
-                <Button type="link" size="small" icon={<LinkOutlined />} onClick={() => openBind(record)}>
-                  绑定展项
-                </Button>
-              ) : (
+              ) : record.status === 'bound' ? (
                 <Popconfirm title="确认解绑？" onConfirm={() => unbindMutation.mutate(record.id)}>
                   <Button type="link" size="small">解绑</Button>
                 </Popconfirm>
+              ) : null}
+              {(record.status === 'pending_accept' || record.status === 'rejected' || record.status === 'withdrawn' || record.status === 'archived') && (
+                <Popconfirm
+                  title="确认删除？"
+                  description="OSS 文件与关联标签将一并清除（已绑定状态请先解绑或归档）"
+                  onConfirm={() => deleteMutation.mutate(record.id)}
+                  okText="删除"
+                  okButtonProps={{ danger: true }}
+                >
+                  <Button type="link" size="small" danger icon={<DeleteOutlined />}>删除</Button>
+                </Popconfirm>
               )}
-              <Popconfirm
-                title="确认删除此文件？"
-                description="删除后 OSS 文件和关联标签将一并清除；已绑定内容走归档，保留原 OSS 对象"
-                onConfirm={() => deleteMutation.mutate(record.id)}
-                okText="删除"
-                okButtonProps={{ danger: true }}
-              >
-                <Button type="link" size="small" danger icon={<DeleteOutlined />}>
-                  删除
-                </Button>
-              </Popconfirm>
             </>
           )}
         </Space>
@@ -281,43 +344,64 @@ export default function ContentGroupListPage() {
     <div>
       <PageHeader
         title="内容总库"
-        description="展厅所有内容文件的统一管理视图，可按绑定状态筛选"
+        description="跨展厅 / 全供应商的内容统一管理；支持按状态、供应商、关键词筛选"
       />
 
-      {!selectedHallId ? (
-        <div style={{ textAlign: 'center', color: 'var(--color-outline)', padding: 60 }}>
-          请先在顶栏选择展厅
-        </div>
-      ) : (
-        <>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <Space align="center" size="small">
-              <span style={{ fontSize: 13, color: 'var(--color-on-surface-variant)' }}>内容状态</span>
-              <Segmented
-                value={bindFilter}
-                onChange={(v) => handleBindFilterChange(v as BindFilter)}
-                options={[
-                  { value: 'all', label: `全部 · ${counts.all}` },
-                  { value: 'pending_accept', label: `仅未绑定 · ${counts.pending}` },
-                  { value: 'bound', label: `已绑定 · ${counts.bound}` },
-                  { value: 'archived', label: `已归档 · ${counts.archived}` },
-                ]}
-              />
-            </Space>
-          </div>
-          <Table<ContentRow>
-            columns={columns}
-            dataSource={filteredItems}
-            loading={isLoading}
-            pagination={{ pageSize: 20, showSizeChanger: true }}
-            rowKey="id"
-            size="middle"
-            locale={{ emptyText: '暂无内容' }}
-          />
-        </>
-      )}
+      {/* 筛选条 */}
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
+        <Select
+          allowClear
+          placeholder="全部供应商"
+          style={{ minWidth: 200 }}
+          value={vendorIdFilter}
+          onChange={(v) => updateParam({ vendor_id: v ? String(v) : null })}
+          options={vendors.map((v) => ({ value: v.id, label: v.name }))}
+          showSearch
+          filterOption={(input, option) => (option?.label as string)?.toLowerCase().includes(input.toLowerCase())}
+        />
+        <Select
+          style={{ minWidth: 180 }}
+          value={hallScope}
+          onChange={(v) => updateParam({ hall_scope: v })}
+          options={[
+            { value: 'all', label: '全部展厅' },
+            { value: 'current', label: `仅当前展厅${selectedHallId ? '' : '（请先在顶栏选展厅）'}`, disabled: !selectedHallId },
+          ]}
+        />
+        <Input.Search
+          allowClear
+          placeholder="搜索文件名"
+          style={{ width: 240 }}
+          value={keyword}
+          onChange={(e) => updateParam({ keyword: e.target.value || null })}
+        />
+        <Typography.Text type="secondary">{isLoading ? '加载中…' : `共 ${filteredItems.length} 条`}</Typography.Text>
+      </div>
 
-      {/* Phase 10：驳回弹窗（PRD §7.5 至少 1 原因码 / 5 字 note 客户端校验） */}
+      {/* 5 Tab PillTabs */}
+      <div style={{ marginBottom: 12 }}>
+        <PillTabs<StatusFilter>
+          tabs={TABS.map((t) => ({
+            ...t,
+            label: t.key === 'all' ? `全部 · ${counts.all}` : `${t.label} · ${counts[t.key]}`,
+          }))}
+          active={status}
+          onChange={(k) => updateParam({ status: k })}
+          ariaLabel="内容生命周期状态 tab"
+        />
+      </div>
+
+      <Table<ContentDetail>
+        columns={columns}
+        dataSource={filteredItems}
+        loading={isLoading}
+        pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: ['20', '50', '100'] }}
+        rowKey="id"
+        size="middle"
+        scroll={{ x: 'max-content' }}
+        locale={{ emptyText: '暂无内容' }}
+      />
+
       <RejectContentModal
         open={!!rejectItem}
         contentName={rejectItem?.name}
@@ -326,7 +410,6 @@ export default function ContentGroupListPage() {
         onCancel={() => setRejectItem(null)}
       />
 
-      {/* Bind to exhibit modal */}
       <Modal
         title="绑定到展项"
         open={bindModalOpen}
@@ -335,21 +418,29 @@ export default function ContentGroupListPage() {
         confirmLoading={bindMutation.isPending}
         okButtonProps={{ disabled: !bindExhibitId }}
         width={420}
-        destroyOnClose
+        destroyOnHidden
       >
-        <div style={{ marginBottom: 12, color: 'var(--ant-color-text-secondary)', fontSize: 13 }}>
-          将「{bindingItem?.name}」绑定到选定展项
-        </div>
+        <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
+          将「{bindingItem?.name}」绑定到当前展厅下的展项
+          {!selectedHallId && '（绑定操作需先在顶栏选定展厅以列出可选展项）'}
+        </Typography.Paragraph>
         <Select
           style={{ width: '100%' }}
-          placeholder="选择展项"
+          placeholder={selectedHallId ? '选择展项' : '请先在顶栏选择展厅'}
           value={bindExhibitId}
-          onChange={(v) => setBindExhibitId(v)}
+          onChange={setBindExhibitId}
           options={exhibits.map((e: ExhibitListItem) => ({ value: e.id, label: e.name }))}
+          disabled={!selectedHallId}
           showSearch
           filterOption={(input, option) => (option?.label as string)?.toLowerCase().includes(input.toLowerCase())}
         />
       </Modal>
+
+      <ContentDetailDrawer
+        open={drawerContentId != null}
+        contentId={drawerContentId}
+        onClose={() => setDrawerContentId(null)}
+      />
     </div>
   );
 }
