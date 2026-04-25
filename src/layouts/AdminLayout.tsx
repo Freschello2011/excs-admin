@@ -117,13 +117,20 @@ function buildMenuRegions(selectedHallId?: number): MenuRegion[] {
       label: '平台管理',
       groups: [
         {
-          key: 'platform-data',
-          label: '平台数据配置',
+          key: 'platform-catalog',
+          label: '数据字典',
           collapsible: true,
           items: [
             { path: '/platform/device-models', icon: 'memory', label: '设备品牌型号', requireActions: ['catalog.view', 'catalog.edit'] },
             { path: '/platform/device-protocols', icon: 'api', label: '设备协议基线库', requireActions: ['catalog.view', 'catalog.edit'] },
             { path: '/platform/device-categories', icon: 'apps', label: '设备分类', requireActions: ['catalog.view', 'catalog.edit'] },
+          ],
+        },
+        {
+          key: 'platform-assets',
+          label: '内容资产',
+          collapsible: true,
+          items: [
             { path: '/platform/ai-avatar-library', icon: 'view_cozy', label: 'AI 形象库', requireActions: ['catalog.view', 'catalog.edit'] },
           ],
         },
@@ -132,36 +139,32 @@ function buildMenuRegions(selectedHallId?: number): MenuRegion[] {
           label: '监控与分析',
           collapsible: true,
           items: [
-            { path: '/analytics/overview', icon: 'monitoring', label: '运行概览', requireActions: ['analytics.view'] },
-            { path: '/analytics/content-stats', icon: 'bar_chart', label: '内容统计', requireActions: ['analytics.view'] },
-            { path: '/analytics/ai-stats', icon: 'smart_toy', label: 'AI 互动统计', requireActions: ['analytics.view'] },
-            { path: '/oss-stats', icon: 'cloud', label: '存储统计', requireActions: ['analytics.view'] },
-            { path: '/analytics/oss-browser', icon: 'folder_open', label: '存储浏览', requireActions: ['analytics.view'] },
-            { path: '/analytics/cost', icon: 'payments', label: '费用分析', requireActions: ['analytics.view'] },
-            { path: '/notifications', icon: 'notifications', label: '通知管理', requireActions: ['notification.view', 'notification.edit'] },
+            { path: '/analytics', icon: 'insights', label: '运营分析', requireActions: ['analytics.view'] },
+            { path: '/analytics/storage', icon: 'cloud', label: '存储与费用', requireActions: ['analytics.view'] },
             { path: '/logs', icon: 'history', label: '操作日志', requireActions: ['audit.view'] },
           ],
         },
         {
-          key: 'system-config',
-          label: '系统配置',
+          key: 'authz',
+          label: '身份与权限',
           collapsible: true,
           items: [
-            { path: '/platform/users', icon: 'group', label: '用户管理', requireActions: ['user.view', 'user.manage'] },
-            { path: '/platform/sys-config', icon: 'settings', label: '系统参数配置', requireActions: ['config.view', 'config.edit'] },
-            { path: '/platform/releases', icon: 'system_update', label: '版本管理', requireActions: ['release.view', 'release.manage'] },
+            { path: '/platform/users', icon: 'group', label: '用户', requireActions: ['user.view', 'user.manage'] },
+            { path: '/platform/authz/role-templates', icon: 'manage_accounts', label: '角色模板', requireActions: ['user.grant', 'user.view'] },
+            { path: '/platform/authz/grants', icon: 'key', label: '授权总览', requireActions: ['user.grant', 'user.view'] },
+            { path: '/platform/authz/vendors', icon: 'business_center', label: '供应商', requireActions: ['vendor.view', 'vendor.manage'] },
+            { path: '/platform/authz/audit', icon: 'fact_check', label: '权限审计', requireActions: ['audit.view'] },
+            { path: '/platform/authz/reports', icon: 'insights', label: '合规报表', requireActions: ['audit.view'] },
           ],
         },
         {
-          key: 'authz',
-          label: '权限管理',
+          key: 'system-settings',
+          label: '系统设置',
           collapsible: true,
           items: [
-            { path: '/platform/authz/role-templates', icon: 'manage_accounts', label: '角色模板', requireActions: ['user.grant', 'user.view'] },
-            { path: '/platform/authz/grants', icon: 'key', label: '授权总览', requireActions: ['user.grant', 'user.view'] },
-            { path: '/platform/authz/vendors', icon: 'business_center', label: '供应商管理', requireActions: ['vendor.view', 'vendor.manage'] },
-            { path: '/platform/authz/audit', icon: 'fact_check', label: '审计日志', requireActions: ['audit.view'] },
-            { path: '/platform/authz/reports', icon: 'insights', label: '合规报表', requireActions: ['audit.view'] },
+            { path: '/platform/sys-config', icon: 'settings', label: '系统参数', requireActions: ['config.view', 'config.edit'] },
+            { path: '/platform/releases', icon: 'system_update', label: '版本管理', requireActions: ['release.view', 'release.manage'] },
+            { path: '/notifications', icon: 'notifications', label: '通知管理', requireActions: ['notification.view', 'notification.edit'] },
           ],
         },
       ],
@@ -174,7 +177,7 @@ const titleMap: Record<string, string> = {
   '/halls': '展厅列表',
   '/devices': '设备管理',
   '/contents': '内容总库',
-  '/oss-stats': '存储统计',
+  '/analytics/storage': '存储与费用',
   '/scenes': '场景管理',
   '/shows': '演出管理',
   '/ai/avatars': '数字人',
@@ -185,22 +188,18 @@ const titleMap: Record<string, string> = {
   '/smarthome/rules': '规则管理',
   '/smarthome/trigger-logs': '触发日志',
   '/smarthome/alerts': '告警列表',
-  '/analytics/overview': '运行概览',
-  '/analytics/content-stats': '内容统计',
-  '/analytics/ai-stats': 'AI 互动统计',
-  '/analytics/oss-browser': '存储浏览',
-  '/analytics/cost': '费用分析',
+  '/analytics': '运营分析',
   '/platform/device-models': '设备品牌型号',
   '/platform/device-protocols': '设备协议基线库',
   '/platform/device-categories': '设备分类',
   '/platform/ai-avatar-library': 'AI 形象库',
-  '/platform/users': '用户管理',
-  '/platform/sys-config': '系统参数配置',
+  '/platform/users': '用户',
+  '/platform/sys-config': '系统参数',
   '/platform/releases': '版本管理',
   '/platform/authz/role-templates': '角色模板',
   '/platform/authz/grants': '授权总览',
-  '/platform/authz/vendors': '供应商管理',
-  '/platform/authz/audit': '审计日志',
+  '/platform/authz/vendors': '供应商',
+  '/platform/authz/audit': '权限审计',
   '/platform/authz/reports': '合规报表',
 };
 
@@ -373,10 +372,11 @@ export default function AdminLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
     smarthome: true,
-    'platform-data': true,
+    'platform-catalog': true,
+    'platform-assets': true,
     analytics: true,
-    'system-config': true,
     authz: true,
+    'system-settings': true,
   });
 
   /* Page title */
@@ -395,6 +395,10 @@ export default function AdminLayout() {
     if (path === '/halls') {
       // Exact match only — don't highlight "展厅列表" when on hall sub-pages
       return location.pathname === '/halls';
+    }
+    if (path === '/analytics') {
+      // Exact match (含 ?tab=) — 不在 /analytics/storage 上高亮"运营分析"
+      return location.pathname === '/analytics';
     }
     return location.pathname.startsWith(path);
   }

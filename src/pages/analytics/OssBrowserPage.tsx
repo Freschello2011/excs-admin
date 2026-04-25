@@ -366,7 +366,7 @@ const OSS_TABS = [
   { key: 'excs-thumbnail', label: '缩略图桶 (excs-thumbnail)' },
 ];
 
-export default function OssBrowserPage() {
+export default function OssBrowserPage({ embedded }: { embedded?: boolean } = {}) {
   const isAdmin = useAuthStore((s) => s.isAdmin());
   const [bucket, setBucket] = useState('excs-encrypted');
 
@@ -377,7 +377,9 @@ export default function OssBrowserPage() {
 
   return (
     <div>
-      <PageHeader title="存储浏览" description="浏览 OSS 桶中的文件与 NAS 归档库" />
+      {!embedded && (
+        <PageHeader title="存储浏览" description="浏览 OSS 桶中的文件与 NAS 归档库" />
+      )}
 
       <Card>
         <Tabs

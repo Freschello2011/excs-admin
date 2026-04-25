@@ -166,7 +166,7 @@ function StorageRow({ dto, loading }: { dto?: StorageCapacityDTO; loading: boole
     <>
       <div className={styles.sectionHead}>
         <div className={styles.sectionLabel}>存储容量（全展厅合计）</div>
-        <Link to="/analytics/oss-browser" className={styles.sectionLink}>存储浏览 →</Link>
+        <Link to="/analytics/storage?tab=browse" className={styles.sectionLink}>存储浏览 →</Link>
       </div>
       <div className={styles.row}>
         <StorageCard
@@ -289,7 +289,7 @@ function CostRow({
     <>
       <div className={styles.sectionHead}>
         <div className={styles.sectionLabel}>本月费用（全展厅合计）</div>
-        <Link to="/analytics/cost" className={styles.sectionLink}>费用分析 →</Link>
+        <Link to="/analytics/storage?tab=cost" className={styles.sectionLink}>费用分析 →</Link>
       </div>
       <div className={styles.row}>
         <CostCard card={dto?.ai} iconCls={styles.icPrimary} icon="🤖" color="#6A4EE8" period={period} loading={loading} />

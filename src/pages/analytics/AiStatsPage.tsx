@@ -14,7 +14,7 @@ import type { Dayjs } from 'dayjs';
 
 const { RangePicker } = DatePicker;
 
-export default function AiStatsPage() {
+export default function AiStatsPage({ embedded }: { embedded?: boolean } = {}) {
   const hallId = useHallStore((s) => s.selectedHallId);
   const tokens = useThemeTokens();
   const [dateRange, setDateRange] = useState<[Dayjs, Dayjs]>([
@@ -99,7 +99,7 @@ export default function AiStatsPage() {
 
   return (
     <div>
-      <PageHeader title="AI 互动统计" description="AI 会话数据与热门关键词" />
+      {!embedded && <PageHeader title="AI 互动统计" description="AI 会话数据与热门关键词" />}
 
       <Space wrap style={{ marginBottom: 16 }}>
         <RangePicker

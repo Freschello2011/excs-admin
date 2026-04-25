@@ -51,7 +51,7 @@ function BucketCard({ title, icon, stats, color }: BucketCardProps) {
   );
 }
 
-export default function OSSStatsPage() {
+export default function OSSStatsPage({ embedded }: { embedded?: boolean } = {}) {
   const { message } = useMessage();
   const isAdmin = useAuthStore((s) => s.isAdmin);
   const selectedHallId = useHallStore((s) => s.selectedHallId);
@@ -85,10 +85,12 @@ export default function OSSStatsPage() {
 
   return (
     <div>
-      <PageHeader
-        title="存储统计"
-        description="查看各展厅的 OSS 存储用量 + NAS 归档总量"
-      />
+      {!embedded && (
+        <PageHeader
+          title="存储统计"
+          description="查看各展厅的 OSS 存储用量 + NAS 归档总量"
+        />
+      )}
 
       <Space wrap style={{ marginBottom: 24 }}>
         <Select

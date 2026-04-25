@@ -17,7 +17,6 @@ const HallListPage = lazy(() => import('@/pages/hall/HallListPage'));
 const HallDetailPage = lazy(() => import('@/pages/hall/HallDetailPage'));
 const ContentGroupListPage = lazy(() => import('@/pages/content/ContentGroupListPage'));
 const ContentGroupDetailPage = lazy(() => import('@/pages/content/ContentGroupDetailPage'));
-const OSSStatsPage = lazy(() => import('@/pages/content/OSSStatsPage'));
 const SceneListPage = lazy(() => import('@/pages/command/SceneListPage'));
 const ShowListPage = lazy(() => import('@/pages/show/ShowListPage'));
 const ShowDetailPage = lazy(() => import('@/pages/show/ShowDetailPage'));
@@ -38,11 +37,8 @@ const ExhibitManagementPage = lazy(() => import('@/pages/hall/ExhibitManagementP
 const AppSessionPage = lazy(() => import('@/pages/hall/AppSessionPage'));
 const ControlAppPage = lazy(() => import('@/pages/panel/ControlAppPage'));
 const TouchNavEditorPage = lazy(() => import('@/pages/hall/TouchNavEditorPage'));
-const OverviewPage = lazy(() => import('@/pages/analytics/OverviewPage'));
-const ContentStatsPage = lazy(() => import('@/pages/analytics/ContentStatsPage'));
-const AiStatsPage = lazy(() => import('@/pages/analytics/AiStatsPage'));
-const OssBrowserPage = lazy(() => import('@/pages/analytics/OssBrowserPage'));
-const CostPage = lazy(() => import('@/pages/analytics/CostPage'));
+const StorageOverviewPage = lazy(() => import('@/pages/analytics/StorageOverviewPage'));
+const AnalyticsHubPage = lazy(() => import('@/pages/analytics/AnalyticsHubPage'));
 const ReleasesPage = lazy(() => import('@/pages/sys-config/ReleasesPage'));
 const RoleTemplateListPage = lazy(() => import('@/pages/authz/RoleTemplateListPage'));
 const RoleTemplateEditPage = lazy(() => import('@/pages/authz/RoleTemplateEditPage'));
@@ -325,30 +321,41 @@ export const router = createBrowserRouter([
         path: 'ai/avatar-library',
         element: <Navigate to="/platform/ai-avatar-library" replace />,
       },
-      /* 监控与分析 */
+      /* 监控与分析 — 两个聚合页 */
+      /* 运营分析（运行概览 / 内容统计 / AI 互动 三 Tab） */
       {
-        path: 'oss-stats',
-        element: <RequireAdmin><SuspenseWrap><OSSStatsPage /></SuspenseWrap></RequireAdmin>,
+        path: 'analytics',
+        element: <RequireAdmin><SuspenseWrap><AnalyticsHubPage /></SuspenseWrap></RequireAdmin>,
       },
+      /* 存储与费用（用量总览 / 文件浏览 / 费用分析 三 Tab） */
+      {
+        path: 'analytics/storage',
+        element: <RequireAdmin><SuspenseWrap><StorageOverviewPage /></SuspenseWrap></RequireAdmin>,
+      },
+      /* Legacy 路径：保持 Dashboard 旧链接 / 老书签可用，自动跳到对应 Tab */
       {
         path: 'analytics/overview',
-        element: <RequireAdmin><SuspenseWrap><OverviewPage /></SuspenseWrap></RequireAdmin>,
+        element: <Navigate to="/analytics?tab=overview" replace />,
       },
       {
         path: 'analytics/content-stats',
-        element: <RequireAdmin><SuspenseWrap><ContentStatsPage /></SuspenseWrap></RequireAdmin>,
+        element: <Navigate to="/analytics?tab=content" replace />,
       },
       {
         path: 'analytics/ai-stats',
-        element: <RequireAdmin><SuspenseWrap><AiStatsPage /></SuspenseWrap></RequireAdmin>,
+        element: <Navigate to="/analytics?tab=ai" replace />,
+      },
+      {
+        path: 'oss-stats',
+        element: <Navigate to="/analytics/storage?tab=usage" replace />,
       },
       {
         path: 'analytics/oss-browser',
-        element: <RequireAdmin><SuspenseWrap><OssBrowserPage /></SuspenseWrap></RequireAdmin>,
+        element: <Navigate to="/analytics/storage?tab=browse" replace />,
       },
       {
         path: 'analytics/cost',
-        element: <RequireAdmin><SuspenseWrap><CostPage /></SuspenseWrap></RequireAdmin>,
+        element: <Navigate to="/analytics/storage?tab=cost" replace />,
       },
       {
         path: 'notifications',

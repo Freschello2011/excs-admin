@@ -20,7 +20,7 @@ function formatSize(bytes: number): string {
   return `${(bytes / Math.pow(1024, i)).toFixed(i > 1 ? 2 : 0)} ${units[i]}`;
 }
 
-export default function CostPage() {
+export default function CostPage({ embedded }: { embedded?: boolean } = {}) {
   const hallId = useHallStore((s) => s.selectedHallId);
   const [monthValue, setMonthValue] = useState<Dayjs>(dayjs());
 
@@ -88,7 +88,9 @@ export default function CostPage() {
 
   return (
     <div>
-      <PageHeader title="费用分析" description="AI 模型费用与 OSS 存储费用估算" />
+      {!embedded && (
+        <PageHeader title="费用分析" description="AI 模型费用与 OSS 存储费用估算" />
+      )}
 
       <Space wrap style={{ marginBottom: 16 }}>
         <DatePicker

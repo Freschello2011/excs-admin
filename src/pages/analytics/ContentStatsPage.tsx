@@ -22,7 +22,7 @@ function formatDuration(seconds: number): string {
   return `${h} 时 ${m} 分`;
 }
 
-export default function ContentStatsPage() {
+export default function ContentStatsPage({ embedded }: { embedded?: boolean } = {}) {
   const hallId = useHallStore((s) => s.selectedHallId);
   const tokens = useThemeTokens();
   const [dateRange, setDateRange] = useState<[Dayjs, Dayjs]>([
@@ -119,7 +119,7 @@ export default function ContentStatsPage() {
 
   return (
     <div>
-      <PageHeader title="内容统计" description="播放数据统计与热门内容排行" />
+      {!embedded && <PageHeader title="内容统计" description="播放数据统计与热门内容排行" />}
 
       <Space wrap style={{ marginBottom: 16 }}>
         <RangePicker

@@ -12,7 +12,7 @@ import type { OperationDailyStat } from '@/types/analytics';
 import type { OperationLogItem } from '@/types/log';
 import dayjs from 'dayjs';
 
-export default function OverviewPage() {
+export default function OverviewPage({ embedded }: { embedded?: boolean } = {}) {
   const hallId = useHallStore((s) => s.selectedHallId);
   const tokens = useThemeTokens();
 
@@ -100,7 +100,7 @@ export default function OverviewPage() {
 
   return (
     <div>
-      <PageHeader title="运行概览" description="App 在线状态、操作监控与实时日志" />
+      {!embedded && <PageHeader title="运行概览" description="App 在线状态、操作监控与实时日志" />}
 
       {!hallId ? (
         <div style={{ textAlign: 'center', color: 'var(--color-outline)', padding: 60 }}>
