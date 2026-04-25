@@ -15,21 +15,13 @@ import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
 import { useScopeGroups } from '@/lib/authz/useScopeGroups';
 import { useAuthzMetaStore } from '@/stores/authzMetaStore';
-import type { ScopeType } from '@/types/authz';
+import ScopeTag from '@/components/authz/common/ScopeTag';
 
 const { Text } = Typography;
 
 interface Props {
   userId: number;
 }
-
-const SCOPE_META: Record<ScopeType, { label: string; color: string }> = {
-  G: { label: '全局', color: 'purple' },
-  T: { label: '租户', color: 'cyan' },
-  H: { label: '展厅', color: 'blue' },
-  E: { label: '展项', color: 'geekblue' },
-  O: { label: '归属', color: 'orange' },
-};
 
 export default function UserActionSetSummaryCard({ userId }: Props) {
   const { data: view, isLoading } = useQuery({
@@ -87,17 +79,15 @@ export default function UserActionSetSummaryCard({ userId }: Props) {
           size="small"
           defaultActiveKey={scopeGroups.map((g) => g.key)}
           items={scopeGroups.map((g) => {
-            const scopeLabel =
-              g.scopeType === 'G'
-                ? '全局'
-                : g.scopeType === 'H'
-                  ? `展厅 · ${hallMap.get(Number(g.scopeId)) ?? g.scopeId}`
-                  : `${SCOPE_META[g.scopeType].label} · ${g.scopeId}`;
             return {
               key: g.key,
               label: (
                 <Space>
-                  <Tag color={SCOPE_META[g.scopeType].color}>{scopeLabel}</Tag>
+                  <ScopeTag
+                    scopeType={g.scopeType}
+                    scopeId={g.scopeId}
+                    hallNameMap={hallMap}
+                  />
                   <Text type="secondary">{g.actions.length} actions</Text>
                 </Space>
               ),

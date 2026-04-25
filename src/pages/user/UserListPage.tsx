@@ -1,11 +1,14 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Table, Input, Select, Space, Pagination, Tag, Button } from 'antd';
 import { useMessage } from '@/hooks/useMessage';
-import { SyncOutlined, UserAddOutlined } from '@ant-design/icons';
+import { KeyOutlined, SyncOutlined, UserAddOutlined } from '@ant-design/icons';
 import type { TableColumnsType } from 'antd';
 import PageHeader from '@/components/common/PageHeader';
+import AccountTypeTag from '@/components/authz/common/AccountTypeTag';
+import Can from '@/components/authz/Can';
+import QuickGrantDrawer, { type QuickGrantTarget } from '@/components/authz/QuickGrantDrawer';
 import { userApi } from '@/api/user';
 import { queryKeys } from '@/api/queryKeys';
 import type { UserListItem } from '@/types/auth';
@@ -20,10 +23,11 @@ const ROLE_OPTIONS = [
   { value: 'producer', label: '制作人' },
 ];
 
-const USER_TYPE_OPTIONS = [
+const ACCOUNT_TYPE_OPTIONS = [
   { value: 'all', label: '全部类型' },
-  { value: 'employee', label: '员工' },
-  { value: 'supplier', label: '供应商' },
+  { value: 'internal', label: '内部员工' },
+  { value: 'vendor', label: '供应商' },
+  { value: 'customer', label: '客户' },
 ];
 
 const ROLE_LABELS: Record<string, { label: string; color: string }> = {
@@ -33,19 +37,52 @@ const ROLE_LABELS: Record<string, { label: string; color: string }> = {
   producer: { label: '制作人', color: 'purple' },
 };
 
-const USER_TYPE_LABELS: Record<string, { label: string; color: string }> = {
-  employee: { label: '员工', color: 'cyan' },
-  supplier: { label: '供应商', color: 'orange' },
+/** 旧后端 user_type 字段 → 新统一 account_type 的双向映射（PRD §4.4） */
+const USER_TYPE_TO_ACCOUNT: Record<string, string> = {
+  employee: 'internal',
+  supplier: 'vendor',
+};
+const ACCOUNT_TO_USER_TYPE: Record<string, string> = {
+  internal: 'employee',
+  vendor: 'supplier',
 };
 
 export default function UserListPage() {
   const { message, modal } = useMessage();
-  const [keyword, setKeyword] = useState('');
-  const [role, setRole] = useState<string>('all');
-  const [userType, setUserType] = useState<string>('all');
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  /* P2.1（2026-04-25）：URL 同步 ?keyword=&role=&account_type=&page=&size= */
+  const keyword = searchParams.get('keyword') ?? '';
+  const role = searchParams.get('role') ?? 'all';
+  /** UI 层一律以 account_type 为准（internal / vendor / customer），向后端发请求时映射回 user_type */
+  const accountType = searchParams.get('account_type') ?? 'all';
+  const page = Number(searchParams.get('page') ?? 1) || 1;
+  const pageSize = useMemo(() => {
+    const ps = Number(searchParams.get('size') ?? 20);
+    return [20, 50, 100].includes(ps) ? ps : 20;
+  }, [searchParams]);
+
   const [importModalOpen, setImportModalOpen] = useState(false);
+  const [quickGrantTarget, setQuickGrantTarget] = useState<QuickGrantTarget | null>(null);
+
+  /** 局部输入态：搜索框防抖前的同步绑定（按回车 / blur 才推 URL，避免每键一发） */
+  const [keywordDraft, setKeywordDraft] = useState(keyword);
+  useEffect(() => { setKeywordDraft(keyword); }, [keyword]);
+
+  function patchSearch(patch: Record<string, string | undefined>) {
+    const next = new URLSearchParams(searchParams);
+    Object.entries(patch).forEach(([k, v]) => {
+      if (v == null || v === '' || v === 'all') next.delete(k);
+      else next.set(k, v);
+    });
+    setSearchParams(next, { replace: true });
+  }
+
+  const setKeyword = (v: string) => patchSearch({ keyword: v, page: '1' });
+  const setRole = (v: string) => patchSearch({ role: v, page: '1' });
+  const setAccountType = (v: string) => patchSearch({ account_type: v, page: '1' });
+  const setPage = (p: number) => patchSearch({ page: p === 1 ? undefined : String(p) });
+  const setPageSize = (ps: number) => patchSearch({ size: ps === 20 ? undefined : String(ps), page: '1' });
 
   const queryClient = useQueryClient();
 
@@ -54,7 +91,9 @@ export default function UserListPage() {
     page_size: pageSize,
     ...(keyword ? { keyword } : {}),
     ...(role !== 'all' ? { role } : {}),
-    ...(userType !== 'all' ? { user_type: userType } : {}),
+    ...(accountType !== 'all'
+      ? { user_type: ACCOUNT_TO_USER_TYPE[accountType] ?? accountType }
+      : {}),
   };
 
   const { data, isLoading } = useQuery({
@@ -86,7 +125,7 @@ export default function UserListPage() {
       title: '姓名',
       dataIndex: 'name',
       render: (name: string, record) => (
-        <Link to={`/users/${record.id}`}>{name}</Link>
+        <Link to={`/platform/authz/users/${record.id}`}>{name}</Link>
       ),
     },
     {
@@ -97,11 +136,10 @@ export default function UserListPage() {
     {
       title: '类型',
       dataIndex: 'user_type',
-      width: 90,
-      render: (t: string) => {
-        const cfg = USER_TYPE_LABELS[t];
-        return cfg ? <Tag color={cfg.color}>{cfg.label}</Tag> : <Tag>{t}</Tag>;
-      },
+      width: 100,
+      render: (t: string) => (
+        <AccountTypeTag accountType={USER_TYPE_TO_ACCOUNT[t] ?? t} />
+      ),
     },
     {
       title: '角色',
@@ -136,9 +174,26 @@ export default function UserListPage() {
     },
     {
       title: '操作',
-      width: 80,
+      width: 180,
       render: (_: unknown, record) => (
-        <Link to={`/users/${record.id}`}>详情</Link>
+        <Space size={8}>
+          <Link to={`/platform/authz/users/${record.id}`}>详情</Link>
+          <Can action="user.grant">
+            <Button
+              size="small"
+              type="link"
+              icon={<KeyOutlined />}
+              onClick={() => setQuickGrantTarget({
+                id: record.id,
+                name: record.name,
+                email: record.email,
+                user_type: record.user_type,
+              })}
+            >
+              快速授权
+            </Button>
+          </Can>
+        </Space>
       ),
     },
   ];
@@ -150,24 +205,25 @@ export default function UserListPage() {
       <Space wrap style={{ marginBottom: 16, width: '100%', justifyContent: 'space-between' }}>
         <Space wrap>
           <Input.Search
-            placeholder="搜索姓名、邮箱、手机..."
+            placeholder="搜索姓名 / 邮箱 / 手机 / user_id"
             allowClear
-            style={{ width: 260 }}
-            value={keyword}
-            onChange={(e) => { setKeyword(e.target.value); setPage(1); }}
-            onSearch={() => setPage(1)}
+            style={{ width: 280 }}
+            value={keywordDraft}
+            onChange={(e) => setKeywordDraft(e.target.value)}
+            onSearch={(v) => setKeyword(v)}
+            onBlur={() => { if (keywordDraft !== keyword) setKeyword(keywordDraft); }}
           />
           <Select
             style={{ width: 140 }}
             value={role}
-            onChange={(v) => { setRole(v); setPage(1); }}
+            onChange={setRole}
             options={ROLE_OPTIONS}
           />
           <Select
             style={{ width: 140 }}
-            value={userType}
-            onChange={(v) => { setUserType(v); setPage(1); }}
-            options={USER_TYPE_OPTIONS}
+            value={accountType}
+            onChange={setAccountType}
+            options={ACCOUNT_TYPE_OPTIONS}
           />
         </Space>
         <Space>
@@ -202,10 +258,14 @@ export default function UserListPage() {
           <Pagination
             current={page}
             pageSize={pageSize}
+            pageSizeOptions={['20', '50', '100']}
             total={total}
             showSizeChanger
             showTotal={(t) => `共 ${t} 条`}
-            onChange={(p, ps) => { setPage(p); setPageSize(ps); }}
+            onChange={(p, ps) => {
+              if (ps !== pageSize) setPageSize(ps);
+              else setPage(p);
+            }}
           />
         </div>
       )}
@@ -213,6 +273,12 @@ export default function UserListPage() {
       <ImportSupplierModal
         open={importModalOpen}
         onClose={() => setImportModalOpen(false)}
+      />
+
+      <QuickGrantDrawer
+        open={!!quickGrantTarget}
+        target={quickGrantTarget}
+        onClose={() => setQuickGrantTarget(null)}
       />
     </div>
   );

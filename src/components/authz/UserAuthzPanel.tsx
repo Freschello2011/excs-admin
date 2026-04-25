@@ -30,9 +30,13 @@ import dayjs, { type Dayjs } from 'dayjs';
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import Can from '@/components/authz/Can';
 import RiskyActionButton from '@/components/authz/RiskyActionButton';
+import ExpiryTag from '@/components/authz/common/ExpiryTag';
+import ScopeTag from '@/components/authz/common/ScopeTag';
+import QuickGrantDrawer, { type QuickGrantTarget } from '@/components/authz/QuickGrantDrawer';
 import { useMessage } from '@/hooks/useMessage';
 import { authzApi } from '@/api/authz';
 import { hallApi } from '@/api/hall';
+import { userApi } from '@/api/user';
 import { queryKeys } from '@/api/queryKeys';
 import { useAuthStore } from '@/stores/authStore';
 import { useScopeGroups } from '@/lib/authz/useScopeGroups';
@@ -40,7 +44,6 @@ import type {
   Grant,
   GrantStatusType,
   RoleTemplate,
-  ScopeType,
 } from '@/types/authz';
 
 const { Text } = Typography;
@@ -51,17 +54,9 @@ const STATUS_META: Record<GrantStatusType, { label: string; color: string }> = {
   revoked: { label: '已撤销', color: 'red' },
 };
 
-const SCOPE_LABELS: Record<ScopeType, string> = {
-  G: '全局',
-  T: '租户',
-  H: '展厅',
-  E: '展项',
-  O: '归属',
-};
-
 interface Props {
   userId: number;
-  /** 跳转到向导时用（不传则不显示「+ 授权」入口） */
+  /** 兼容旧入口：传则显示按钮但点开 QuickGrantDrawer；不传则不渲染按钮（如 self 视角） */
   onNavigateGrantWizard?: () => void;
 }
 
@@ -73,6 +68,24 @@ export default function UserAuthzPanel({ userId, onNavigateGrantWizard }: Props)
 
   const [extending, setExtending] = useState<Grant | null>(null);
   const [extendValue, setExtendValue] = useState<Dayjs | null>(null);
+  const [quickGrantOpen, setQuickGrantOpen] = useState(false);
+
+  // 抓 user 摘要供 QuickGrantDrawer 决定 vendor 默认过期 + 抽屉标题展示
+  const { data: user } = useQuery({
+    queryKey: queryKeys.userDetail(userId),
+    queryFn: () => userApi.getUser(userId),
+    select: (res) => res.data.data,
+    enabled: userId > 0,
+  });
+  const quickGrantTarget: QuickGrantTarget | null = user
+    ? {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        account_type: user.account_type,
+        user_type: user.user_type,
+      }
+    : null;
 
   const {
     data: view,
@@ -175,7 +188,8 @@ export default function UserAuthzPanel({ userId, onNavigateGrantWizard }: Props)
               type="primary"
               size="small"
               icon={<PlusOutlined />}
-              onClick={onNavigateGrantWizard}
+              onClick={() => setQuickGrantOpen(true)}
+              disabled={!quickGrantTarget}
             >
               + 授权
             </Button>
@@ -215,18 +229,13 @@ export default function UserAuthzPanel({ userId, onNavigateGrantWizard }: Props)
               },
               {
                 title: '范围',
-                render: (_, record) => {
-                  if (record.scope_type === 'G') return <Tag color="purple">全局</Tag>;
-                  if (record.scope_type === 'H') {
-                    const name = hallMap.get(Number(record.scope_id));
-                    return <Tag color="blue">展厅 · {name ?? record.scope_id}</Tag>;
-                  }
-                  return (
-                    <Tag>
-                      {SCOPE_LABELS[record.scope_type]} · {record.scope_id}
-                    </Tag>
-                  );
-                },
+                render: (_, record) => (
+                  <ScopeTag
+                    scopeType={record.scope_type}
+                    scopeId={record.scope_id}
+                    hallNameMap={hallMap}
+                  />
+                ),
               },
               {
                 title: '状态',
@@ -240,9 +249,8 @@ export default function UserAuthzPanel({ userId, onNavigateGrantWizard }: Props)
               {
                 title: '到期',
                 dataIndex: 'expires_at',
-                width: 140,
-                render: (v?: string | null) =>
-                  v ? dayjs(v).format('YYYY-MM-DD') : <Tag>永久</Tag>,
+                width: 180,
+                render: (v?: string | null) => <ExpiryTag expiresAt={v} variant="compact" />,
               },
               {
                 title: '操作',
@@ -305,50 +313,59 @@ export default function UserAuthzPanel({ userId, onNavigateGrantWizard }: Props)
           <Empty description="无生效 action" />
         ) : (
           <Space direction="vertical" style={{ width: '100%' }}>
-            {scopeGroups.map((g) => {
-              const scopeLabel =
-                g.scopeType === 'G'
-                  ? '全局'
-                  : g.scopeType === 'H'
-                    ? `展厅 · ${hallMap.get(Number(g.scopeId)) ?? g.scopeId}`
-                    : `${SCOPE_LABELS[g.scopeType]} · ${g.scopeId}`;
-              return (
-                <div
-                  key={g.key}
-                  style={{
-                    padding: 8,
-                    border: '1px solid var(--ant-color-border-secondary)',
-                    borderRadius: 4,
-                  }}
-                >
-                  <Space style={{ marginBottom: 6 }}>
-                    <Tag color={g.scopeType === 'G' ? 'purple' : 'blue'}>{scopeLabel}</Tag>
-                    <Text type="secondary">{g.actions.length} actions</Text>
-                  </Space>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                    {g.actions.map((code) => (
-                      <Tag key={code} style={{ marginInlineEnd: 0 }}>
-                        {code}
-                      </Tag>
-                    ))}
-                  </div>
+            {scopeGroups.map((g) => (
+              <div
+                key={g.key}
+                style={{
+                  padding: 8,
+                  border: '1px solid var(--ant-color-border-secondary)',
+                  borderRadius: 4,
+                }}
+              >
+                <Space style={{ marginBottom: 6 }}>
+                  <ScopeTag
+                    scopeType={g.scopeType}
+                    scopeId={g.scopeId}
+                    hallNameMap={hallMap}
+                  />
+                  <Text type="secondary">{g.actions.length} actions</Text>
+                </Space>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  {g.actions.map((code) => (
+                    <Tag key={code} style={{ marginInlineEnd: 0 }}>
+                      {code}
+                    </Tag>
+                  ))}
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </Space>
         )}
       </Card>
 
-      {/* 审计快照（Phase 11 审计 UI 上线前先留占位） */}
-      <Card size="small" title="审计快照（最近 10 条）">
+      {/* 审计快照（Phase 11 审计 API 上线前先留占位 + 刷新 stub） */}
+      <Card
+        size="small"
+        title="审计快照（最近 10 条）"
+        extra={
+          <Button
+            size="small"
+            icon={<ReloadOutlined />}
+            disabled
+            title="Phase 11 审计 API 上线后启用"
+          >
+            刷新最近事件
+          </Button>
+        }
+      >
         <Alert
           type="info"
           showIcon
           message="审计日志 UI 将在 Phase 11 上线"
           description={
             <span>
-              届时此处展示与该用户相关的授权变更、关键操作最近 10 条；现阶段可在
-              <Link to="/platform/authz/audit"> 审计日志</Link> 查看占位页。
+              届时此处展示与该用户相关的授权变更、关键操作最近 10 条；现阶段可去
+              <Link to="/platform/authz/audit"> 权限审计</Link> 用 actor_user_id 过滤查看。
             </span>
           }
         />
@@ -386,6 +403,12 @@ export default function UserAuthzPanel({ userId, onNavigateGrantWizard }: Props)
           placeholder="新到期时间"
         />
       </Modal>
+
+      <QuickGrantDrawer
+        open={quickGrantOpen}
+        target={quickGrantTarget}
+        onClose={() => setQuickGrantOpen(false)}
+      />
     </div>
   );
 }

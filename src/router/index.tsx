@@ -86,10 +86,16 @@ function HallRoute({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Legacy /users/:userId → /platform/users/:userId 的参数化重定向 */
+/** Legacy /users/:userId 与 /platform/users/:userId → /platform/authz/users/:userId 的参数化重定向 */
 function LegacyUserDetailRedirect() {
   const { userId } = useParams<{ userId: string }>();
-  return <Navigate to={`/platform/users/${userId}`} replace />;
+  return <Navigate to={`/platform/authz/users/${userId}`} replace />;
+}
+
+/** /platform/users/:userId/grant → /platform/authz/users/:userId/grant */
+function LegacyGrantWizardRedirect() {
+  const { userId } = useParams<{ userId: string }>();
+  return <Navigate to={`/platform/authz/users/${userId}/grant`} replace />;
 }
 
 /** Legacy /halls/:hallId/pairing-codes → /halls/:hallId/exhibits?tab=pairing-codes */
@@ -367,14 +373,6 @@ export const router = createBrowserRouter([
       },
       /* 系统配置（新前缀 /platform/*） */
       {
-        path: 'platform/users',
-        element: <RequireAdmin><SuspenseWrap><UserListPage /></SuspenseWrap></RequireAdmin>,
-      },
-      {
-        path: 'platform/users/:userId',
-        element: <RequireAdmin><SuspenseWrap><UserDetailPage /></SuspenseWrap></RequireAdmin>,
-      },
-      {
         path: 'platform/sys-config',
         element: <RequireAdmin><SuspenseWrap><SysConfigPage /></SuspenseWrap></RequireAdmin>,
       },
@@ -383,6 +381,19 @@ export const router = createBrowserRouter([
         element: <RequireAdmin><SuspenseWrap><ReleasesPage /></SuspenseWrap></RequireAdmin>,
       },
       /* 权限管理（Phase 6）——不挂 RequireAdmin，靠菜单 requireActions 过滤 + 后端 403 interceptor 兜底 */
+      /* P0.5（2026-04-25）：用户列表 / 详情 / 三步授权向导 全族迁入 /platform/authz/users 下 */
+      {
+        path: 'platform/authz/users',
+        element: <SuspenseWrap><UserListPage /></SuspenseWrap>,
+      },
+      {
+        path: 'platform/authz/users/:userId',
+        element: <SuspenseWrap><UserDetailPage /></SuspenseWrap>,
+      },
+      {
+        path: 'platform/authz/users/:userId/grant',
+        element: <SuspenseWrap><GrantWizardPage /></SuspenseWrap>,
+      },
       {
         path: 'platform/authz/role-templates',
         element: <SuspenseWrap><RoleTemplateListPage /></SuspenseWrap>,
@@ -398,10 +409,6 @@ export const router = createBrowserRouter([
       {
         path: 'platform/authz/grants',
         element: <SuspenseWrap><GrantListPage /></SuspenseWrap>,
-      },
-      {
-        path: 'platform/users/:userId/grant',
-        element: <SuspenseWrap><GrantWizardPage /></SuspenseWrap>,
       },
       {
         path: 'platform/authz/audit',
@@ -424,14 +431,27 @@ export const router = createBrowserRouter([
         path: 'platform/authz/vendors/:id',
         element: <SuspenseWrap><VendorDetailPage /></SuspenseWrap>,
       },
-      /* Legacy /users /sys-config /releases → /platform/* */
+      /* Legacy /users /platform/users /sys-config /releases → 新位置 */
       {
         path: 'users',
-        element: <Navigate to="/platform/users" replace />,
+        element: <Navigate to="/platform/authz/users" replace />,
       },
       {
         path: 'users/:userId',
         element: <LegacyUserDetailRedirect />,
+      },
+      /* P0.5（2026-04-25）：旧 /platform/users → /platform/authz/users 全族 redirect */
+      {
+        path: 'platform/users',
+        element: <Navigate to="/platform/authz/users" replace />,
+      },
+      {
+        path: 'platform/users/:userId',
+        element: <LegacyUserDetailRedirect />,
+      },
+      {
+        path: 'platform/users/:userId/grant',
+        element: <LegacyGrantWizardRedirect />,
       },
       {
         path: 'sys-config',

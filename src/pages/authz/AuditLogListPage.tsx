@@ -137,8 +137,8 @@ export default function AuditLogListPage() {
   return (
     <div>
       <PageHeader
-        title="审计日志"
-        description="授权变更 / 风险操作 / 登录登出 / 配置变更——近 90 天 DB，跨 90 天 OSS 冷读。"
+        title="权限审计"
+        description="授权变更 / 风险操作 / 登录登出 / 配置变更——近 90 天 DB，跨 90 天 OSS 冷读。与「监控与分析 → 操作日志」（业务事件）区分开。"
       />
 
       {archiveUsed && (

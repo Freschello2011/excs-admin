@@ -8,9 +8,9 @@ import { useState } from 'react';
 import { Alert, Button, Card, Descriptions, Modal, Select, Space, Spin, Tag, Tooltip } from 'antd';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import dayjs from 'dayjs';
 import { SwapOutlined } from '@ant-design/icons';
 import RiskyActionButton from '@/components/authz/RiskyActionButton';
+import ExpiryTag from '@/components/authz/common/ExpiryTag';
 import { vendorApi } from '@/api/vendor';
 import { useMessage } from '@/hooks/useMessage';
 import type { UserDetail } from '@/types/auth';
@@ -74,9 +74,6 @@ export default function VendorInfoCard({ user }: Props) {
   const vendor = vendorDetail.vendor;
   const members = vendorDetail.members ?? [];
   const expiresAt = vendor.grant_expires_at;
-  const expDays = expiresAt ? dayjs(expiresAt).diff(dayjs(), 'day') : null;
-  const expColor =
-    expDays == null ? undefined : expDays < 0 ? 'error' : expDays <= 30 ? 'warning' : undefined;
   const vendorArchived = vendor.status === 'archived';
 
   const otherMembers = members.filter((m) => m.user_id !== user.id && !m.suspended);
@@ -151,14 +148,7 @@ export default function VendorInfoCard({ user }: Props) {
         </Descriptions.Item>
 
         <Descriptions.Item label="公司授权到期">
-          {expiresAt ? (
-            <Tag color={expColor}>
-              {dayjs(expiresAt).format('YYYY-MM-DD')}
-              {expDays != null && (expDays < 0 ? ` · 已过期 ${-expDays} 天` : ` · 剩 ${expDays} 天`)}
-            </Tag>
-          ) : (
-            <Tag>未设置</Tag>
-          )}
+          <ExpiryTag expiresAt={expiresAt} permanentText="未设置" />
         </Descriptions.Item>
 
         <Descriptions.Item label="默认展厅范围">

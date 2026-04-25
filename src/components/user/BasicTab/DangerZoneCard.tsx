@@ -1,17 +1,19 @@
 /**
  * DangerZoneCard —— 基本信息 Tab 右栏最后一块：停用 / 软删入口（PRD §8.8.7）。
  *
+ * P3.2（2026-04-25）：停用按钮也接 RiskyActionButton（forceRiskLevel='high'），
+ * 与 user.delete=critical 配套；user.manage 注册表 risk=high。
+ *
  * 职责：
- *   - 停用（high）：普通 Modal 确认，不走 RiskyActionButton 的 critical 分支；
- *     archived → active 的恢复也走此按钮（根据当前 status 切标签）。
+ *   - 停用（high）：RiskyActionButton 简单确认（无 reason 输入）；archived → active 恢复
+ *     也走类似按钮（根据当前 status 切标签）。
  *   - 软删（critical）：RiskyActionButton forceRiskLevel='critical'，强制原因 ≥ 5 字。
  *   - isSelf=true：全部 disabled + 顶部 Alert 提示防自锁。
  *   - vendor 主账号额外提醒：先转移再停用 / 删除。
  */
-import { Alert, Button, Card, Input, Modal, Space, Tooltip } from 'antd';
+import { Alert, Button, Card, Modal, Space, Tooltip } from 'antd';
 import { DeleteOutlined, PoweroffOutlined } from '@ant-design/icons';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
 import RiskyActionButton from '@/components/authz/RiskyActionButton';
 import Can from '@/components/authz/Can';
 import { userApi } from '@/api/user';
@@ -27,8 +29,6 @@ interface Props {
 export default function DangerZoneCard({ user, isSelf, onSuccess }: Props) {
   const { message } = useMessage();
   const queryClient = useQueryClient();
-  const [suspendOpen, setSuspendOpen] = useState(false);
-  const [suspendReason, setSuspendReason] = useState('');
 
   const isVendorPrimary = user.account_type === 'vendor' && user.is_primary;
   const isArchived = user.status === 'archived';
@@ -42,8 +42,6 @@ export default function DangerZoneCard({ user, isSelf, onSuccess }: Props) {
       message.success('操作成功');
       queryClient.invalidateQueries({ queryKey: ['user', 'detail', user.id] });
       queryClient.invalidateQueries({ queryKey: ['authz', 'user-view', user.id] });
-      setSuspendOpen(false);
-      setSuspendReason('');
       onSuccess();
     },
     onError: (err: unknown) => {
@@ -149,14 +147,28 @@ export default function DangerZoneCard({ user, isSelf, onSuccess }: Props) {
         ) : (
           <Can action="user.manage">
             <Tooltip title={isSelf ? '不能对自己操作' : '停用后无法登录；可在此页面恢复'}>
-              <Button
-                danger
-                icon={<PoweroffOutlined />}
-                disabled={!canOperate}
-                onClick={() => setSuspendOpen(true)}
-              >
-                停用账号
-              </Button>
+              <span>
+                {/* P3.2（2026-04-25）：停用走 RiskyActionButton forceRiskLevel='high'，
+                    与 user.delete=critical 配套；user.manage 注册表 risk=high，二者一致 */}
+                <RiskyActionButton
+                  action="user.manage"
+                  forceRiskLevel="high"
+                  danger
+                  icon={<PoweroffOutlined />}
+                  disabled={!canOperate}
+                  confirmTitle="停用账号"
+                  confirmContent={
+                    <span>
+                      停用后 <strong>{user.name}</strong>（#{user.id}）将立即无法登录；可在本页面随时恢复。
+                    </span>
+                  }
+                  onConfirm={async () => {
+                    await patchMutation.mutateAsync({ status: 'suspended' });
+                  }}
+                >
+                  停用账号
+                </RiskyActionButton>
+              </span>
             </Tooltip>
           </Can>
         )}
@@ -184,31 +196,6 @@ export default function DangerZoneCard({ user, isSelf, onSuccess }: Props) {
         </Can>
       </Space>
 
-      {/* 停用确认（high 风险，普通 Modal） */}
-      <Modal
-        title="停用账号"
-        open={suspendOpen}
-        onCancel={() => {
-          setSuspendOpen(false);
-          setSuspendReason('');
-        }}
-        onOk={() =>
-          patchMutation.mutate({ status: 'suspended', reason: suspendReason || undefined })
-        }
-        okText="确认停用"
-        okButtonProps={{ danger: true, loading: patchMutation.isPending }}
-      >
-        <p>
-          停用后 {user.name}（#{user.id}）将立即无法登录；可在本页面随时恢复。
-        </p>
-        <Input.TextArea
-          rows={3}
-          placeholder="操作原因（选填，≤500 字）"
-          value={suspendReason}
-          maxLength={500}
-          onChange={(e) => setSuspendReason(e.target.value)}
-        />
-      </Modal>
     </Card>
   );
 }

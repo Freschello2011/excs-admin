@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
-import { Button, Card, Form, Input, InputNumber, Result, Space, Typography } from 'antd';
+import { Button, Card, Form, Input, InputNumber, Result, Space, Tooltip, Typography } from 'antd';
+import { InfoCircleOutlined } from '@ant-design/icons';
 import dayjs, { type Dayjs } from 'dayjs';
 import PageHeader from '@/components/common/PageHeader';
 import { useMessage } from '@/hooks/useMessage';
@@ -9,6 +10,18 @@ import { vendorApi } from '@/api/vendor';
 import { makeDefaultExpiry } from '@/lib/authz/expiry';
 import InitialPasswordModal from '@/components/authz/InitialPasswordModal';
 import type { CreateVendorBody, Vendor } from '@/types/authz';
+
+/** 短标题 + ⓘ Tooltip —— FieldRow 范式 */
+function LabelHint({ label, hint }: { label: string; hint: string }) {
+  return (
+    <Space size={4}>
+      <span>{label}</span>
+      <Tooltip title={hint}>
+        <InfoCircleOutlined style={{ color: 'var(--ant-color-text-tertiary)', fontSize: 12 }} />
+      </Tooltip>
+    </Space>
+  );
+}
 
 const { Text, Paragraph } = Typography;
 
@@ -32,7 +45,7 @@ interface FormValues {
  *
  * 成功态页展示：
  *   - vendor 基本信息
- *   - 「跳转用户详情权限 Tab」按钮（授权前端 /platform/users/:id?tab=authz）
+ *   - 「跳转用户详情权限 Tab」按钮（授权前端 /platform/authz/users/:id?tab=authz）
  *   - 「查看供应商详情」按钮 → /platform/authz/vendors/:id
  */
 export default function VendorCreatePage() {
@@ -107,7 +120,7 @@ export default function VendorCreatePage() {
             <Button
               key="authz"
               onClick={() =>
-                navigate(`/platform/users/${createdVendor.primary_user_id}?tab=authz`)
+                navigate(`/platform/authz/users/${createdVendor.primary_user_id}?tab=authz`)
               }
             >
               跳转用户权限 Tab
@@ -154,28 +167,28 @@ export default function VendorCreatePage() {
         >
           <Form.Item
             name="code"
-            label="供应商代码（唯一）"
+            label={<LabelHint label="代码" hint="供应商唯一标识，建议小写英文 / 数字 / 下划线；新建后不可修改" />}
             rules={[{ required: true, message: '必填' }, { max: 64 }]}
           >
             <Input placeholder="如 acme_media" />
           </Form.Item>
           <Form.Item
             name="name"
-            label="供应商名称"
+            label={<LabelHint label="名称" hint="管理员可见的供应商显示名；建议填工商注册全称" />}
             rules={[{ required: true, message: '必填' }, { max: 128 }]}
           >
             <Input placeholder="如 北京优异数字媒体有限公司" />
           </Form.Item>
           <Form.Item
             name="contact_name"
-            label="主账号联系人姓名"
+            label={<LabelHint label="主账号姓名" hint="供应商主账号联系人姓名；将同步到 SSO 用户姓名字段" />}
             rules={[{ required: true, message: '必填' }, { max: 64 }]}
           >
             <Input placeholder="如 张三" />
           </Form.Item>
           <Form.Item
             name="contact_phone"
-            label="主账号手机号（SSO 注册 + 登录用）"
+            label={<LabelHint label="主账号手机号" hint="11 位大陆手机号；SSO 注册 + 登录用，11h 内会发邀请短信" />}
             rules={[
               { required: true, message: '必填' },
               { pattern: /^1\d{10}$/, message: '请输入 11 位大陆手机号' },
@@ -185,20 +198,30 @@ export default function VendorCreatePage() {
           </Form.Item>
           <Form.Item
             name="contact_email"
-            label="主账号邮箱（可选）"
+            label={<LabelHint label="主账号邮箱" hint="可选；用于备用通知和找回密码" />}
             rules={[{ type: 'email', message: '邮箱格式无效' }]}
           >
             <Input placeholder="如 zhangsan@acme.com" />
           </Form.Item>
           <Form.Item
-            name="grant_days"
-            label="授权期（天）"
-            rules={[{ required: true, type: 'number', min: 1, max: 3650 }]}
-            extra="默认 180 天（PRD §6.4 vendor 强制过期），可调整。"
+            label={<LabelHint label="授权期" hint="vendor 必须过期（PRD §6.4）；默认 180 天，1-3650 天" />}
+            required
           >
-            <InputNumber style={{ width: 180 }} min={1} max={3650} />
+            <Space size={8}>
+              <Form.Item
+                name="grant_days"
+                noStyle
+                rules={[{ required: true, type: 'number', min: 1, max: 3650 }]}
+              >
+                <InputNumber style={{ width: 180 }} min={1} max={3650} />
+              </Form.Item>
+              <span style={{ color: 'var(--ant-color-text-tertiary)' }}>天</span>
+            </Space>
           </Form.Item>
-          <Form.Item name="notes" label="备注">
+          <Form.Item
+            name="notes"
+            label={<LabelHint label="备注" hint="可选；供管理员留协议号、对接人等内部信息" />}
+          >
             <Input.TextArea rows={3} maxLength={500} showCount />
           </Form.Item>
           <Form.Item>

@@ -171,7 +171,7 @@ export default function HallAuthzPanel({ hallId, hallName }: Props) {
                       const u = userMap.get(uid);
                       return u ? (
                         <Space>
-                          <Link to={`/platform/users/${uid}?tab=authz`}>{u.name}</Link>
+                          <Link to={`/platform/authz/users/${uid}?tab=authz`}>{u.name}</Link>
                           <Text type="secondary" style={{ fontSize: 12 }}>
                             {u.email ?? u.phone ?? ''}
                           </Text>

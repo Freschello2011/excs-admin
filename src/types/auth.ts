@@ -44,13 +44,19 @@ export interface LoginUser {
   hall_permissions: HallPermission[];
 }
 
+/** resolveAccountType 接受任何含 account_type / user_type 的局部对象（含 LoginUser / UserListItem / UserDetail） */
+export interface AccountTypeBearer {
+  account_type?: 'internal' | 'vendor' | 'customer';
+  user_type?: string;
+}
+
 /**
  * resolveAccountType —— Phase 8 兼容读取：优先用 account_type，缺省时从 user_type 兜底推断。
  *   - account_type 存在且有值：直接返回
  *   - user_type === 'supplier' → 'vendor'
  *   - 其他或未登录 → 'internal'
  */
-export function resolveAccountType(user: Partial<LoginUser> | null | undefined): 'internal' | 'vendor' | 'customer' {
+export function resolveAccountType(user: AccountTypeBearer | null | undefined): 'internal' | 'vendor' | 'customer' {
   if (!user) return 'internal';
   if (user.account_type) return user.account_type;
   if (user.user_type === 'supplier') return 'vendor';

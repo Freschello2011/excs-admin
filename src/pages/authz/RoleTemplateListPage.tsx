@@ -1,7 +1,7 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Table, Button, Space, Tag, Tooltip, Modal, Form, Input } from 'antd';
+import { Table, Button, Space, Tag, Tooltip, Modal, Form, Input, Select, Switch } from 'antd';
 import { PlusOutlined, CopyOutlined, DeleteOutlined, EditOutlined, WarningOutlined } from '@ant-design/icons';
 import type { TableColumnsType } from 'antd';
 import dayjs from 'dayjs';
@@ -21,11 +21,59 @@ export default function RoleTemplateListPage() {
   const [copySource, setCopySource] = useState<RoleTemplate | null>(null);
   const [copyForm] = Form.useForm<CopyRoleTemplateBody>();
 
+  /* P2.3（2026-04-25）：URL 同步 ?keyword=&domain=&critical= */
+  const [searchParams, setSearchParams] = useSearchParams();
+  const keyword = searchParams.get('keyword') ?? '';
+  const domainFilter = searchParams.get('domain') ?? 'all';
+  const criticalOnly = searchParams.get('critical') === '1';
+
+  function patch(p: Record<string, string | undefined>) {
+    const next = new URLSearchParams(searchParams);
+    Object.entries(p).forEach(([k, v]) => {
+      if (v == null || v === '' || v === 'all' || v === '0') next.delete(k);
+      else next.set(k, v);
+    });
+    setSearchParams(next, { replace: true });
+  }
+
+  const [keywordDraft, setKeywordDraft] = useState(keyword);
+  useEffect(() => { setKeywordDraft(keyword); }, [keyword]);
+
   const { data, isLoading } = useQuery({
     queryKey,
     queryFn: () => authzApi.listTemplates(),
     select: (res) => res.data.data?.list ?? [],
   });
+
+  /** 列表中所有 action_codes 的 domain（取 code 的 . 前缀），构造 filter 选项 */
+  const domainOptions = useMemo(() => {
+    const set = new Set<string>();
+    (data ?? []).forEach((t) => {
+      (t.action_codes ?? []).forEach((c) => {
+        const dot = c.indexOf('.');
+        if (dot > 0) set.add(c.slice(0, dot));
+        if (c === '*') set.add('*');
+      });
+    });
+    return Array.from(set).sort().map((d) => ({ value: d, label: d }));
+  }, [data]);
+
+  const filtered = useMemo(() => {
+    return (data ?? []).filter((t) => {
+      if (criticalOnly && !t.has_critical) return false;
+      if (domainFilter !== 'all') {
+        const hit = (t.action_codes ?? []).some((c) =>
+          domainFilter === '*' ? c === '*' : c.startsWith(`${domainFilter}.`),
+        );
+        if (!hit) return false;
+      }
+      if (keyword) {
+        const hay = [t.name_zh, t.code, t.description ?? ''].join(' ').toLowerCase();
+        if (!hay.includes(keyword.toLowerCase())) return false;
+      }
+      return true;
+    });
+  }, [data, criticalOnly, domainFilter, keyword]);
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => authzApi.deleteTemplate(id),
@@ -202,10 +250,42 @@ export default function RoleTemplateListPage() {
     <div>
       <PageHeader description="管理系统角色模板：内置模板可改名/改 action，自定义模板可增删。" />
 
-      <Space style={{ marginBottom: 16, width: '100%', justifyContent: 'space-between' }}>
-        <span style={{ color: 'var(--ant-color-text-secondary)' }}>
-          共 {data?.length ?? 0} 个模板
-        </span>
+      <Space wrap style={{ marginBottom: 16, width: '100%', justifyContent: 'space-between' }}>
+        <Space wrap>
+          <Input.Search
+            placeholder="搜索模板名 / code / 描述"
+            allowClear
+            style={{ width: 260 }}
+            value={keywordDraft}
+            onChange={(e) => setKeywordDraft(e.target.value)}
+            onSearch={(v) => patch({ keyword: v })}
+            onBlur={() => { if (keywordDraft !== keyword) patch({ keyword: keywordDraft }); }}
+          />
+          <Select
+            style={{ width: 180 }}
+            value={domainFilter}
+            onChange={(v) => patch({ domain: v })}
+            options={[{ value: 'all', label: '全部 domain' }, ...domainOptions]}
+            placeholder="按 action domain 过滤"
+            showSearch
+            optionFilterProp="label"
+          />
+          <Tooltip title="仅显示含 critical 高危 action 的模板">
+            <Space size={6}>
+              <span style={{ fontSize: 12, color: 'var(--ant-color-text-tertiary)' }}>
+                仅含 critical
+              </span>
+              <Switch
+                size="small"
+                checked={criticalOnly}
+                onChange={(v) => patch({ critical: v ? '1' : undefined })}
+              />
+            </Space>
+          </Tooltip>
+          <span style={{ color: 'var(--ant-color-text-secondary)', fontSize: 12 }}>
+            共 {filtered.length} / {data?.length ?? 0} 个模板
+          </span>
+        </Space>
         <Can action="user.grant">
           <Button
             type="primary"
@@ -219,7 +299,7 @@ export default function RoleTemplateListPage() {
 
       <Table<RoleTemplate>
         columns={columns}
-        dataSource={data ?? []}
+        dataSource={filtered}
         loading={isLoading}
         rowKey="id"
         pagination={false}

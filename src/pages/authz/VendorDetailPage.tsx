@@ -1,33 +1,63 @@
-import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+/**
+ * VendorDetailPage —— P2.5/2.6/2.8 重构（2026-04-25）。
+ *
+ * 视觉/IA 变化：
+ *   - antd <Tabs> → PillTabs（与全站对齐）
+ *   - 拆 3 Tab：基本信息 / 团队成员 / 上传内容（占位 Phase 12）
+ *   - 「基本信息」 Tab 增主账号摘要卡：姓名/邮箱/手机/user_id 链接到 /platform/authz/users/:id?tab=authz +
+ *     团队成员数 Statistic
+ *   - vendor 级操作（延期 / 停用 / 编辑默认范围）顶栏；member 级（邀请 / 转移 / 停用）团队 Tab 内
+ *   - 各处过期 ExpiryTag 化
+ */
+import { useMemo, useState } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Button,
   Card,
+  DatePicker,
   Descriptions,
+  Empty,
   Form,
   Input,
   Modal,
+  Result,
+  Select,
   Space,
+  Statistic,
   Table,
   Tag,
-  Tooltip,
   Typography,
-  DatePicker,
 } from 'antd';
-import { Select } from 'antd';
+import {
+  IdcardOutlined,
+  MailOutlined,
+  PhoneOutlined,
+  TeamOutlined,
+  UploadOutlined,
+} from '@ant-design/icons';
 import dayjs, { type Dayjs } from 'dayjs';
 import type { TableColumnsType } from 'antd';
 import PageHeader from '@/components/common/PageHeader';
+import PillTabs, { type PillTab } from '@/components/common/PillTabs';
 import { useMessage } from '@/hooks/useMessage';
 import Can from '@/components/authz/Can';
 import RiskyActionButton from '@/components/authz/RiskyActionButton';
 import InitialPasswordModal from '@/components/authz/InitialPasswordModal';
+import ExpiryTag from '@/components/authz/common/ExpiryTag';
 import { vendorApi } from '@/api/vendor';
 import { hallApi } from '@/api/hall';
 import type { VendorMember, VendorStatus } from '@/types/authz';
 
 const { Text, Paragraph } = Typography;
+
+type TabKey = 'basic' | 'members' | 'contents';
+
+const TABS: PillTab<TabKey>[] = [
+  { key: 'basic', label: '基本信息', icon: <IdcardOutlined /> },
+  { key: 'members', label: '团队成员', icon: <TeamOutlined /> },
+  { key: 'contents', label: '上传内容', icon: <UploadOutlined /> },
+];
 
 const STATUS_META: Record<VendorStatus, { label: string; color: string }> = {
   active: { label: '启用', color: 'green' },
@@ -41,6 +71,18 @@ export default function VendorDetailPage() {
   const navigate = useNavigate();
   const { message } = useMessage();
   const qc = useQueryClient();
+
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = useMemo<TabKey>(() => {
+    const t = searchParams.get('tab');
+    return TABS.some((x) => x.key === t) ? (t as TabKey) : 'basic';
+  }, [searchParams]);
+  const setActiveTab = (key: TabKey) => {
+    const next = new URLSearchParams(searchParams);
+    if (key === 'basic') next.delete('tab');
+    else next.set('tab', key);
+    setSearchParams(next, { replace: true });
+  };
 
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteForm] = Form.useForm<{ name: string; phone: string; email?: string }>();
@@ -153,6 +195,8 @@ export default function VendorDetailPage() {
   const { vendor, members } = data;
   const statusMeta = STATUS_META[vendor.status] ?? { label: vendor.status, color: 'default' };
 
+  const primaryMember = members.find((m) => m.is_primary);
+
   const memberColumns: TableColumnsType<VendorMember> = [
     {
       title: '账号',
@@ -161,8 +205,10 @@ export default function VendorDetailPage() {
       render: (_, m) => (
         <div>
           <div>
-            <strong>{m.name || `user#${m.user_id}`}</strong>{' '}
-            {m.is_primary && <Tag color="blue">主账号</Tag>}
+            <Link to={`/platform/authz/users/${m.user_id}?tab=authz`}>
+              <strong>{m.name || `user#${m.user_id}`}</strong>
+            </Link>{' '}
+            {m.is_primary && <Tag color="gold" style={{ borderColor: '#C29023', color: '#C29023' }}>⭐ 主账号</Tag>}
             {m.suspended && <Tag color="red">已停用</Tag>}
           </div>
           <div style={{ fontSize: 12, color: '#999' }}>
@@ -180,7 +226,7 @@ export default function VendorDetailPage() {
       render: (_, m) => (
         <Button
           size="small"
-          onClick={() => navigate(`/platform/users/${m.user_id}?tab=authz`)}
+          onClick={() => navigate(`/platform/authz/users/${m.user_id}?tab=authz`)}
         >
           查看授权
         </Button>
@@ -235,6 +281,8 @@ export default function VendorDetailPage() {
     },
   ];
 
+  /* ============== 渲染 ============== */
+
   return (
     <div>
       <PageHeader
@@ -270,92 +318,207 @@ export default function VendorDetailPage() {
         }
       />
 
-      <Card title="基本信息" style={{ marginBottom: 16 }}>
-        <Descriptions column={2}>
-          <Descriptions.Item label="代码">{vendor.code}</Descriptions.Item>
-          <Descriptions.Item label="状态">
-            <Tag color={statusMeta.color}>{statusMeta.label}</Tag>
-          </Descriptions.Item>
-          <Descriptions.Item label="主账号 user_id">{vendor.primary_user_id}</Descriptions.Item>
-          <Descriptions.Item label="租户 id">{vendor.tenant_id}</Descriptions.Item>
-          <Descriptions.Item label="联系人">{vendor.contact_name || '-'}</Descriptions.Item>
-          <Descriptions.Item label="联系电话">{vendor.contact_phone || '-'}</Descriptions.Item>
-          <Descriptions.Item label="联系邮箱">{vendor.contact_email || '-'}</Descriptions.Item>
-          <Descriptions.Item label="授权到期">
-            <Tooltip title={dayjs(vendor.grant_expires_at).format('YYYY-MM-DD HH:mm:ss')}>
-              <span>
-                {dayjs(vendor.grant_expires_at).format('YYYY-MM-DD')}（剩{' '}
-                {Math.max(0, dayjs(vendor.grant_expires_at).diff(dayjs(), 'day'))} 天）
-              </span>
-            </Tooltip>
-          </Descriptions.Item>
-          <Descriptions.Item label="备注" span={2}>
-            {vendor.notes || '-'}
-          </Descriptions.Item>
-        </Descriptions>
-        {/* Phase 10：默认归属展厅（绑定 Modal 的"建议展厅"过滤条件；不作为硬约束） */}
-        <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--ant-color-border-secondary)' }}>
-          <Space align="start" size={16}>
-            <span style={{ color: 'var(--ant-color-text-secondary)', width: 110, display: 'inline-block' }}>默认归属展厅</span>
-            {scopeEditing ? (
-              <Space wrap>
-                <Select
-                  mode="multiple"
-                  value={scopeValue}
-                  onChange={setScopeValue}
-                  options={allHalls.map((h: { id: number; name: string }) => ({ value: h.id, label: h.name }))}
-                  style={{ minWidth: 320 }}
-                  placeholder="选一个或多个展厅（可留空=总库可见）"
-                />
-                <Button type="primary" loading={updateVendorMutation.isPending} onClick={() => updateVendorMutation.mutate({ default_hall_scope: scopeValue })}>
-                  保存
-                </Button>
-                <Button onClick={() => setScopeEditing(false)}>取消</Button>
-              </Space>
-            ) : (
-              <Space wrap>
-                {(vendor.default_hall_scope && vendor.default_hall_scope.length > 0) ? (
-                  vendor.default_hall_scope.map((hid) => {
-                    const h = allHalls.find((x: { id: number; name: string }) => x.id === hid);
-                    return <Tag key={hid}>{h?.name ?? `hall#${hid}`}</Tag>;
-                  })
+      <PillTabs
+        tabs={TABS}
+        active={activeTab}
+        onChange={setActiveTab}
+        ariaLabel="供应商详情 tab"
+      />
+
+      <div style={{ marginTop: 16 }}>
+        {activeTab === 'basic' && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <Card title="供应商信息" size="small">
+              <Descriptions column={1} size="small">
+                <Descriptions.Item label="代码">{vendor.code}</Descriptions.Item>
+                <Descriptions.Item label="状态">
+                  <Tag color={statusMeta.color}>{statusMeta.label}</Tag>
+                </Descriptions.Item>
+                <Descriptions.Item label="租户 id">{vendor.tenant_id}</Descriptions.Item>
+                <Descriptions.Item label="授权到期">
+                  <ExpiryTag expiresAt={vendor.grant_expires_at} variant="full" />
+                </Descriptions.Item>
+                <Descriptions.Item label="备注">{vendor.notes || '-'}</Descriptions.Item>
+              </Descriptions>
+
+              {/* 默认归属展厅（编辑入口） */}
+              <div
+                style={{
+                  marginTop: 16,
+                  paddingTop: 16,
+                  borderTop: '1px solid var(--ant-color-border-secondary)',
+                }}
+              >
+                <div style={{ marginBottom: 8 }}>
+                  <Text type="secondary">默认归属展厅</Text>
+                </div>
+                {scopeEditing ? (
+                  <Space wrap>
+                    <Select
+                      mode="multiple"
+                      value={scopeValue}
+                      onChange={setScopeValue}
+                      options={allHalls.map((h: { id: number; name: string }) => ({
+                        value: h.id,
+                        label: h.name,
+                      }))}
+                      style={{ minWidth: 320 }}
+                      placeholder="选一个或多个展厅（可留空=总库可见）"
+                    />
+                    <Button
+                      type="primary"
+                      loading={updateVendorMutation.isPending}
+                      onClick={() => updateVendorMutation.mutate({ default_hall_scope: scopeValue })}
+                    >
+                      保存
+                    </Button>
+                    <Button onClick={() => setScopeEditing(false)}>取消</Button>
+                  </Space>
                 ) : (
-                  <Text type="secondary">未设置（总库所有展厅均可见）</Text>
+                  <Space wrap>
+                    {vendor.default_hall_scope && vendor.default_hall_scope.length > 0 ? (
+                      vendor.default_hall_scope.map((hid) => {
+                        const h = allHalls.find((x: { id: number; name: string }) => x.id === hid);
+                        return <Tag key={hid}>{h?.name ?? `hall#${hid}`}</Tag>;
+                      })
+                    ) : (
+                      <Text type="secondary">未设置（总库所有展厅均可见）</Text>
+                    )}
+                    <Can action="vendor.manage" mode="hide">
+                      <Button
+                        size="small"
+                        onClick={() => {
+                          setScopeValue(vendor.default_hall_scope ?? []);
+                          setScopeEditing(true);
+                        }}
+                      >
+                        编辑
+                      </Button>
+                    </Can>
+                  </Space>
                 )}
-                <Can action="vendor.manage" mode="hide">
-                  <Button
-                    size="small"
-                    onClick={() => {
-                      setScopeValue(vendor.default_hall_scope ?? []);
-                      setScopeEditing(true);
+              </div>
+            </Card>
+
+            <Card
+              title={
+                <Space>
+                  <span>主账号</span>
+                  {primaryMember && (
+                    <Tag color="gold" style={{ borderColor: '#C29023', color: '#C29023' }}>
+                      ⭐ {primaryMember.name || `user#${primaryMember.user_id}`}
+                    </Tag>
+                  )}
+                </Space>
+              }
+              size="small"
+              extra={
+                primaryMember && (
+                  <Link to={`/platform/authz/users/${primaryMember.user_id}?tab=authz`}>
+                    查看权限 →
+                  </Link>
+                )
+              }
+            >
+              {primaryMember ? (
+                <>
+                  <Descriptions column={1} size="small">
+                    <Descriptions.Item label="姓名">
+                      {primaryMember.name || <Text type="secondary">（未填）</Text>}
+                    </Descriptions.Item>
+                    <Descriptions.Item label={<><MailOutlined /> 邮箱</>}>
+                      {primaryMember.email || vendor.contact_email || <Text type="secondary">-</Text>}
+                    </Descriptions.Item>
+                    <Descriptions.Item label={<><PhoneOutlined /> 手机</>}>
+                      {primaryMember.phone || vendor.contact_phone || <Text type="secondary">-</Text>}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="user_id">
+                      <Link to={`/platform/authz/users/${primaryMember.user_id}`}>
+                        <Text code>#{primaryMember.user_id}</Text>
+                      </Link>
+                    </Descriptions.Item>
+                    <Descriptions.Item label="状态">
+                      {primaryMember.suspended ? (
+                        <Tag color="red">已停用</Tag>
+                      ) : (
+                        <Tag color="green">活跃</Tag>
+                      )}
+                    </Descriptions.Item>
+                  </Descriptions>
+
+                  <div
+                    style={{
+                      marginTop: 16,
+                      paddingTop: 12,
+                      borderTop: '1px solid var(--ant-color-border-secondary)',
+                      display: 'flex',
+                      gap: 24,
                     }}
                   >
-                    编辑
-                  </Button>
-                </Can>
-              </Space>
-            )}
-          </Space>
-        </div>
-      </Card>
+                    <Statistic
+                      title="团队成员"
+                      value={members.length}
+                      suffix="人"
+                      valueStyle={{ fontSize: 20 }}
+                    />
+                    <Statistic
+                      title="子账号（不含主账号）"
+                      value={members.filter((m) => !m.is_primary).length}
+                      suffix="人"
+                      valueStyle={{ fontSize: 20 }}
+                    />
+                  </div>
+                  <div style={{ marginTop: 12 }}>
+                    <Button size="small" onClick={() => setActiveTab('members')}>
+                      查看「团队成员」Tab →
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <Empty description="未找到主账号信息" />
+              )}
+            </Card>
+          </div>
+        )}
 
-      <Card
-        title={`团队成员（${members.length}）`}
-        extra={
-          <Can action="vendor.manage" mode="hide">
-            <Button type="primary" onClick={() => setInviteOpen(true)}>
-              邀请子账号
-            </Button>
-          </Can>
-        }
-      >
-        <Table
-          rowKey="user_id"
-          columns={memberColumns}
-          dataSource={members}
-          pagination={false}
-        />
-      </Card>
+        {activeTab === 'members' && (
+          <Card
+            title={`团队成员（${members.length}）`}
+            size="small"
+            extra={
+              <Can action="vendor.manage" mode="hide">
+                <Button type="primary" onClick={() => setInviteOpen(true)}>
+                  邀请子账号
+                </Button>
+              </Can>
+            }
+          >
+            <Table
+              rowKey="user_id"
+              columns={memberColumns}
+              dataSource={members}
+              pagination={false}
+            />
+          </Card>
+        )}
+
+        {activeTab === 'contents' && (
+          <Card size="small">
+            <Result
+              status="info"
+              icon={<UploadOutlined style={{ color: 'var(--ant-color-primary)' }} />}
+              title="上传内容浏览（Phase 12 计划）"
+              subTitle={
+                <span>
+                  本 Tab 将展示该供应商上传的全部内容（按状态分组：待接收 / 已绑定 / 已驳回 / 已撤回 / 已归档）。
+                  <br />
+                  当前可在 <Link to="/contents?vendor_id={id}">内容总库</Link> 按 vendor_id 过滤查看（手动）。
+                </span>
+              }
+            />
+          </Card>
+        )}
+      </div>
 
       {/* 邀请子账号 Modal */}
       <Modal

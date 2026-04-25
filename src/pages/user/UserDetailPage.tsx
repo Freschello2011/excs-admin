@@ -1,24 +1,49 @@
+import { useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Button, Space, Spin, Tabs, Tooltip } from 'antd';
-import { ArrowLeftOutlined, KeyOutlined } from '@ant-design/icons';
+import { Button, Space, Spin } from 'antd';
+import { ArrowLeftOutlined, IdcardOutlined, KeyOutlined } from '@ant-design/icons';
 import PageHeader from '@/components/common/PageHeader';
-import Can from '@/components/authz/Can';
+import PillTabs, { type PillTab } from '@/components/common/PillTabs';
 import UserAuthzPanel from '@/components/authz/UserAuthzPanel';
 import BasicTab from '@/components/user/BasicTab';
 import { userApi } from '@/api/user';
 import { queryKeys } from '@/api/queryKeys';
 import { useAuthStore } from '@/stores/authStore';
 
-// v1.1（PRD §8.8）：基本信息 Tab 重构为 summary 5 块（画像 / Grant / 能做什么 / vendor / 危险区），
-// 「权限」Tab 维持 UserAuthzPanel 不动；Grant 三步向导入口不变。
+/**
+ * UserDetailPage —— P0.5 / P1.1（2026-04-25）：
+ *   - 路由迁入 /platform/authz/users/:userId
+ *   - 顶栏 「+ 授权」 按钮移除（基本信息卡 / 权限 Tab 内各有入口，不再三处重复）
+ *   - antd Tabs → PillTabs 玻璃胶囊（与 StorageOverviewPage / AnalyticsHubPage 一致）
+ *   - URL ?tab=basic|authz 深链同步
+ */
+
+type TabKey = 'basic' | 'authz';
+
+const TABS: PillTab<TabKey>[] = [
+  { key: 'basic', label: '基本信息', icon: <IdcardOutlined /> },
+  { key: 'authz', label: '权限', icon: <KeyOutlined /> },
+];
 
 export default function UserDetailPage() {
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const id = Number(userId);
-  const activeTab = searchParams.get('tab') ?? 'basic';
+
+  const activeTab = useMemo<TabKey>(() => {
+    const t = searchParams.get('tab');
+    return TABS.some((x) => x.key === t) ? (t as TabKey) : 'basic';
+  }, [searchParams]);
+
+  const setActiveTab = (key: TabKey) => {
+    const next = new URLSearchParams(searchParams);
+    if (key === 'basic') next.delete('tab');
+    else next.set('tab', key);
+    setSearchParams(next, { replace: true });
+  };
+
   const currentUser = useAuthStore((s) => s.user);
   const isSelf = currentUser?.id === id;
 
@@ -43,53 +68,36 @@ export default function UserDetailPage() {
         title="用户详情"
         extra={
           <Space>
-            {isSelf ? (
-              <Tooltip title="不能对自己授权">
-                <Button type="primary" icon={<KeyOutlined />} disabled>
-                  + 授权
-                </Button>
-              </Tooltip>
-            ) : (
-              <Can action="user.grant">
-                <Button
-                  type="primary"
-                  icon={<KeyOutlined />}
-                  onClick={() => navigate(`/platform/users/${id}/grant`)}
-                >
-                  + 授权
-                </Button>
-              </Can>
-            )}
-            <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/platform/users')}>
+            <Button
+              icon={<ArrowLeftOutlined />}
+              onClick={() => navigate('/platform/authz/users')}
+            >
               返回列表
             </Button>
           </Space>
         }
       />
 
-      <Tabs
-        activeKey={activeTab}
-        onChange={(key) => {
-          if (key === 'basic') {
-            setSearchParams({});
-          } else {
-            setSearchParams({ tab: key });
-          }
-        }}
-        items={[
-          { key: 'basic', label: '基本信息', children: <BasicTab user={user} /> },
-          {
-            key: 'authz',
-            label: '权限',
-            children: (
-              <UserAuthzPanel
-                userId={id}
-                onNavigateGrantWizard={() => navigate(`/platform/users/${id}/grant`)}
-              />
-            ),
-          },
-        ]}
+      <PillTabs
+        tabs={TABS}
+        active={activeTab}
+        onChange={setActiveTab}
+        ariaLabel="用户详情 tab"
       />
+
+      <div style={{ marginTop: 16 }}>
+        {activeTab === 'basic' && (
+          <BasicTab user={user} onSwitchToAuthz={() => setActiveTab('authz')} />
+        )}
+        {activeTab === 'authz' && (
+          <UserAuthzPanel
+            userId={id}
+            onNavigateGrantWizard={
+              isSelf ? undefined : () => navigate(`/platform/authz/users/${id}/grant`)
+            }
+          />
+        )}
+      </div>
     </div>
   );
 }

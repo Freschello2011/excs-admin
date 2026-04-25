@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs, { Dayjs } from 'dayjs';
 import {
@@ -21,6 +21,9 @@ import { useMessage } from '@/hooks/useMessage';
 import { useAuthStore } from '@/stores/authStore';
 import Can from '@/components/authz/Can';
 import RiskyActionButton from '@/components/authz/RiskyActionButton';
+import ExpiryTag from '@/components/authz/common/ExpiryTag';
+import ScopeTag from '@/components/authz/common/ScopeTag';
+import QuickGrantDrawer, { type QuickGrantTarget } from '@/components/authz/QuickGrantDrawer';
 import { authzApi } from '@/api/authz';
 import { hallApi } from '@/api/hall';
 import { userApi } from '@/api/user';
@@ -34,30 +37,49 @@ const STATUS_META: Record<GrantStatusType, { label: string; color: string }> = {
   revoked: { label: '已撤销', color: 'red' },
 };
 
-const SCOPE_LABELS: Record<ScopeType, string> = {
-  G: '全局',
-  T: '租户',
-  H: '展厅',
-  E: '展项',
-  O: '归属',
-};
-
 export default function GrantListPage() {
   const { message } = useMessage();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const currentUser = useAuthStore((s) => s.user);
   const refreshActionSet = useAuthStore((s) => s.refreshActionSet);
 
-  const [statusFilter, setStatusFilter] = useState<'all' | GrantStatusType>('active');
-  const [scopeFilter, setScopeFilter] = useState<'all' | ScopeType>('all');
-  const [userKeyword, setUserKeyword] = useState('');
-  /** Phase 7.6：仅显示 Phase 5a 迁移脚本产生的 Grant（reason 含 'migrate_hall_permissions'） */
-  const [phase5aOnly, setPhase5aOnly] = useState(false);
+  /* P2.2（2026-04-25）：URL 同步 ?status=&scope=&hall=&keyword=&template=&phase5a= */
+  const [searchParams, setSearchParams] = useSearchParams();
+  const statusFilter = (searchParams.get('status') ?? 'active') as 'all' | GrantStatusType;
+  const scopeFilter = (searchParams.get('scope') ?? 'all') as 'all' | ScopeType;
+  const scopeHallId = searchParams.get('hall')
+    ? Number(searchParams.get('hall'))
+    : undefined;
+  const userKeyword = searchParams.get('keyword') ?? '';
+  const templateKeyword = searchParams.get('template') ?? '';
+  const phase5aOnly = searchParams.get('phase5a') === '1';
+
+  function patch(p: Record<string, string | undefined>) {
+    const next = new URLSearchParams(searchParams);
+    Object.entries(p).forEach(([k, v]) => {
+      if (v == null || v === '' || v === 'all' || v === '0') next.delete(k);
+      else next.set(k, v);
+    });
+    setSearchParams(next, { replace: true });
+  }
+  const setStatusFilter = (v: 'all' | GrantStatusType) => patch({ status: v === 'active' ? undefined : v });
+  const setScopeFilter = (v: 'all' | ScopeType) =>
+    patch({ scope: v, hall: v === 'H' ? searchParams.get('hall') ?? undefined : undefined });
+  const setScopeHallId = (v: number | undefined) => patch({ hall: v ? String(v) : undefined });
+  const setUserKeyword = (v: string) => patch({ keyword: v });
+  const setTemplateKeyword = (v: string) => patch({ template: v });
+  const setPhase5aOnly = (v: boolean) => patch({ phase5a: v ? '1' : undefined });
+
+  const [userKeywordDraft, setUserKeywordDraft] = useState(userKeyword);
+  const [templateKeywordDraft, setTemplateKeywordDraft] = useState(templateKeyword);
+  useEffect(() => { setUserKeywordDraft(userKeyword); }, [userKeyword]);
+  useEffect(() => { setTemplateKeywordDraft(templateKeyword); }, [templateKeyword]);
 
   const [revokingId, setRevokingId] = useState<number | null>(null);
   const [extending, setExtending] = useState<Grant | null>(null);
   const [extendValue, setExtendValue] = useState<Dayjs | null>(null);
+  const [quickGrantTarget, setQuickGrantTarget] = useState<QuickGrantTarget | null>(null);
+  const [quickGrantPickOpen, setQuickGrantPickOpen] = useState(false);
 
   const { data: grants, isLoading } = useQuery({
     queryKey: ['authz', 'grants', { include_inactive: statusFilter !== 'active' }],
@@ -107,6 +129,8 @@ export default function GrantListPage() {
     return list.filter((g) => {
       if (statusFilter !== 'all' && g.status !== statusFilter) return false;
       if (scopeFilter !== 'all' && g.scope_type !== scopeFilter) return false;
+      // 进一步：scope=H 时若指定了 hall，过滤 scope_id 匹配
+      if (scopeFilter === 'H' && scopeHallId && Number(g.scope_id) !== scopeHallId) return false;
       if (phase5aOnly) {
         const reason = g.reason ?? '';
         if (!reason.includes('migrate_hall_permissions')) return false;
@@ -119,9 +143,17 @@ export default function GrantListPage() {
           .toLowerCase();
         if (!hay.includes(userKeyword.toLowerCase())) return false;
       }
+      if (templateKeyword) {
+        const t = templateMap.get(g.role_template_id);
+        const hay = [t?.name_zh, t?.code, String(g.role_template_id)]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        if (!hay.includes(templateKeyword.toLowerCase())) return false;
+      }
       return true;
     });
-  }, [grants, statusFilter, scopeFilter, userKeyword, userMap, phase5aOnly]);
+  }, [grants, statusFilter, scopeFilter, scopeHallId, userKeyword, userMap, phase5aOnly, templateKeyword, templateMap]);
 
   const revokeMutation = useMutation({
     mutationFn: ({ id, reason }: { id: number; reason?: string }) =>
@@ -173,7 +205,7 @@ export default function GrantListPage() {
       render: (uid: number) => {
         const u = userMap.get(uid);
         return u ? (
-          <Link to={`/platform/users/${uid}`}>{u.name}</Link>
+          <Link to={`/platform/authz/users/${uid}`}>{u.name}</Link>
         ) : (
           <span>#{uid}</span>
         );
@@ -196,20 +228,13 @@ export default function GrantListPage() {
     },
     {
       title: '范围',
-      render: (_: unknown, record) => {
-        if (record.scope_type === 'G') {
-          return <Tag color="purple">全局</Tag>;
-        }
-        if (record.scope_type === 'H') {
-          const name = hallMap.get(Number(record.scope_id));
-          return <Tag color="blue">展厅 · {name ?? record.scope_id}</Tag>;
-        }
-        return (
-          <Tag>
-            {SCOPE_LABELS[record.scope_type]} · {record.scope_id}
-          </Tag>
-        );
-      },
+      render: (_: unknown, record) => (
+        <ScopeTag
+          scopeType={record.scope_type}
+          scopeId={record.scope_id}
+          hallNameMap={hallMap}
+        />
+      ),
     },
     {
       title: '状态',
@@ -229,16 +254,8 @@ export default function GrantListPage() {
     {
       title: '到期',
       dataIndex: 'expires_at',
-      width: 150,
-      render: (v?: string | null) => {
-        if (!v) return <Tag>永久</Tag>;
-        const m = dayjs(v);
-        const days = m.diff(dayjs(), 'day');
-        const relative = days >= 0 ? `${days} 天后` : `${-days} 天前`;
-        return (
-          <Tooltip title={relative}>{m.format('YYYY-MM-DD HH:mm')}</Tooltip>
-        );
-      },
+      width: 200,
+      render: (v?: string | null) => <ExpiryTag expiresAt={v} variant="full" />,
     },
     {
       title: '授予人',
@@ -312,11 +329,22 @@ export default function GrantListPage() {
       >
         <Space wrap>
           <Input.Search
-            placeholder="搜索用户姓名 / 邮箱 / ID"
+            placeholder="搜索用户姓名 / 邮箱 / 手机 / user_id"
             allowClear
             style={{ width: 260 }}
-            value={userKeyword}
-            onChange={(e) => setUserKeyword(e.target.value)}
+            value={userKeywordDraft}
+            onChange={(e) => setUserKeywordDraft(e.target.value)}
+            onSearch={(v) => setUserKeyword(v)}
+            onBlur={() => { if (userKeywordDraft !== userKeyword) setUserKeyword(userKeywordDraft); }}
+          />
+          <Input.Search
+            placeholder="搜索模板名 / code"
+            allowClear
+            style={{ width: 200 }}
+            value={templateKeywordDraft}
+            onChange={(e) => setTemplateKeywordDraft(e.target.value)}
+            onSearch={(v) => setTemplateKeyword(v)}
+            onBlur={() => { if (templateKeywordDraft !== templateKeyword) setTemplateKeyword(templateKeywordDraft); }}
           />
           <Select
             style={{ width: 140 }}
@@ -342,6 +370,18 @@ export default function GrantListPage() {
               { value: 'O', label: '归属 O' },
             ]}
           />
+          {scopeFilter === 'H' && (
+            <Select
+              style={{ width: 200 }}
+              placeholder="筛选具体展厅"
+              allowClear
+              value={scopeHallId}
+              onChange={setScopeHallId}
+              options={(halls ?? []).map((h) => ({ value: h.id, label: h.name }))}
+              showSearch
+              optionFilterProp="label"
+            />
+          )}
           <Button
             icon={<ReloadOutlined />}
             onClick={() => queryClient.invalidateQueries({ queryKey: ['authz', 'grants'] })}
@@ -365,9 +405,9 @@ export default function GrantListPage() {
           <Button
             type="primary"
             icon={<PlusOutlined />}
-            onClick={() => navigate('/platform/users')}
+            onClick={() => setQuickGrantPickOpen(true)}
           >
-            新建授权（去用户管理选人）
+            新建授权
           </Button>
         </Can>
       </Space>
@@ -406,6 +446,52 @@ export default function GrantListPage() {
           placeholder="新到期时间"
         />
       </Modal>
+
+      {/* 新建授权：先选用户 → 打开 QuickGrantDrawer（P2.2 优化） */}
+      <Modal
+        title="选择被授权用户"
+        open={quickGrantPickOpen}
+        onCancel={() => setQuickGrantPickOpen(false)}
+        footer={null}
+        width={640}
+        destroyOnHidden
+      >
+        <Input.Search
+          placeholder="按姓名 / 邮箱 / 手机过滤（仅本页搜索；未在列表的请先去用户页导入）"
+          allowClear
+          style={{ marginBottom: 12 }}
+          onChange={(e) => setUserKeyword(e.target.value)}
+        />
+        <Table<UserListItem>
+          size="small"
+          rowKey="id"
+          pagination={{ pageSize: 10, size: 'small' }}
+          dataSource={users ?? []}
+          columns={[
+            { title: '姓名', dataIndex: 'name' },
+            { title: '邮箱', dataIndex: 'email' },
+            { title: 'ID', dataIndex: 'id', width: 60 },
+          ]}
+          onRow={(record) => ({
+            style: { cursor: 'pointer' },
+            onClick: () => {
+              setQuickGrantTarget({
+                id: record.id,
+                name: record.name,
+                email: record.email,
+                user_type: record.user_type,
+              });
+              setQuickGrantPickOpen(false);
+            },
+          })}
+        />
+      </Modal>
+
+      <QuickGrantDrawer
+        open={!!quickGrantTarget}
+        target={quickGrantTarget}
+        onClose={() => setQuickGrantTarget(null)}
+      />
     </div>
   );
 }

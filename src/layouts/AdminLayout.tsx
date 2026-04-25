@@ -149,7 +149,7 @@ function buildMenuRegions(selectedHallId?: number): MenuRegion[] {
           label: '身份与权限',
           collapsible: true,
           items: [
-            { path: '/platform/users', icon: 'group', label: '用户', requireActions: ['user.view', 'user.manage'] },
+            { path: '/platform/authz/users', icon: 'group', label: '用户', requireActions: ['user.view', 'user.manage'] },
             { path: '/platform/authz/role-templates', icon: 'manage_accounts', label: '角色模板', requireActions: ['user.grant', 'user.view'] },
             { path: '/platform/authz/grants', icon: 'key', label: '授权总览', requireActions: ['user.grant', 'user.view'] },
             { path: '/platform/authz/vendors', icon: 'business_center', label: '供应商', requireActions: ['vendor.view', 'vendor.manage'] },
@@ -193,7 +193,7 @@ const titleMap: Record<string, string> = {
   '/platform/device-protocols': '设备协议基线库',
   '/platform/device-categories': '设备分类',
   '/platform/ai-avatar-library': 'AI 形象库',
-  '/platform/users': '用户',
+  '/platform/authz/users': '用户',
   '/platform/sys-config': '系统参数',
   '/platform/releases': '版本管理',
   '/platform/authz/role-templates': '角色模板',
@@ -207,7 +207,8 @@ const titleMap: Record<string, string> = {
 function resolveTitleFromPath(pathname: string): string {
   // Authz 动态路径优先（Phase 6）
   if (/^\/platform\/authz\/role-templates\/(new|\d+\/edit)/.test(pathname)) return '编辑角色模板';
-  if (/^\/platform\/users\/\d+\/grant$/.test(pathname)) return '授权向导';
+  if (/^\/platform\/authz\/users\/\d+\/grant$/.test(pathname)) return '授权向导';
+  if (/^\/platform\/authz\/users\/\d+$/.test(pathname)) return '用户详情';
   if (/^\/platform\/authz\/vendors\/new$/.test(pathname)) return '新建供应商';
   if (/^\/platform\/authz\/vendors\/\d+$/.test(pathname)) return '供应商详情';
   // Dynamic hall-level routes — check first (before /halls catches all)

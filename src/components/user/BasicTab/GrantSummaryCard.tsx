@@ -8,15 +8,16 @@
  *     / 授权人 #id / reason
  *   - 空：Empty + 大 CTA「+ 立即授权」
  */
-import { Button, Card, Empty, Space, Spin, Tag, Tooltip, Typography } from 'antd';
+import { Button, Card, Empty, Space, Spin, Tooltip, Typography } from 'antd';
 import { KeyOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import dayjs from 'dayjs';
 import Can from '@/components/authz/Can';
+import ExpiryTag from '@/components/authz/common/ExpiryTag';
+import ScopeTag, { SCOPE_ORDER } from '@/components/authz/common/ScopeTag';
 import { authzApi } from '@/api/authz';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
-import type { Grant, ScopeType } from '@/types/authz';
+import type { Grant } from '@/types/authz';
 
 const { Text } = Typography;
 
@@ -25,31 +26,6 @@ interface Props {
   onGrantWizard: () => void;
   /** self 视角下隐藏 +授权 CTA（防自锁 —— 前端不引导自授权） */
   isSelf?: boolean;
-}
-
-const SCOPE_ORDER: ScopeType[] = ['G', 'T', 'H', 'E', 'O'];
-const SCOPE_META: Record<ScopeType, { label: string; color: string }> = {
-  G: { label: '全局', color: 'purple' },
-  T: { label: '租户', color: 'cyan' },
-  H: { label: '展厅', color: 'blue' },
-  E: { label: '展项', color: 'geekblue' },
-  O: { label: '归属', color: 'orange' },
-};
-
-/** 到期渲染：≤30 天橙色 / 已过期红色 / 永久 gray tag */
-function ExpiryTag({ expiresAt }: { expiresAt?: string | null }) {
-  if (!expiresAt) return <Tag>永久</Tag>;
-  const now = dayjs();
-  const exp = dayjs(expiresAt);
-  const diffDays = exp.diff(now, 'day');
-  const label = exp.format('YYYY-MM-DD');
-  if (diffDays < 0) {
-    return <Tag color="error">已过期 {label}</Tag>;
-  }
-  if (diffDays <= 30) {
-    return <Tag color="warning">{label}（剩 {diffDays} 天）</Tag>;
-  }
-  return <Tag>到期 {label}</Tag>;
 }
 
 export default function GrantSummaryCard({ userId, onGrantWizard, isSelf = false }: Props) {
@@ -127,9 +103,7 @@ export default function GrantSummaryCard({ userId, onGrantWizard, isSelf = false
           {groups.map((g) => (
             <div key={g.scopeType}>
               <Space size={6} style={{ marginBottom: 6 }}>
-                <Tag color={SCOPE_META[g.scopeType].color}>
-                  {SCOPE_META[g.scopeType].label}
-                </Tag>
+                <ScopeTag scopeType={g.scopeType} short />
                 <Text type="secondary">{g.items.length} 条</Text>
               </Space>
               <Space direction="vertical" size={6} style={{ width: '100%' }}>
@@ -160,13 +134,6 @@ function GrantRow({
   hallMap: Map<number, string>;
 }) {
   const tpl = templateMap.get(grant.role_template_id);
-  const scopeMeta = SCOPE_META[grant.scope_type];
-  let scopeText = scopeMeta.label;
-  if (grant.scope_type === 'H') {
-    scopeText = `展厅 · ${hallMap.get(Number(grant.scope_id)) ?? grant.scope_id}`;
-  } else if (grant.scope_type !== 'G') {
-    scopeText = `${scopeMeta.label} · ${grant.scope_id}`;
-  }
 
   return (
     <div
@@ -186,7 +153,11 @@ function GrantRow({
           {tpl?.code ?? ''} · v{grant.role_template_version}
         </Text>
       </Space>
-      <Tag>{scopeText}</Tag>
+      <ScopeTag
+        scopeType={grant.scope_type}
+        scopeId={grant.scope_id}
+        hallNameMap={hallMap}
+      />
       <ExpiryTag expiresAt={grant.expires_at} />
       <Tooltip title={`授权人 user #${grant.granted_by}`}>
         <Text type="secondary" style={{ fontSize: 12 }}>

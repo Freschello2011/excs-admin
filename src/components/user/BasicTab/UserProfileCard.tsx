@@ -1,27 +1,25 @@
 /**
- * UserProfileCard —— 基本信息 Tab 左栏画像卡（PRD §8.8.2 / §8.8.3）。
+ * UserProfileCard —— 基本信息 Tab 左栏画像卡（PRD §8.8 v1.2，P1.3 重构）。
  *
- * 职责：summary 只读展示 + 下方 footer 三个快捷操作（+授权 / 切权限 Tab / SSO 外链）。
- * vendor 信息单独走 VendorInfoCard（条件渲染），不塞在这里。
+ * 职责：summary 只读展示 + footer 跳转链接。
+ *
+ * 重构（2026-04-25）：
+ *   - 字段排版套 FieldRow 范式：短中文标题（≤ 6 字）+ ⓘ Tooltip 解释 + 控件灰字
+ *   - 「+ 授权」按钮移除 —— 授权入口统一收敛到「权限」Tab 与列表行操作
+ *   - 保留：「查看『权限』Tab」次级链接 + 「在 SSO 编辑资料」外链
  */
 import { Alert, Avatar, Button, Card, Descriptions, Space, Tag, Tooltip } from 'antd';
-import { KeyOutlined, SettingOutlined, UserOutlined } from '@ant-design/icons';
+import { InfoCircleOutlined, KeyOutlined, SettingOutlined, UserOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import Can from '@/components/authz/Can';
+import AccountTypeTag from '@/components/authz/common/AccountTypeTag';
 import { resolveAccountType, type UserDetail } from '@/types/auth';
 
 interface Props {
   user: UserDetail;
   isSelf: boolean;
+  /** 切到「权限」Tab；由 BasicTab → UserDetailPage 注入 */
   onSwitchTab: () => void;
-  onGrantWizard: () => void;
 }
-
-const ACCOUNT_TYPE_LABELS: Record<string, { label: string; color: string }> = {
-  internal: { label: '内部员工', color: 'blue' },
-  vendor: { label: '供应商', color: 'orange' },
-  customer: { label: '客户', color: 'purple' },
-};
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   active: { label: '活跃', color: 'green' },
@@ -31,15 +29,27 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   disabled: { label: '已禁用', color: 'default' },
 };
 
-export default function UserProfileCard({ user, isSelf, onSwitchTab, onGrantWizard }: Props) {
+/** 短标题 + ⓘ Tooltip —— 与 sys-config FieldRow 范式视觉对齐 */
+function LabelWithHint({ label, hint }: { label: string; hint?: string }) {
+  return (
+    <Space size={4}>
+      <span>{label}</span>
+      {hint && (
+        <Tooltip title={hint}>
+          <InfoCircleOutlined
+            style={{ color: 'var(--ant-color-text-tertiary)', fontSize: 12 }}
+          />
+        </Tooltip>
+      )}
+    </Space>
+  );
+}
+
+export default function UserProfileCard({ user, isSelf, onSwitchTab }: Props) {
   const accountType = resolveAccountType({
     account_type: user.account_type,
     user_type: user.user_type as 'employee' | 'supplier',
   });
-  const accountMeta = ACCOUNT_TYPE_LABELS[accountType] ?? {
-    label: accountType,
-    color: 'default',
-  };
   const statusMeta = STATUS_LABELS[user.status] ?? { label: user.status, color: 'default' };
 
   return (
@@ -48,7 +58,7 @@ export default function UserProfileCard({ user, isSelf, onSwitchTab, onGrantWiza
         <Avatar size={80} src={user.avatar} icon={<UserOutlined />} />
         <h3 style={{ marginTop: 12, marginBottom: 8 }}>{user.name}</h3>
         <Space size={4} wrap style={{ justifyContent: 'center' }}>
-          <Tag color={accountMeta.color}>{accountMeta.label}</Tag>
+          <AccountTypeTag accountType={accountType} />
           <Tag color={statusMeta.color}>{statusMeta.label}</Tag>
           {accountType === 'vendor' && user.is_primary && (
             <Tag color="gold" style={{ borderColor: '#C29023', color: '#C29023' }}>
@@ -69,37 +79,56 @@ export default function UserProfileCard({ user, isSelf, onSwitchTab, onGrantWiza
         />
       )}
 
-      <Descriptions column={1} size="small" colon={false} labelStyle={{ width: 80 }}>
-        <Descriptions.Item label="邮箱">{user.email || '-'}</Descriptions.Item>
-        <Descriptions.Item label="手机">{user.phone || '-'}</Descriptions.Item>
-        <Descriptions.Item label="SSO ID">#{user.sso_user_id}</Descriptions.Item>
-        <Descriptions.Item label="ExCS ID">#{user.id}</Descriptions.Item>
-        <Descriptions.Item label="创建时间">
+      <Descriptions
+        column={1}
+        size="small"
+        colon={false}
+        labelStyle={{ width: 96, color: 'var(--ant-color-text-secondary)' }}
+      >
+        <Descriptions.Item label={<LabelWithHint label="邮箱" hint="SSO 同步字段；如需修改请去 SSO 后台" />}>
+          {user.email || <span style={{ color: 'var(--ant-color-text-tertiary)' }}>-</span>}
+        </Descriptions.Item>
+        <Descriptions.Item label={<LabelWithHint label="手机" hint="SSO 注册手机号 + 短信登录用" />}>
+          {user.phone || <span style={{ color: 'var(--ant-color-text-tertiary)' }}>-</span>}
+        </Descriptions.Item>
+        <Descriptions.Item label={<LabelWithHint label="SSO ID" hint="单点登录系统中的用户主键" />}>
+          <span style={{ fontFamily: 'monospace' }}>#{user.sso_user_id}</span>
+        </Descriptions.Item>
+        <Descriptions.Item label={<LabelWithHint label="ExCS ID" hint="本系统数据库主键 / Grant 关联键" />}>
+          <span style={{ fontFamily: 'monospace' }}>#{user.id}</span>
+        </Descriptions.Item>
+        <Descriptions.Item label={<LabelWithHint label="创建时间" hint="导入到 ExCS 的时间，非 SSO 注册时间" />}>
           {dayjs(user.created_at).format('YYYY-MM-DD HH:mm')}
         </Descriptions.Item>
-        <Descriptions.Item label="创建者">
-          {user.created_by ? `#${user.created_by}` : '-'}
+        <Descriptions.Item label={<LabelWithHint label="创建者" hint="谁导入了这个账号；从审计日志反查（可空）" />}>
+          {user.created_by ? (
+            <span style={{ fontFamily: 'monospace' }}>#{user.created_by}</span>
+          ) : (
+            <span style={{ color: 'var(--ant-color-text-tertiary)' }}>-</span>
+          )}
         </Descriptions.Item>
-        <Descriptions.Item label="最近登录">
-          {user.last_login_at ? dayjs(user.last_login_at).format('YYYY-MM-DD HH:mm') : '从未登录'}
+        <Descriptions.Item label={<LabelWithHint label="最近登录" hint="最近一次成功登录 ExCS 的时间" />}>
+          {user.last_login_at ? (
+            dayjs(user.last_login_at).format('YYYY-MM-DD HH:mm')
+          ) : (
+            <span style={{ color: 'var(--ant-color-text-tertiary)' }}>从未登录</span>
+          )}
         </Descriptions.Item>
       </Descriptions>
 
-      <div style={{ marginTop: 16, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        {isSelf ? (
-          <Tooltip title="不能对自己操作">
-            <Button type="primary" icon={<KeyOutlined />} disabled>
-              + 授权
-            </Button>
-          </Tooltip>
-        ) : (
-          <Can action="user.grant">
-            <Button type="primary" icon={<KeyOutlined />} onClick={onGrantWizard}>
-              + 授权
-            </Button>
-          </Can>
-        )}
-        <Button onClick={onSwitchTab}>查看「权限」Tab</Button>
+      <div
+        style={{
+          marginTop: 16,
+          paddingTop: 12,
+          borderTop: '1px solid var(--ant-color-border-secondary)',
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 8,
+        }}
+      >
+        <Button type="primary" icon={<KeyOutlined />} onClick={onSwitchTab}>
+          查看「权限」Tab
+        </Button>
         <Tooltip title="跳转到 SSO 后台修改姓名 / 手机 / 邮箱 / 头像（ExCS 不持有写权）">
           <Button
             icon={<SettingOutlined />}

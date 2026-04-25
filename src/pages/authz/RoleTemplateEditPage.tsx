@@ -6,6 +6,8 @@ import {
   Card,
   Checkbox,
   Collapse,
+  Drawer,
+  FloatButton,
   Form,
   Input,
   Space,
@@ -15,7 +17,13 @@ import {
   Typography,
   Alert,
 } from 'antd';
-import { SaveOutlined, WarningOutlined, ArrowLeftOutlined } from '@ant-design/icons';
+import {
+  SaveOutlined,
+  WarningOutlined,
+  ArrowLeftOutlined,
+  EyeOutlined,
+  InfoCircleOutlined,
+} from '@ant-design/icons';
 import PageHeader from '@/components/common/PageHeader';
 import { useMessage } from '@/hooks/useMessage';
 import { authzApi } from '@/api/authz';
@@ -81,6 +89,18 @@ interface FormValues {
   action_codes: string[];
 }
 
+/** 短标题 + ⓘ Tooltip —— FieldRow 范式（与 sys-config / UserProfileCard 对齐） */
+function LabelHint({ label, hint }: { label: string; hint: string }) {
+  return (
+    <Space size={4}>
+      <span>{label}</span>
+      <Tooltip title={hint}>
+        <InfoCircleOutlined style={{ color: 'var(--ant-color-text-tertiary)', fontSize: 12 }} />
+      </Tooltip>
+    </Space>
+  );
+}
+
 export default function RoleTemplateEditPage() {
   const { id } = useParams<{ id?: string }>();
   const isNew = !id || id === 'new';
@@ -92,6 +112,7 @@ export default function RoleTemplateEditPage() {
 
   const [form] = Form.useForm<FormValues>();
   const [selectedActions, setSelectedActions] = useState<string[]>([]);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const actions = useAuthzMetaStore((s) => s.actions);
   const loadActions = useAuthzMetaStore((s) => s.loadActions);
@@ -302,38 +323,40 @@ export default function RoleTemplateEditPage() {
         layout="vertical"
         initialValues={{ action_codes: [] }}
       >
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16 }}>
-          {/* 左：表单 + action 树 */}
-          <div>
-            <Card size="small" title="基本信息" style={{ marginBottom: 16 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                <Form.Item
-                  name="code"
-                  label="Code"
-                  rules={[
-                    { required: true, message: '请输入 code' },
-                    { pattern: /^[a-z][a-z0-9_]*$/, message: '小写字母、数字、下划线，以字母开头' },
-                  ]}
-                >
-                  <Input placeholder="例如：narrator_senior" disabled={!isNew} />
-                </Form.Item>
-                <Form.Item
-                  name="name_zh"
-                  label="中文名"
-                  rules={[{ required: true, message: '请输入中文名' }]}
-                >
-                  <Input placeholder="例如：高级讲解员" />
-                </Form.Item>
-              </div>
-              <Form.Item name="description" label="描述">
-                <Input.TextArea rows={2} placeholder="用于管理员理解此模板的用途" />
+        {/* P2.4 改单列布局：基本信息 → Action 树；预览搬到右下角浮动 FAB Drawer */}
+        <div style={{ maxWidth: 960 }}>
+          <Card size="small" title="基本信息" style={{ marginBottom: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <Form.Item
+                name="code"
+                label={<LabelHint label="Code" hint="模板唯一标识；小写字母 + 数字 + 下划线，以字母开头；新建后不可修改" />}
+                rules={[
+                  { required: true, message: '请输入 code' },
+                  { pattern: /^[a-z][a-z0-9_]*$/, message: '小写字母、数字、下划线，以字母开头' },
+                ]}
+              >
+                <Input placeholder="例如：narrator_senior" disabled={!isNew} />
               </Form.Item>
-              <Form.Item name="action_codes" hidden>
-                <Input />
+              <Form.Item
+                name="name_zh"
+                label={<LabelHint label="中文名" hint="管理员可见的模板显示名；可中英文混合，最长 64 字" />}
+                rules={[{ required: true, message: '请输入中文名' }]}
+              >
+                <Input placeholder="例如：高级讲解员" />
               </Form.Item>
-            </Card>
+            </div>
+            <Form.Item
+              name="description"
+              label={<LabelHint label="描述" hint="供管理员判断该模板用途；可为空，建议写一两句话" />}
+            >
+              <Input.TextArea rows={2} placeholder="用于管理员理解此模板的用途" />
+            </Form.Item>
+            <Form.Item name="action_codes" hidden>
+              <Input />
+            </Form.Item>
+          </Card>
 
-            <Card
+          <Card
               size="small"
               title={`选择 Action（已选 ${selectedActions.length} / ${actions?.length ?? 0}）`}
               loading={actionsLoading && !actions}
@@ -442,62 +465,118 @@ export default function RoleTemplateEditPage() {
                 />
               )}
             </Card>
-          </div>
 
-          {/* 右：实时预览 */}
-          <div>
-            <Card size="small" title="实时预览" style={{ position: 'sticky', top: 16 }}>
-              {template?.is_builtin && (
-                <Alert
-                  type="info"
-                  showIcon
-                  style={{ marginBottom: 12 }}
-                  message="内置模板"
-                  description="code 不可修改；action 变更会影响所有已授予此模板的用户。"
-                />
+          {/* 卡片底部分隔线 + 右对齐保存按钮（P2.4 单列布局；预览走 FAB） */}
+          <div
+            style={{
+              marginTop: 16,
+              paddingTop: 16,
+              borderTop: '1px solid var(--ant-color-border-secondary)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: 12,
+            }}
+          >
+            <Space wrap>
+              {nextHasCritical && (
+                <Tag color="red" icon={<WarningOutlined />}>
+                  含 critical · 强制过期
+                </Tag>
               )}
-
-              <div style={{ marginBottom: 12 }}>
-                <Text type="secondary">已选 Action：</Text>
-                <div style={{ fontSize: 22, fontWeight: 600 }}>{selectedActions.length}</div>
-              </div>
-
-              <div style={{ marginBottom: 12 }}>
-                <Text type="secondary">含 critical：</Text>
-                <div>
-                  {nextHasCritical ? (
-                    <Tag color="red" icon={<WarningOutlined />}>
-                      是（强制过期）
-                    </Tag>
-                  ) : (
-                    <Tag>否</Tag>
-                  )}
-                </div>
-              </div>
-
-              {criticalTurnedOn && (
-                <Alert
-                  type="warning"
-                  showIcon
-                  style={{ marginBottom: 12 }}
-                  message="模板将变为含 critical"
-                  description="保存后，基于此模板的新授权将强制要求过期时间，且需要操作原因。"
-                />
-              )}
-
+              <Text type="secondary" style={{ fontSize: 13 }}>
+                已选 {selectedActions.length} / {actions?.length ?? 0} action
+              </Text>
+            </Space>
+            <Space>
+              <Button onClick={() => navigate('/platform/authz/role-templates')}>取消</Button>
               <Button
                 type="primary"
                 icon={<SaveOutlined />}
-                block
                 loading={createMutation.isPending || updateMutation.isPending}
                 onClick={handleSubmit}
               >
                 {isNew ? '创建模板' : '保存修改'}
               </Button>
-            </Card>
+            </Space>
           </div>
         </div>
       </Form>
+
+      {/* P2.4：右下角浮动 FAB → 实时预览 Drawer */}
+      <FloatButton
+        icon={<EyeOutlined />}
+        type="primary"
+        tooltip="实时预览"
+        badge={{ count: selectedActions.length, color: nextHasCritical ? 'red' : 'blue' }}
+        onClick={() => setPreviewOpen(true)}
+        style={{ insetInlineEnd: 24, insetBlockEnd: 24 }}
+      />
+      <Drawer
+        title="实时预览"
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        width={360}
+      >
+        {template?.is_builtin && (
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginBottom: 12 }}
+            message="内置模板"
+            description="code 不可修改；action 变更会影响所有已授予此模板的用户。"
+          />
+        )}
+        <div style={{ marginBottom: 12 }}>
+          <Text type="secondary">已选 Action：</Text>
+          <div style={{ fontSize: 22, fontWeight: 600 }}>{selectedActions.length}</div>
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <Text type="secondary">含 critical：</Text>
+          <div>
+            {nextHasCritical ? (
+              <Tag color="red" icon={<WarningOutlined />}>是（强制过期）</Tag>
+            ) : (
+              <Tag>否</Tag>
+            )}
+          </div>
+        </div>
+        {criticalTurnedOn && (
+          <Alert
+            type="warning"
+            showIcon
+            style={{ marginBottom: 12 }}
+            message="模板将变为含 critical"
+            description="保存后，基于此模板的新授权将强制要求过期时间，且需要操作原因。"
+          />
+        )}
+        <div style={{ marginTop: 16 }}>
+          <Text type="secondary" style={{ fontSize: 12 }}>已选 action 列表：</Text>
+          <div
+            style={{
+              marginTop: 6,
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 4,
+              maxHeight: 360,
+              overflowY: 'auto',
+            }}
+          >
+            {selectedActions.length === 0 ? (
+              <Text type="secondary">未选择任何 action</Text>
+            ) : (
+              selectedActions
+                .slice()
+                .sort()
+                .map((c) => (
+                  <Tag key={c} style={{ marginInlineEnd: 0 }}>
+                    {c}
+                  </Tag>
+                ))
+            )}
+          </div>
+        </div>
+      </Drawer>
     </div>
   );
 }

@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
-import { Button, Table, Tag, Tooltip } from 'antd';
+import { Button, Table, Tag } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import type { TableColumnsType } from 'antd';
 import dayjs from 'dayjs';
 import PageHeader from '@/components/common/PageHeader';
 import Can from '@/components/authz/Can';
+import ExpiryTag from '@/components/authz/common/ExpiryTag';
 import { vendorApi } from '@/api/vendor';
 import type { Vendor, VendorStatus } from '@/types/authz';
 
@@ -54,24 +55,8 @@ export default function VendorListPage() {
       title: '授权到期',
       dataIndex: 'grant_expires_at',
       key: 'grant_expires_at',
-      width: 180,
-      render: (val: string) => {
-        if (!val) return '-';
-        const d = dayjs(val);
-        const days = d.diff(dayjs(), 'day');
-        const expired = days < 0;
-        const soon = days >= 0 && days <= 7;
-        return (
-          <Tooltip title={d.format('YYYY-MM-DD HH:mm')}>
-            <span style={{ color: expired ? '#cf1322' : soon ? '#d48806' : undefined }}>
-              {d.format('YYYY-MM-DD')}
-              <span style={{ fontSize: 12, marginLeft: 6, color: '#999' }}>
-                ({expired ? `已过期 ${-days}d` : `剩 ${days}d`})
-              </span>
-            </span>
-          </Tooltip>
-        );
-      },
+      width: 200,
+      render: (val: string) => <ExpiryTag expiresAt={val} variant="full" />,
     },
     {
       title: '状态',
