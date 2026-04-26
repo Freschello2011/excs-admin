@@ -6,8 +6,8 @@ import type {
   AuditAppOpsResp,
   AuditAuthzResp,
   AuditSummaryDTO,
-} from '@/types/platform';
-import type { DashboardData } from '@/types/dashboard';
+} from '@/api/gen/client';
+import type { DashboardData } from '@/api/gen/client';
 
 const AUDIT_REFRESH_MS = 3 * 60_000;
 

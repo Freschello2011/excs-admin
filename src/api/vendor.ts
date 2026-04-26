@@ -16,7 +16,7 @@ import type {
   InviteInfo,
   CreateVendorResponse,
   InviteMemberResponse,
-} from '@/types/authz';
+} from '@/api/gen/client';
 
 interface ListWrap<T> {
   list: T[];

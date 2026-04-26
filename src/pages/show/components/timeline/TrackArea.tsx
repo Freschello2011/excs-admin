@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import { Button, Tag, Popconfirm, Input, Select, Space } from 'antd';
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useDroppable } from '@dnd-kit/core';
-import type { ShowTrack, ShowAction, TrackType } from '@/types/show';
+import type { ShowTrack, ShowAction, TrackType } from '@/api/gen/client';
 import ActionBlock from './ActionBlock';
 import ContextMenu, {
   buildTrackEmptyMenu, buildActionMenu, buildTrackLabelMenu,
@@ -85,7 +85,7 @@ function DroppableTrackRow({
         <ActionBlock
           key={action.id}
           action={action}
-          trackType={track.track_type}
+          trackType={track.track_type as TrackType}
           zoomLevel={zoomLevel}
           scrollLeft={scrollLeft}
           selected={selectedActionIds.has(action.id)}
@@ -289,10 +289,10 @@ export default function TrackArea({
               }}
             >
               <Tag
-                color={TRACK_TYPE_COLORS[track.track_type]}
+                color={TRACK_TYPE_COLORS[track.track_type as TrackType]}
                 style={{ margin: 0, fontSize: 10, lineHeight: '18px', padding: '0 4px' }}
               >
-                {TRACK_TYPE_LABELS[track.track_type]}
+                {TRACK_TYPE_LABELS[track.track_type as TrackType]}
               </Tag>
               {renamingTrackId === track.id ? (
                 <Input

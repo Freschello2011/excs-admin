@@ -32,8 +32,8 @@ import { useMessage } from '@/hooks/useMessage';
 import { authzApi } from '@/api/authz';
 import { userApi } from '@/api/user';
 import { queryKeys } from '@/api/queryKeys';
-import type { Grant, RoleTemplate } from '@/types/authz';
-import type { UserListItem } from '@/types/auth';
+import type { Grant, RoleTemplate } from '@/api/gen/client';
+import type { UserListItem } from '@/api/gen/client';
 
 const { Text } = Typography;
 
@@ -73,7 +73,7 @@ export default function HallAuthzPanel({ hallId, hallName }: Props) {
   const { data: users } = useQuery({
     queryKey: queryKeys.users({ page: 1, page_size: 500 }),
     queryFn: () => userApi.getUsers({ page: 1, page_size: 500 }),
-    select: (res) => res.data.data?.list ?? [],
+    select: (res) => res.list ?? [],
   });
 
   const templateMap = useMemo(() => {

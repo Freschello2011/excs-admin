@@ -11,7 +11,7 @@ import { releaseApi } from '@/api/release';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
 import { useHallStore } from '@/stores/hallStore';
-import type { AppRelease } from '@/types/release';
+import type { AppRelease } from '@/api/gen/client';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 

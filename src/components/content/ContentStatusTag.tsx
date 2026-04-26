@@ -13,7 +13,7 @@
  * Tag color 表，避免配色漂移。
  */
 import { Tag } from 'antd';
-import type { ContentStatus } from '@/types/content';
+import type { ContentStatus } from '@/api/gen/client';
 
 interface ContentStatusTagProps {
   status: ContentStatus | string;

@@ -17,7 +17,7 @@ import ScopeTag, { SCOPE_ORDER } from '@/components/authz/common/ScopeTag';
 import { authzApi } from '@/api/authz';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
-import type { Grant } from '@/types/authz';
+import type { Grant, ScopeType } from '@/api/gen/client';
 
 const { Text } = Typography;
 
@@ -154,7 +154,7 @@ function GrantRow({
         </Text>
       </Space>
       <ScopeTag
-        scopeType={grant.scope_type}
+        scopeType={grant.scope_type as ScopeType}
         scopeId={grant.scope_id}
         hallNameMap={hallMap}
       />

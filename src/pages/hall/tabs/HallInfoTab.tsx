@@ -6,7 +6,7 @@ import dayjs from 'dayjs';
 import StatusTag from '@/components/common/StatusTag';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
-import type { HallDetail } from '@/types/hall';
+import type { HallDetail } from '@/api/gen/client';
 
 interface HallInfoTabProps {
   hall: HallDetail;
@@ -54,7 +54,6 @@ export default function HallInfoTab({ hall, isAdmin }: HallInfoTabProps) {
     { key: 'id', label: 'ID', children: hall.id },
     { key: 'mdm_id', label: 'MDM 编号', children: hall.mdm_showroom_id },
     { key: 'name', label: '展厅名称', children: hall.name },
-    { key: 'description', label: '描述', children: hall.description || '-', span: 2 },
     {
       key: 'status',
       label: '服务状态',

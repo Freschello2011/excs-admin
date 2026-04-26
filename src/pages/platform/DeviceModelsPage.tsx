@@ -41,16 +41,14 @@ import { deviceProtocolBaselineApi } from '@/api/deviceProtocolBaseline';
 import { queryKeys } from '@/api/queryKeys';
 import { useAuthStore } from '@/stores/authStore';
 import type {
+  DeviceBrandDTO,
   DeviceModelDetail,
   DeviceModelListItem,
   DeviceModelStatus,
   ModelListQuery,
-} from '@/types/deviceModel';
-import type { DeviceBrandDTO } from '@/types/deviceBrand';
-import type {
   ProtocolBaselineDetailDTO,
   ProtocolBaselineListItemDTO,
-} from '@/types/deviceProtocolBaseline';
+} from '@/api/gen/client';
 import type { ParamsSchemaProperty } from '@/types/deviceCatalog';
 
 /* ==================== Page ==================== */

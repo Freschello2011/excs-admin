@@ -5,7 +5,7 @@ import { useQueries, useMutation, useQueryClient } from '@tanstack/react-query';
 import { sysConfigApi } from '@/api/sysConfig';
 import { queryKeys } from '@/api/queryKeys';
 import { useMessage } from '@/hooks/useMessage';
-import type { ConfigItem, ConfigGroupData } from '@/types/sysConfig';
+import type { ConfigItem, ConfigGroupData } from '@/api/gen/client';
 import type { Section } from './ia';
 import { sectionGroups } from './ia';
 import FieldRow, { toFormInitialValue, fromFormValue } from './FieldRow';

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { ScopeType, UserActionEntry } from '@/types/authz';
+import type { ScopeType, UserActionEntry } from '@/api/gen/client';
 
 export interface ScopeGroup {
   key: string;

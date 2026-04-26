@@ -12,7 +12,7 @@ import AvatarSpritePreview from '@/components/ai/AvatarSpritePreview';
 import WhiteboardLayoutEditor, { DEFAULT_LAYOUT_CONFIG } from '@/components/ai/WhiteboardLayoutEditor';
 import { aiApi } from '@/api/ai';
 import { queryKeys } from '@/api/queryKeys';
-import type { TemplateListItem, VideoType, LayoutConfig } from '@/types/ai';
+import type { TemplateListItem, VideoType, LayoutConfig } from '@/api/gen/client';
 
 /* ─── Upload Task Types ─── */
 

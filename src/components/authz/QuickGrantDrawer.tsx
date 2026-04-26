@@ -44,8 +44,8 @@ import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
 import { makeDefaultExpiry } from '@/lib/authz/expiry';
 import AccountTypeTag from '@/components/authz/common/AccountTypeTag';
-import { resolveAccountType, type LoginUser } from '@/types/auth';
-import type { CreateGrantBody, RoleTemplate, ScopeType } from '@/types/authz';
+import { resolveAccountType, type LoginUser } from '@/api/gen/client';
+import type { CreateGrantBody, RoleTemplate, ScopeType } from '@/api/gen/client';
 
 const { Text, Paragraph } = Typography;
 

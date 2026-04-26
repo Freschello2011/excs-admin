@@ -1,21 +1,39 @@
 import { useState, useMemo, useCallback, useEffect, Fragment } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Button, Modal, Form, Select, Space, Popconfirm, Switch, Tooltip } from 'antd';
+import { Button, Modal, Form, Input, Select, Space, Popconfirm, Switch, Tooltip } from 'antd';
+import type { AxiosError } from 'axios';
 import { useMessage } from '@/hooks/useMessage';
 import dayjs from 'dayjs';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
+import RiskyActionButton from '@/components/authz/RiskyActionButton';
 import type {
   PairingCodeListItem,
   PairingCodeStatus,
   ExhibitListItem,
   AppInstanceListItem,
-  DeviceInfo,
+  DeviceInfoMetaKnown as DeviceInfo,
   ControlAppSessionItem,
   HallListItem,
   AnnouncedDevice,
-} from '@/types/hall';
+} from '@/api/gen/client';
 import s from './PairingCodeTab.module.scss';
+
+/**
+ * 从 AxiosError 里抠出后端真实消息。
+ * 后端约定：{code, message} (response.go) → 取 message；
+ * authz reason_required: {error, hint} → 取 hint；
+ * 其它 → 用 fallback。
+ */
+function pickServerMessage(err: unknown, fallback: string): string {
+  const ax = err as AxiosError<unknown> | undefined;
+  const data = ax?.response?.data as Record<string, unknown> | undefined;
+  if (data && typeof data === 'object') {
+    if (typeof data.message === 'string' && data.message) return data.message;
+    if (typeof data.hint === 'string' && data.hint) return data.hint;
+  }
+  return fallback;
+}
 
 interface PairingCodeTabProps {
   hallId: number;
@@ -81,7 +99,7 @@ function formatShortTime(iso: string): string {
 
 /* ── Heartbeat ── */
 
-function formatHeartbeat(ts: string | null): { text: string; isOnline: boolean } {
+function formatHeartbeat(ts: string | null | undefined): { text: string; isOnline: boolean } {
   if (!ts) return { text: '未上报', isOnline: false };
   const diff = dayjs().diff(dayjs(ts), 'minute');
   if (diff < 3) return { text: '在线', isOnline: true };
@@ -98,7 +116,7 @@ function getPlatformIcon(os?: string): string {
   return 'computer';
 }
 
-function formatNetworkInfo(info?: DeviceInfo): string {
+function formatNetworkInfo(info?: DeviceInfo | null): string {
   if (!info) return '';
   const parts: string[] = [];
   if (info.local_ip) parts.push(info.local_ip);
@@ -279,49 +297,54 @@ export default function PairingCodeTab({ hallId, isAdmin, mode, exhibitId }: Pai
   };
 
   const generateMutation = useMutation({
-    mutationFn: (data: { target_type: 'exhibit' | 'hall'; target_id: number }) =>
-      hallApi.generatePairingCode(hallId, data),
+    mutationFn: (vars: { data: { target_type: 'exhibit' | 'hall'; target_id: number }; reason?: string }) =>
+      hallApi.generatePairingCode(hallId, vars.data, vars.reason),
     onSuccess: () => {
       message.success('配对码已生成');
       invalidate();
       setGenerateModalOpen(false);
     },
-    onError: () => message.error('生成失败，目标可能已有有效配对码'),
+    onError: (err) => message.error(pickServerMessage(err, '生成失败，目标可能已有有效配对码')),
   });
 
   const batchMutation = useMutation({
-    mutationFn: () => hallApi.batchGeneratePairingCodes(hallId),
+    mutationFn: (vars: { reason?: string }) => hallApi.batchGeneratePairingCodes(hallId, vars.reason),
     onSuccess: (res) => {
       const data = res.data.data;
       message.success(`批量生成完成：${data.generated.length} 个成功，${data.skipped.length} 个跳过`);
       invalidate();
     },
+    onError: (err) => message.error(pickServerMessage(err, '批量生成失败')),
   });
 
   const regenerateMutation = useMutation({
-    mutationFn: (codeId: number) => hallApi.regeneratePairingCode(hallId, codeId),
+    mutationFn: (vars: { codeId: number; reason?: string }) =>
+      hallApi.regeneratePairingCode(hallId, vars.codeId, vars.reason),
     onSuccess: () => {
       message.success('配对码已重新生成');
       invalidate();
     },
+    onError: (err) => message.error(pickServerMessage(err, '重新生成失败')),
   });
 
   const unlockMutation = useMutation({
-    mutationFn: (codeId: number) => hallApi.unlockPairingCode(hallId, codeId),
+    mutationFn: (vars: { codeId: number; reason?: string }) =>
+      hallApi.unlockPairingCode(hallId, vars.codeId, vars.reason),
     onSuccess: () => {
       message.success('配对码已解锁');
       invalidate();
     },
+    onError: (err) => message.error(pickServerMessage(err, '解锁失败')),
   });
 
   const generateDebugMutation = useMutation({
-    mutationFn: (data: { exhibit_id: number; ttl_hours?: number }) =>
-      hallApi.generateDebugPairingCode(hallId, data),
+    mutationFn: (vars: { data: { exhibit_id: number; ttl_hours?: number }; reason?: string }) =>
+      hallApi.generateDebugPairingCode(hallId, vars.data, vars.reason),
     onSuccess: () => {
       message.success('调试配对码已生成');
       invalidate();
     },
-    onError: () => message.error('生成调试码失败，可能已有有效码或调试实例已达上限'),
+    onError: (err) => message.error(pickServerMessage(err, '生成调试码失败，可能已有有效码或调试实例已达上限')),
   });
 
   const disconnectDebugMutation = useMutation({
@@ -349,15 +372,6 @@ export default function PairingCodeTab({ hallId, isAdmin, mode, exhibitId }: Pai
     },
   });
 
-  const switchMasterMutation = useMutation({
-    mutationFn: (newMasterExhibitId: number) =>
-      hallApi.switchMaster(hallId, { new_master_exhibit_id: newMasterExhibitId }),
-    onSuccess: () => {
-      message.success('主控切换成功');
-      invalidate();
-      queryClient.invalidateQueries({ queryKey: queryKeys.hallDetail(hallId) });
-    },
-  });
 
   const switchHallMutation = useMutation({
     mutationFn: ({ sessionId, newHallId }: { sessionId: number; newHallId: number }) =>
@@ -386,7 +400,7 @@ export default function PairingCodeTab({ hallId, isAdmin, mode, exhibitId }: Pai
       message.success('设备配对成功');
       invalidate();
     },
-    onError: () => message.error('配对失败，展项可能已有绑定设备'),
+    onError: (err) => message.error(pickServerMessage(err, '配对失败，展项可能已有绑定设备')),
   });
 
   /* ── Aggregation ── */
@@ -480,9 +494,9 @@ export default function PairingCodeTab({ hallId, isAdmin, mode, exhibitId }: Pai
     });
   }, []);
 
-  const handleGenerate = () => {
-    form.validateFields().then((values) => {
-      generateMutation.mutate(values);
+  const handleGenerate = (reason?: string) => {
+    return form.validateFields().then((values) => {
+      return generateMutation.mutateAsync({ data: values, reason });
     });
   };
 
@@ -562,7 +576,7 @@ export default function PairingCodeTab({ hallId, isAdmin, mode, exhibitId }: Pai
 
   const renderDevice = (instance?: AppInstanceListItem) => {
     if (!instance) return null;
-    const info = instance.device_info;
+    const info = instance.device_info as DeviceInfo | undefined;
     const icon = getPlatformIcon(info?.os);
     const hostname = info?.hostname || '—';
     const networkInfo = formatNetworkInfo(info);
@@ -609,7 +623,7 @@ export default function PairingCodeTab({ hallId, isAdmin, mode, exhibitId }: Pai
               <span>{formatShortTime(hc.created_at)}</span>
               {hc.used_by_instance_id && (
                 <span className={s.historyDevice}>
-                  → {instances.find((i) => i.id === hc.used_by_instance_id)?.device_info?.hostname || '设备'}
+                  → {(instances.find((i) => i.id === hc.used_by_instance_id)?.device_info as DeviceInfo | undefined)?.hostname || '设备'}
                 </span>
               )}
               {hc.failed_attempts > 0 && (
@@ -623,8 +637,9 @@ export default function PairingCodeTab({ hallId, isAdmin, mode, exhibitId }: Pai
   };
 
   const renderDebugInstance = (di: AppInstanceListItem) => {
-    const hostname = di.device_info?.hostname || '—';
-    const icon = getPlatformIcon(di.device_info?.os);
+    const info = di.device_info as DeviceInfo | undefined;
+    const hostname = info?.hostname || '—';
+    const icon = getPlatformIcon(info?.os);
     const remaining = di.debug_expires_at ? formatCountdown(di.debug_expires_at, nowMs) : null;
 
     return (
@@ -633,7 +648,7 @@ export default function PairingCodeTab({ hallId, isAdmin, mode, exhibitId }: Pai
           <span className={`material-symbols-outlined ${s.platformIcon}`} style={{ fontSize: 14 }}>{icon}</span>
           <div className={s.deviceDetails}>
             <span className={s.deviceText} style={{ fontSize: 12 }}>{hostname}</span>
-            {di.device_info?.local_ip && <span className={s.deviceNetwork}>{di.device_info.local_ip}</span>}
+            {info?.local_ip && <span className={s.deviceNetwork}>{info.local_ip}</span>}
           </div>
         </div>
         {remaining && <span className={`${s.countdown} ${remaining.cls}`} style={{ fontSize: 12 }}>{remaining.text}</span>}
@@ -794,15 +809,19 @@ export default function PairingCodeTab({ hallId, isAdmin, mode, exhibitId }: Pai
                     <span className={s.hint}>
                       可另接 {MAX_DEBUG_INSTANCES - group.debugInstances.length} 台调试机（开发/维护用）· 不占用主实例
                     </span>
-                    <Popconfirm
-                      title="生成调试配对码？默认有效期 10 小时"
-                      onConfirm={() => generateDebugMutation.mutate({ exhibit_id: group.exhibitId })}
+                    <RiskyActionButton
+                      action="pairing.debug"
+                      type="link"
+                      size="small"
+                      confirmTitle="生成调试配对码"
+                      confirmContent="为该展项生成调试配对码（默认有效期 10 小时）。请填写操作原因（≥ 5 字，审计用）。"
+                      onConfirm={async (reason) => {
+                        await generateDebugMutation.mutateAsync({ data: { exhibit_id: group.exhibitId }, reason });
+                      }}
                     >
-                      <button className={s.addDebugBtn}>
-                        <span className="material-symbols-outlined">add</span>
-                        添加调试实例
-                      </button>
-                    </Popconfirm>
+                      <span className="material-symbols-outlined" style={{ fontSize: 14, marginRight: 2 }}>add</span>
+                      添加调试实例
+                    </RiskyActionButton>
                   </div>
                 )}
               </div>
@@ -819,25 +838,38 @@ export default function PairingCodeTab({ hallId, isAdmin, mode, exhibitId }: Pai
             </span>
           )}
           <Space size="small" style={{ marginLeft: 'auto' }} split={<span style={{ color: 'var(--color-outline-variant)', fontSize: 11 }}>·</span>}>
-            {group.instance && !group.instance.is_hall_master && (
-              <Popconfirm title="确认设为主控？" onConfirm={() => switchMasterMutation.mutate(group.exhibitId)}>
-                <Button type="link" size="small">设为主控</Button>
-              </Popconfirm>
-            )}
             {group.instance && (
               <Popconfirm title="确认解绑？解绑后设备将断开" onConfirm={() => unpairMutation.mutate(group.instance!.id)}>
                 <Button type="link" size="small" danger>解绑</Button>
               </Popconfirm>
             )}
             {actionCode && actionCode.status !== 'locked' && (
-              <Popconfirm title="确认重新生成？旧码将作废" onConfirm={() => regenerateMutation.mutate(actionCode.id)}>
-                <Button type="link" size="small">重新生成</Button>
-              </Popconfirm>
+              <RiskyActionButton
+                action="pairing.manage"
+                type="link"
+                size="small"
+                confirmTitle="重新生成配对码"
+                confirmContent={`旧码将立即作废，请填写重新生成的原因（≥ 5 字，审计用）。展项：${group.exhibitName}`}
+                onConfirm={async (reason) => {
+                  await regenerateMutation.mutateAsync({ codeId: actionCode.id, reason });
+                }}
+              >
+                重新生成
+              </RiskyActionButton>
             )}
             {group.currentCode?.status === 'locked' && (
-              <Button type="link" size="small" onClick={() => unlockMutation.mutate(group.currentCode!.id)}>
+              <RiskyActionButton
+                action="pairing.manage"
+                type="link"
+                size="small"
+                confirmTitle="解锁配对码"
+                confirmContent={`将清除当前 ${group.failedAttempts} 次失败计数并立即恢复 active。请填写解锁原因（≥ 5 字，审计用）。`}
+                onConfirm={async (reason) => {
+                  await unlockMutation.mutateAsync({ codeId: group.currentCode!.id, reason });
+                }}
+              >
                 解锁
-              </Button>
+              </RiskyActionButton>
             )}
             {!displayCode && (
               <Button
@@ -980,14 +1012,32 @@ export default function PairingCodeTab({ hallId, isAdmin, mode, exhibitId }: Pai
           )}
           <Space size="small" style={{ marginLeft: 'auto' }}>
             {actionCode && !isCodeLocked(actionCode) && (
-              <Popconfirm title="确认重新生成？旧码将作废" onConfirm={() => regenerateMutation.mutate(actionCode.id)}>
-                <Button type="link" size="small">重新生成</Button>
-              </Popconfirm>
+              <RiskyActionButton
+                action="pairing.manage"
+                type="link"
+                size="small"
+                confirmTitle="重新生成展厅码"
+                confirmContent="旧码将立即作废。请填写重新生成的原因（≥ 5 字，审计用）。"
+                onConfirm={async (reason) => {
+                  await regenerateMutation.mutateAsync({ codeId: actionCode.id, reason });
+                }}
+              >
+                重新生成
+              </RiskyActionButton>
             )}
             {hc.currentCode && isCodeLocked(hc.currentCode) && (
-              <Button type="link" size="small" onClick={() => unlockMutation.mutate(hc.currentCode!.id)}>
+              <RiskyActionButton
+                action="pairing.manage"
+                type="link"
+                size="small"
+                confirmTitle="解锁展厅码"
+                confirmContent="将立即恢复 active 状态。请填写解锁原因（≥ 5 字，审计用）。"
+                onConfirm={async (reason) => {
+                  await unlockMutation.mutateAsync({ codeId: hc.currentCode!.id, reason });
+                }}
+              >
                 解锁
-              </Button>
+              </RiskyActionButton>
             )}
             {!displayCode && (
               <Button
@@ -1040,9 +1090,17 @@ export default function PairingCodeTab({ hallId, isAdmin, mode, exhibitId }: Pai
             生成配对码
           </Button>
           {tab === 'exhibit' && !exhibitId && (
-            <Popconfirm title="为所有未配对展项批量生成配对码？" onConfirm={() => batchMutation.mutate()}>
-              <Button loading={batchMutation.isPending}>批量生成</Button>
-            </Popconfirm>
+            <RiskyActionButton
+              action="pairing.manage"
+              loading={batchMutation.isPending}
+              confirmTitle="批量生成配对码"
+              confirmContent="将为所有未配对展项生成新配对码。请填写批量生成的原因（≥ 5 字，审计用）。"
+              onConfirm={async (reason) => {
+                await batchMutation.mutateAsync({ reason });
+              }}
+            >
+              批量生成
+            </RiskyActionButton>
           )}
           {tab === 'exhibit' && <Button onClick={handleExport}>导出</Button>}
         </Space>
@@ -1061,7 +1119,7 @@ export default function PairingCodeTab({ hallId, isAdmin, mode, exhibitId }: Pai
               <span className={s.announcePulse} />
             </div>
             {announcedDevices.map((device: AnnouncedDevice) => {
-              const info = device.device_info;
+              const info = device.device_info as DeviceInfo | undefined;
               const icon = getPlatformIcon(info?.os);
               const hostname = info?.hostname || device.machine_code;
               const networkInfo = formatNetworkInfo(info);
@@ -1170,7 +1228,12 @@ export default function PairingCodeTab({ hallId, isAdmin, mode, exhibitId }: Pai
       <Modal
         title="生成配对码"
         open={generateModalOpen}
-        onOk={handleGenerate}
+        onOk={() => {
+          // pairing.manage 是 critical action，后端要求 reason ≥ 5 字
+          form.validateFields(['reason']).then(({ reason }) => {
+            handleGenerate(reason);
+          });
+        }}
         onCancel={() => setGenerateModalOpen(false)}
         confirmLoading={generateMutation.isPending}
         destroyOnClose
@@ -1212,6 +1275,22 @@ export default function PairingCodeTab({ hallId, isAdmin, mode, exhibitId }: Pai
                 </Form.Item>
               )
             }
+          </Form.Item>
+          <Form.Item
+            name="reason"
+            label="操作原因（审计用）"
+            rules={[
+              { required: true, message: '请填写操作原因（≥ 5 字）' },
+              { min: 5, message: '操作原因至少 5 个字' },
+            ]}
+            extra="pairing.manage 为 critical action，后端会校验该原因并写入审计日志。"
+          >
+            <Input.TextArea
+              rows={3}
+              placeholder="例：定期更新配对码 / 调试现场设备"
+              maxLength={500}
+              showCount
+            />
           </Form.Item>
         </Form>
       </Modal>

@@ -7,7 +7,7 @@ import type { TableColumnsType } from 'antd';
 import { PlusOutlined, ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
-import type { ExhibitListItem, ExhibitScript } from '@/types/hall';
+import type { ExhibitListItem, ExhibitScript } from '@/api/gen/client';
 
 interface ExhibitTabProps {
   hallId: number;

@@ -15,7 +15,7 @@ import { queryKeys } from '@/api/queryKeys';
 import type {
   AiAvatarBody, AiToolName, TagSearchConfig,
   VoiceItem, KnowledgeFile, VideoType, LayoutConfig, HotwordExtensions,
-} from '@/types/ai';
+} from '@/api/gen/client';
 import AvatarSpritePreview from '@/components/ai/AvatarSpritePreview';
 import ChatSimulator from '@/components/ai/ChatSimulator';
 import WhiteboardLayoutEditor, {

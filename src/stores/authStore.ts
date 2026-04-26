@@ -1,9 +1,10 @@
 import { create } from 'zustand';
-import { authApi } from '@/api/auth';
+import { authClient, type LoginUser } from '@/api/gen/client';
+import { authzApi } from '@/api/authz';
 import { redirectToSSO } from '@/api/request';
-import type { ApiResponse } from '@/types/api';
-import type { LoginUser, LoginResponse } from '@/types/auth';
-import type { UserActionSet } from '@/types/authz';
+import type { UserActionSet } from '@/api/gen/client';
+
+export type { LoginUser };
 
 /* ==================== Types ==================== */
 
@@ -37,10 +38,6 @@ interface AuthActions {
 type AuthStore = AuthState & AuthActions;
 
 /* ==================== Helpers ==================== */
-
-function unwrap<T>(axiosRes: { data: ApiResponse<T> }): ApiResponse<T> {
-  return axiosRes?.data ?? (axiosRes as unknown as ApiResponse<T>);
-}
 
 function loadActionSet(): UserActionSet | null {
   try {
@@ -79,29 +76,24 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
 
   handleLoginCallback: async (code: string) => {
     const redirectUri = `${window.location.origin}/login/callback`;
-    const axiosRes = await authApi.loginByCode(code, redirectUri);
-    const res = unwrap<LoginResponse>(axiosRes);
+    const data = await authClient.login({ sso_code: code, redirect_uri: redirectUri });
 
-    if (res.code === 0) {
-      const { access_token, refresh_token, user } = res.data;
-      set({ accessToken: access_token, refreshToken: refresh_token, user });
-      localStorage.setItem('excs-access-token', access_token);
-      localStorage.setItem('excs-refresh-token', refresh_token);
-      localStorage.setItem('excs-user', JSON.stringify(user));
+    const { access_token, refresh_token, user, mqtt } = data;
+    set({ accessToken: access_token, refreshToken: refresh_token, user });
+    localStorage.setItem('excs-access-token', access_token);
+    localStorage.setItem('excs-refresh-token', refresh_token);
+    localStorage.setItem('excs-user', JSON.stringify(user));
 
-      // Store MQTT info for future use
-      if (res.data.mqtt) {
-        localStorage.setItem('excs-mqtt', JSON.stringify(res.data.mqtt));
-      }
+    // Store MQTT info for future use
+    if (mqtt) {
+      localStorage.setItem('excs-mqtt', JSON.stringify(mqtt));
+    }
 
-      // 登录后立即拉 action set；失败不阻塞登录流程（后续页面按需 fail-safe）
-      try {
-        await get().refreshActionSet();
-      } catch {
-        // swallow — axios 层已有 message 提示
-      }
-    } else {
-      throw new Error(res.message || '登录失败');
+    // 登录后立即拉 action set；失败不阻塞登录流程（后续页面按需 fail-safe）
+    try {
+      await get().refreshActionSet();
+    } catch {
+      // swallow — axios 层已有 message 提示
     }
   },
 
@@ -110,25 +102,21 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
     if (!refreshToken) {
       throw new Error('No refresh token');
     }
-    const axiosRes = await authApi.refresh(refreshToken);
-    const res = unwrap(axiosRes);
-    if (res.code === 0) {
-      set({
-        accessToken: res.data.access_token,
-        refreshToken: res.data.refresh_token,
-      });
-      localStorage.setItem('excs-access-token', res.data.access_token);
-      localStorage.setItem('excs-refresh-token', res.data.refresh_token);
-      // 刷新 token 后异步重拉 action set（JWT 可能携带的权限信息已变）
-      get().refreshActionSet().catch(() => {});
-      return res.data.access_token;
-    }
-    throw new Error('Refresh failed');
+    const data = await authClient.refreshToken({ refresh_token: refreshToken });
+    set({
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
+    });
+    localStorage.setItem('excs-access-token', data.access_token);
+    localStorage.setItem('excs-refresh-token', data.refresh_token);
+    // 刷新 token 后异步重拉 action set（JWT 可能携带的权限信息已变）
+    get().refreshActionSet().catch(() => {});
+    return data.access_token;
   },
 
   refreshActionSet: async () => {
-    const axiosRes = await authApi.getMyActionSet();
-    const res = unwrap<UserActionSet>(axiosRes);
+    const axiosRes = await authzApi.getMyActionSet();
+    const res = axiosRes.data;
     if (res.code === 0 && res.data) {
       set({ actionSet: res.data });
       localStorage.setItem('excs-action-set', JSON.stringify(res.data));

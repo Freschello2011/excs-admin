@@ -18,7 +18,7 @@ import { InfoCircleOutlined } from '@ant-design/icons';
 import { Popover, Tooltip, Typography } from 'antd';
 import { useCan, explain } from '@/lib/authz/can';
 import { useExplain } from '@/lib/authz/useExplain';
-import type { ExplainResult, ResourceRef } from '@/types/authz';
+import type { ExplainResult, ResourceRef } from '@/api/gen/client';
 
 const { Text } = Typography;
 

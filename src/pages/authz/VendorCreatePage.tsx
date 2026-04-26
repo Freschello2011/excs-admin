@@ -9,7 +9,7 @@ import { useMessage } from '@/hooks/useMessage';
 import { vendorApi } from '@/api/vendor';
 import { makeDefaultExpiry } from '@/lib/authz/expiry';
 import InitialPasswordModal from '@/components/authz/InitialPasswordModal';
-import type { CreateVendorBody, Vendor } from '@/types/authz';
+import type { CreateVendorBody, Vendor } from '@/api/gen/client';
 
 /** 短标题 + ⓘ Tooltip —— FieldRow 范式 */
 function LabelHint({ label, hint }: { label: string; hint: string }) {

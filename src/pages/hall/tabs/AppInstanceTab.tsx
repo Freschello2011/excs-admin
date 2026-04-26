@@ -6,7 +6,7 @@ import dayjs from 'dayjs';
 import StatusTag from '@/components/common/StatusTag';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
-import type { AppInstanceListItem } from '@/types/hall';
+import type { AppInstanceListItem } from '@/api/gen/client';
 
 interface AppInstanceTabProps {
   hallId: number;
@@ -29,16 +29,6 @@ export default function AppInstanceTab({ hallId, isAdmin }: AppInstanceTabProps)
     onSuccess: () => {
       message.success('解绑成功');
       queryClient.invalidateQueries({ queryKey: queryKeys.appInstances(hallId) });
-    },
-  });
-
-  const switchMasterMutation = useMutation({
-    mutationFn: (newMasterExhibitId: number) =>
-      hallApi.switchMaster(hallId, { new_master_exhibit_id: newMasterExhibitId }),
-    onSuccess: () => {
-      message.success('主控切换成功');
-      queryClient.invalidateQueries({ queryKey: queryKeys.appInstances(hallId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.hallDetail(hallId) });
     },
   });
 
@@ -83,12 +73,9 @@ export default function AppInstanceTab({ hallId, isAdmin }: AppInstanceTabProps)
     },
     ...(isAdmin ? [{
       title: '操作',
-      width: 160,
+      width: 100,
       render: (_: unknown, record: AppInstanceListItem) => (
         <Space size="small">
-          {!record.is_hall_master && (
-            <a onClick={() => switchMasterMutation.mutate(record.exhibit_id)}>设为主控</a>
-          )}
           <Popconfirm
             title="确认解绑？"
             description="解绑后在线设备将收到断开通知"

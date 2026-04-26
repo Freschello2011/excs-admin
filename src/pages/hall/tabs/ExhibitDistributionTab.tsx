@@ -7,7 +7,7 @@ import { DownloadOutlined } from '@ant-design/icons';
 import StatusTag from '@/components/common/StatusTag';
 import { contentApi } from '@/api/content';
 import { queryKeys } from '@/api/queryKeys';
-import type { DistributionItem, DistributionStatus, ExhibitContentItem } from '@/types/content';
+import type { DistributionItem, DistributionStatus, ExhibitContentItem } from '@/api/gen/client';
 
 interface Props {
   hallId: number;

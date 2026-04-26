@@ -1,131 +1,140 @@
+/**
+ * Phase 3-B：ai 全部 22 端点已切到 typed `aiClient`（@/api/gen/client）。
+ *
+ * 本文件保留为 AxiosResponse 兼容壳：老 react-query 调用方写
+ * `useQuery({ queryFn: () => aiApi.getAvatar(id), select: (res) => res.data.data })`
+ * 完全零改动。新代码请直接 import `aiClient`（自带 unwrap，返回纯 data）。
+ *
+ * 例外：testChat（SSE 流）保留原 fetch 实现 —— typed client 不消费 SSE 字节流，
+ * 调用方走 fetch + ReadableStream。
+ */
 import type { AxiosResponse } from 'axios';
 import request from './request';
 import type { ApiResponse } from '@/types/api';
-import type {
-  AiAvatarDetail,
-  AiAvatarBody,
-  TemplateListItem,
-  AiAvatarTemplate,
-  CreateTemplateRequest,
-  UpdateTemplateRequest,
-  TemplateUploadUrlRequest,
-  TemplateUploadUrlResult,
-  TemplateUploadCompleteRequest,
-  TemplateUploadCompleteResult,
-  VoiceItem,
-  TtsSynthesizeRequest,
-  TtsSynthesizeResult,
-  KnowledgeFile,
-  KnowledgeUploadUrlRequest,
-  KnowledgeUploadUrlResult,
-  KnowledgeSearchRequest,
-  KnowledgeChunk,
-  TestTagSearchRequest,
-  TestTagSearchResult,
-} from '@/types/ai';
+import {
+  aiClient,
+  type AiAvatarDetail,
+  type AiAvatarBody,
+  type TemplateListItem,
+  type AiAvatarTemplate,
+  type CreateTemplateRequest,
+  type UpdateTemplateRequest,
+  type TemplateUploadUrlRequest,
+  type TemplateUploadUrlResult,
+  type TemplateUploadCompleteRequest,
+  type TemplateUploadCompleteResult,
+  type VoiceItem,
+  type TtsSynthesizeRequest,
+  type TtsSynthesizeResult,
+  type KnowledgeFile,
+  type KnowledgeUploadUrlRequest,
+  type KnowledgeUploadUrlResult,
+  type KnowledgeSearchRequest,
+  type KnowledgeChunk,
+  type TestTagSearchRequest,
+  type TestTagSearchResult,
+} from '@/api/gen/client';
+
+/** 把 typed Promise<T> 包成 AxiosResponse<ApiResponse<T>>（react-query select(res.data.data) 老调用零改动） */
+function asAxiosLike<T>(p: Promise<T>): Promise<AxiosResponse<ApiResponse<T>>> {
+  return p.then((data) => ({
+    data: { code: 0, message: 'ok', data } as ApiResponse<T>,
+    status: 200,
+    statusText: 'OK',
+    headers: {},
+    config: {} as AxiosResponse['config'],
+  }));
+}
 
 export const aiApi = {
   /** 获取 AI 形象配置 */
-  getAvatar(exhibitId: number, options?: { skipErrorMessage?: boolean }): Promise<AxiosResponse<ApiResponse<AiAvatarDetail>>> {
-    return request.get(`/api/v1/ai/avatars/${exhibitId}`, {
-      skipErrorMessage: options?.skipErrorMessage,
-    });
+  getAvatar(
+    exhibitId: number,
+    options?: { skipErrorMessage?: boolean },
+  ): Promise<AxiosResponse<ApiResponse<AiAvatarDetail>>> {
+    return asAxiosLike(aiClient.getAvatar(exhibitId, options));
   },
 
   /** 配置 AI 形象 */
-  updateAvatar(exhibitId: number, data: AiAvatarBody): Promise<AxiosResponse<ApiResponse<void>>> {
-    return request.put(`/api/v1/ai/avatars/${exhibitId}`, data);
+  updateAvatar(exhibitId: number, data: AiAvatarBody): Promise<AxiosResponse<ApiResponse<AiAvatarDetail>>> {
+    return asAxiosLike(aiClient.configureAvatar(exhibitId, data));
   },
 
-  /** 激活 AI 形象 */
-  activateAvatar(exhibitId: number): Promise<AxiosResponse<ApiResponse<void>>> {
-    return request.post(`/api/v1/ai/avatars/${exhibitId}/activate`);
+  /** 激活 AI 形象（hall_id 必填，path:/api/v1/ai/avatars/:id/activate?hall_id=） */
+  activateAvatar(exhibitId: number, hallId: number): Promise<AxiosResponse<ApiResponse<void>>> {
+    return asAxiosLike(aiClient.activateAvatar(exhibitId, hallId));
   },
 
   /** 停用 AI 形象 */
-  deactivateAvatar(exhibitId: number): Promise<AxiosResponse<ApiResponse<void>>> {
-    return request.post(`/api/v1/ai/avatars/${exhibitId}/deactivate`);
+  deactivateAvatar(exhibitId: number, hallId: number): Promise<AxiosResponse<ApiResponse<void>>> {
+    return asAxiosLike(aiClient.deactivateAvatar(exhibitId, hallId));
   },
 
   /* ==================== Avatar Templates ==================== */
 
-  /** 创建形象模板 */
   createTemplate(data: CreateTemplateRequest): Promise<AxiosResponse<ApiResponse<AiAvatarTemplate>>> {
-    return request.post('/api/v1/ai/avatar-templates', data);
+    return asAxiosLike(aiClient.createTemplate(data));
   },
 
-  /** 更新形象模板（支持 name/description/default_layout_config） */
   updateTemplate(templateId: number, data: UpdateTemplateRequest): Promise<AxiosResponse<ApiResponse<AiAvatarTemplate>>> {
-    return request.put(`/api/v1/ai/avatar-templates/${templateId}`, data);
+    return asAxiosLike(aiClient.updateTemplate(templateId, data));
   },
 
-  /** 获取模板上传 URL */
   getTemplateUploadURL(templateId: number, data: TemplateUploadUrlRequest): Promise<AxiosResponse<ApiResponse<TemplateUploadUrlResult>>> {
-    return request.post(`/api/v1/ai/avatar-templates/${templateId}/upload-url`, data);
+    return asAxiosLike(aiClient.getTemplateUploadURL(templateId, data));
   },
 
-  /** 通知视频上传完成 */
   completeTemplateUpload(templateId: number, data: TemplateUploadCompleteRequest): Promise<AxiosResponse<ApiResponse<TemplateUploadCompleteResult>>> {
-    return request.post(`/api/v1/ai/avatar-templates/${templateId}/upload-complete`, data);
+    return asAxiosLike(aiClient.completeTemplateUpload(templateId, data));
   },
 
-  /** 获取模板列表 */
   listTemplates(): Promise<AxiosResponse<ApiResponse<{ list: TemplateListItem[] }>>> {
-    return request.get('/api/v1/ai/avatar-templates');
+    return asAxiosLike(aiClient.listTemplates() as Promise<{ list: TemplateListItem[] }>);
   },
 
-  /** 获取模板详情 */
   getTemplate(templateId: number): Promise<AxiosResponse<ApiResponse<AiAvatarTemplate>>> {
-    return request.get(`/api/v1/ai/avatar-templates/${templateId}`);
+    return asAxiosLike(aiClient.getTemplate(templateId));
   },
 
-  /** 删除形象模板 */
   deleteTemplate(templateId: number): Promise<AxiosResponse<ApiResponse<void>>> {
-    return request.delete(`/api/v1/ai/avatar-templates/${templateId}`);
+    return asAxiosLike(aiClient.deleteTemplate(templateId));
   },
 
   /* ==================== Voices & TTS ==================== */
 
-  /** 获取可用语音列表 */
   listVoices(): Promise<AxiosResponse<ApiResponse<{ list: VoiceItem[] }>>> {
-    return request.get('/api/v1/ai/voices');
+    return asAxiosLike(aiClient.listVoices() as Promise<{ list: VoiceItem[] }>);
   },
 
-  /** TTS 合成试听 */
   synthesizeSpeech(data: TtsSynthesizeRequest): Promise<AxiosResponse<ApiResponse<TtsSynthesizeResult>>> {
-    return request.post('/api/v1/ai/tts/synthesize', data);
+    return asAxiosLike(aiClient.synthesizeSpeech(data));
   },
 
   /* ==================== Knowledge Files ==================== */
 
-  /** 获取知识库文件上传 URL */
   getKnowledgeUploadURL(data: KnowledgeUploadUrlRequest): Promise<AxiosResponse<ApiResponse<KnowledgeUploadUrlResult>>> {
-    return request.post('/api/v1/ai/knowledge-files/upload-url', data);
+    return asAxiosLike(aiClient.getKnowledgeUploadURL(data));
   },
 
-  /** 通知知识文件上传完成 */
-  completeKnowledgeUpload(fileId: number): Promise<AxiosResponse<ApiResponse<{ file_id: number; status: string }>>> {
-    return request.post(`/api/v1/ai/knowledge-files/${fileId}/upload-complete`);
+  completeKnowledgeUpload(fileId: number): Promise<AxiosResponse<ApiResponse<KnowledgeFile>>> {
+    return asAxiosLike(aiClient.completeKnowledgeUpload(fileId));
   },
 
-  /** 获取知识库文件列表 */
-  listKnowledgeFiles(params: { exhibit_id?: number; hall_id?: number }): Promise<AxiosResponse<ApiResponse<{ list: KnowledgeFile[] }>>> {
-    return request.get('/api/v1/ai/knowledge-files', { params });
+  listKnowledgeFiles(params: { exhibit_id?: number; hall_id: number }): Promise<AxiosResponse<ApiResponse<{ list: KnowledgeFile[] }>>> {
+    return asAxiosLike(aiClient.listKnowledgeFiles(params) as Promise<{ list: KnowledgeFile[] }>);
   },
 
-  /** 删除知识库文件 */
   deleteKnowledgeFile(fileId: number): Promise<AxiosResponse<ApiResponse<void>>> {
-    return request.delete(`/api/v1/ai/knowledge-files/${fileId}`);
+    return asAxiosLike(aiClient.deleteKnowledgeFile(fileId));
   },
 
-  /** 测试知识检索 */
   searchKnowledge(data: KnowledgeSearchRequest): Promise<AxiosResponse<ApiResponse<{ chunks: KnowledgeChunk[] }>>> {
-    return request.post('/api/v1/ai/knowledge/search', data);
+    return asAxiosLike(aiClient.searchKnowledge(data) as Promise<{ chunks: KnowledgeChunk[] }>);
   },
 
   /* ==================== Test Chat & Tag Search ==================== */
 
-  /** 测试对话（SSE 流） — 返回 ReadableStream，调用方自行解析 SSE 事件 */
+  /** 测试对话（SSE 流） — 返回 ReadableStream，调用方自行解析 SSE 事件。typed client 不消费此响应。 */
   testChat(
     exhibitId: number,
     hallId: number,
@@ -148,6 +157,9 @@ export const aiApi = {
 
   /** 测试标签搜索 */
   testTagSearch(exhibitId: number, hallId: number, data: TestTagSearchRequest): Promise<AxiosResponse<ApiResponse<TestTagSearchResult>>> {
-    return request.post(`/api/v1/ai/avatars/${exhibitId}/test-tag-search?hall_id=${hallId}`, data);
+    return asAxiosLike(aiClient.testTagSearch(exhibitId, hallId, data));
   },
 };
+
+// 让 request 显式被引用，避免 import-未使用 lint（保留 axios 拦截器入口）
+void request;

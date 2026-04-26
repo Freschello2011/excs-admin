@@ -1,5 +1,5 @@
 import { useRef, useCallback, useState, type CSSProperties } from 'react';
-import type { ShowAction, TrackType } from '@/types/show';
+import type { ShowAction, TrackType } from '@/api/gen/client';
 
 /* ==================== Constants ==================== */
 

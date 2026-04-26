@@ -9,8 +9,8 @@ import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
 import { useAuthStore } from '@/stores/authStore';
 import { useHallStore } from '@/stores/hallStore';
-import type { HallListItem, } from '@/types/hall';
-import type { BucketStats } from '@/types/content';
+import type { HallListItem, } from '@/api/gen/client';
+import type { BucketStats } from '@/api/gen/client';
 
 function formatSize(bytes: number): string {
   if (bytes === 0) return '0 B';

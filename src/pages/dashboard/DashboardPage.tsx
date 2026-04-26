@@ -13,7 +13,7 @@ import PlatformTab from './components/PlatformTab';
 import BusinessTab from './components/BusinessTab';
 import AuditTab from './components/AuditTab';
 import PeriodSwitch from './components/PeriodSwitch';
-import type { BusinessPeriod } from '@/types/platform';
+import type { BusinessPeriod } from '@/api/gen/client';
 
 type TabKey = 'platform' | 'business' | 'audit';
 

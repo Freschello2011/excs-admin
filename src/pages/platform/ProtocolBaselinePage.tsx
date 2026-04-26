@@ -19,7 +19,7 @@ import type {
   ProtocolBaselineDetailDTO,
   ProtocolCommand,
   ConnectionSchema,
-} from '@/types/deviceProtocolBaseline';
+} from '@/api/gen/client';
 
 const { Title, Paragraph, Text } = Typography;
 

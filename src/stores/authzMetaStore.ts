@@ -9,7 +9,7 @@
  */
 import { create } from 'zustand';
 import { authzApi } from '@/api/authz';
-import type { ActionDef } from '@/types/authz';
+import type { ActionDef } from '@/api/gen/client';
 
 const TTL_MS = 10 * 60 * 1000;
 

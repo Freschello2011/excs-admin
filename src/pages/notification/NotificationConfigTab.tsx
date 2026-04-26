@@ -17,8 +17,8 @@ import { notificationApi } from '@/api/notification';
 import { userApi } from '@/api/user';
 import { queryKeys } from '@/api/queryKeys';
 import { useHallStore } from '@/stores/hallStore';
-import type { NotificationConfigItem } from '@/types/notification';
-import type { UserListItem } from '@/types/auth';
+import type { NotificationConfigItem } from '@/api/gen/client';
+import type { UserListItem } from '@/api/gen/client';
 
 export default function NotificationConfigTab() {
   const { message } = useMessage();
@@ -171,7 +171,7 @@ function RecipientEditor({
           page: 1,
           page_size: 10,
         });
-        setSearchResults(res.data.data?.list ?? []);
+        setSearchResults(res.list ?? []);
       } catch {
         setSearchResults([]);
       }

@@ -13,13 +13,13 @@
  *   任何无法判定的场景一律返回 false，由后端 403 + hint 兜底。
  */
 import { useAuthStore } from '@/stores/authStore';
-import { authApi } from '@/api/auth';
+import { authzApi } from '@/api/authz';
 import type {
   UserActionSet,
   UserActionEntry,
-  ResourceRef,
+  ResourceRefHint as ResourceRef,
   ExplainResult,
-} from '@/types/authz';
+} from '@/api/gen/client';
 
 /* ==================== 核心匹配 ==================== */
 
@@ -134,7 +134,7 @@ export async function explain(
   }
 
   try {
-    const axiosRes = await authApi.explainPermission(user.id, action, resource);
+    const axiosRes = await authzApi.explainPermission(user.id, action, resource);
     const res = axiosRes.data;
     if (res.code !== 0) return null;
 

@@ -22,8 +22,8 @@ import { useAuthStore } from '@/stores/authStore';
 import RiskyActionButton from '@/components/authz/RiskyActionButton';
 import InitialPasswordModal from '@/components/authz/InitialPasswordModal';
 import { vendorApi } from '@/api/vendor';
-import { authApi } from '@/api/auth';
-import type { VendorMember } from '@/types/authz';
+import { authClient } from '@/api/gen/client';
+import type { VendorMember } from '@/api/gen/client';
 
 const { Text } = Typography;
 
@@ -92,8 +92,7 @@ export default function TeamMembersPage() {
       qc.invalidateQueries({ queryKey: ['authz', 'vendor', vendorId] });
       // 主账号已移交：刷新当前 /auth/me，让 VendorLayout 侧栏立刻缩到三项
       try {
-        const me = await authApi.getMe();
-        const u = me.data?.data;
+        const u = await authClient.getAuthMe();
         if (u) {
           useAuthStore.setState({ user: u });
           localStorage.setItem('excs-user', JSON.stringify(u));

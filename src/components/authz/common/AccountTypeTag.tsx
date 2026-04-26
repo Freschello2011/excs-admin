@@ -8,8 +8,8 @@
  * 零散 ACCOUNT_TYPE_LABELS 写法。
  */
 import { Tag } from 'antd';
-import { resolveAccountType, type AccountTypeBearer } from '@/types/auth';
-import type { AccountType } from '@/types/authz';
+import { resolveAccountType, type AccountTypeBearer } from '@/api/gen/client';
+import type { AccountType } from '@/api/gen/client';
 
 const ACCOUNT_TYPE_META: Record<AccountType, { label: string; color: string }> = {
   internal: { label: '内部员工', color: 'blue' },

@@ -6,7 +6,7 @@ import { useHallStore } from '@/stores/hallStore';
 import { useAuthStore } from '@/stores/authStore';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
-import type { HallListItem } from '@/types/hall';
+import type { HallListItem } from '@/api/gen/client';
 
 /**
  * 包裹所有「展厅管理」region 的路由 element。

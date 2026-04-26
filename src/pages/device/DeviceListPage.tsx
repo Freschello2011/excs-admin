@@ -25,7 +25,7 @@ import { deviceProtocolBaselineApi } from '@/api/deviceProtocolBaseline';
 import { queryKeys } from '@/api/queryKeys';
 import { useAuthStore } from '@/stores/authStore';
 import { useHallStore } from '@/stores/hallStore';
-import type { DeviceBody, DeviceListItem, ExhibitListItem } from '@/types/hall';
+import type { DeviceBody, DeviceListItem, ExhibitListItem } from '@/api/gen/client';
 import type { ParamsSchemaProperty } from '@/types/deviceCatalog';
 
 interface ConnSchemaShape {

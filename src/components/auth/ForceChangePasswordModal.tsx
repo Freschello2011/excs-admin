@@ -9,7 +9,7 @@
 import { useState } from 'react';
 import { Alert, Form, Input, Modal } from 'antd';
 import { useMessage } from '@/hooks/useMessage';
-import { authApi } from '@/api/auth';
+import { authClient } from '@/api/gen/client';
 import { useAuthStore } from '@/stores/authStore';
 
 export default function ForceChangePasswordModal() {
@@ -30,7 +30,10 @@ export default function ForceChangePasswordModal() {
     if (!values) return;
     setSubmitting(true);
     try {
-      await authApi.changePassword(values.old_password, values.new_password);
+      await authClient.changePassword({
+        old_password: values.old_password,
+        new_password: values.new_password,
+      });
       message.success('密码已更新');
       if (user) {
         setUser({ ...user, must_change_pwd: false });

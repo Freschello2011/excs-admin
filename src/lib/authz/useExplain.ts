@@ -9,7 +9,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { explain } from '@/lib/authz/can';
-import type { ExplainResult, ResourceRef } from '@/types/authz';
+import type { ExplainResult, ResourceRef } from '@/api/gen/client';
 
 interface UseExplainResult {
   loading: boolean;

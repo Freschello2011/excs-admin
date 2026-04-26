@@ -5,7 +5,7 @@ import { useMessage } from '@/hooks/useMessage';
 import { DeleteOutlined, ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
 import { contentApi } from '@/api/content';
 import { queryKeys } from '@/api/queryKeys';
-import type { ExhibitContentItem, SlideshowTransition } from '@/types/content';
+import type { ExhibitContentItem, SlideshowTransition } from '@/api/gen/client';
 import styles from './ExhibitSlideshowTab.module.scss';
 
 const { Text } = Typography;

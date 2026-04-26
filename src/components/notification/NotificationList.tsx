@@ -12,7 +12,7 @@ import { Button, Empty, List, Pagination, Radio, Tag, Typography } from 'antd';
 import dayjs from 'dayjs';
 import { userMessageApi } from '@/api/userMessage';
 import { queryKeys } from '@/api/queryKeys';
-import type { UserMessage } from '@/types/userMessage';
+import type { UserMessage } from '@/api/gen/client';
 
 const { Text, Paragraph } = Typography;
 

@@ -13,17 +13,17 @@ import { hallApi } from '@/api/hall';
 import { commandApi } from '@/api/command';
 import { queryKeys } from '@/api/queryKeys';
 import { useHallStore } from '@/stores/hallStore';
-import type { HallListItem, DeviceListItem } from '@/types/hall';
+import type { HallListItem, DeviceListItem } from '@/api/gen/client';
 import type {
   EventRuleDTO,
   CreateTriggerBody,
   CreateConditionBody,
   CreateActionBody,
-  ConditionType,
-  ActionType,
+  SmarthomeConditionType,
+  SmarthomeActionType,
   DryRunResultDTO,
-} from '@/types/smarthome';
-import type { SceneListItem } from '@/types/command';
+} from '@/api/gen/client';
+import type { SceneListItem } from '@/api/gen/client';
 
 /* ==================== 常量映射 ==================== */
 
@@ -39,13 +39,13 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
   device_offline: '设备离线',
 };
 
-const CONDITION_TYPE_LABELS: Record<ConditionType, string> = {
+const CONDITION_TYPE_LABELS: Record<SmarthomeConditionType, string> = {
   time_range: '时间范围',
   device_state: '设备状态',
   scene_state: '场景状态',
 };
 
-const ACTION_TYPE_LABELS: Record<ActionType, string> = {
+const ACTION_TYPE_LABELS: Record<SmarthomeActionType, string> = {
   switch_scene: '切换场景',
   device_cmd: '设备命令',
   delay: '延迟',
@@ -577,7 +577,7 @@ export default function RulesPage() {
                 <Divider>预计执行动作</Divider>
                 {dryRunResult.actions.map((a, i) => (
                   <div key={i}>
-                    {i + 1}. {ACTION_TYPE_LABELS[a.action_type] ?? a.action_type} — {JSON.stringify(a.params)}
+                    {i + 1}. {ACTION_TYPE_LABELS[a.action_type as SmarthomeActionType] ?? a.action_type} — {JSON.stringify(a.params)}
                   </div>
                 ))}
               </>

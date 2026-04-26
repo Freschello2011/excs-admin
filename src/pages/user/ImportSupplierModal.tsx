@@ -5,7 +5,7 @@ import { useMessage } from '@/hooks/useMessage';
 import { UserOutlined } from '@ant-design/icons';
 import type { TableColumnsType } from 'antd';
 import { userApi } from '@/api/user';
-import type { SSOSearchUser } from '@/types/auth';
+import type { SSOSearchUser } from '@/api/gen/client';
 
 interface Props {
   open: boolean;
@@ -24,7 +24,6 @@ export default function ImportSupplierModal({ open, onClose }: Props) {
   const { data, isLoading } = useQuery({
     queryKey: ['sso-users-search', searchKeyword, page, pageSize],
     queryFn: () => userApi.searchSSOUsers({ keyword: searchKeyword, page, page_size: pageSize }),
-    select: (res) => res.data.data,
     enabled: open && searchKeyword.length > 0,
   });
 

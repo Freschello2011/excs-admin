@@ -14,8 +14,8 @@ import { useQuery } from '@tanstack/react-query';
 import { Drawer, Empty, Skeleton, Space, Tag, Timeline, Typography } from 'antd';
 import ContentStatusTag from '@/components/content/ContentStatusTag';
 import { contentApi } from '@/api/content';
-import type { ContentDetail, ContentRejectReason } from '@/types/content';
-import { REJECT_REASON_LABEL } from '@/types/content';
+import type { ContentDetail, ContentRejectReason } from '@/api/gen/client';
+import { REJECT_REASON_LABEL } from '@/api/gen/client';
 
 const { Text, Title, Paragraph } = Typography;
 
@@ -108,8 +108,8 @@ export default function ContentDetailDrawer({ open, contentId, onClose }: Props)
             <Space size={[16, 6]} wrap>
               <Text type="secondary">类型：<Text>{current.type}</Text></Text>
               <Text type="secondary">大小：<Text>{formatFileSize(current.file_size)}</Text></Text>
-              {current.duration > 0 && (
-                <Text type="secondary">时长：<Text>{Math.round(current.duration / 1000)}s</Text></Text>
+              {current.duration_ms > 0 && (
+                <Text type="secondary">时长：<Text>{Math.round(current.duration_ms / 1000)}s</Text></Text>
               )}
               <Text type="secondary">上传时间：<Text>{formatDate(current.created_at)}</Text></Text>
               {current.hall_name && (

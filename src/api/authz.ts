@@ -1,69 +1,101 @@
-/**
- * Authz API 封装 —— Phase 6 权限管理后台使用。
- *
- * 与后端 02-server/internal/interfaces/api/authz_handler.go 对齐。
- * 不存在的后端端点（batch / affected-users / import-from-sso）在下方做了说明并留存前端
- * 降级策略；Phase 8 后端补齐后再回来切换实现。
- */
-import type { AxiosResponse } from 'axios';
-import request from './request';
-import type { ApiResponse } from '@/types/api';
-import type {
-  RoleTemplate,
-  Grant,
-  CreateRoleTemplateBody,
-  UpdateRoleTemplateBody,
-  CopyRoleTemplateBody,
-  CreateGrantBody,
-  RevokeGrantBody,
-  ExtendGrantBody,
-  ListGrantsQuery,
-  UserAuthzView,
-  ResourceAuthzView,
-  ActionListResponse,
-  UserActionSet,
-  ExplainResult,
-  ResourceRef,
-} from '@/types/authz';
+// Phase 3-G：authz 全部 32 端点切到 OpenAPI typed client。
+//
+// `authzApi.*` 保留 AxiosResponse<ApiResponse<T>> 形态——react-query
+// `select: (res) => res.data.data` / 老 `.then(res => res.data)` 调用方零改动；
+// 内部全部代理到 `authzClient.*`（typed，剥 envelope）。
+//
+// 新调用方应直接用 `import { authzClient } from '@/api/gen/client'`。
 
-/** 列表响应包裹（后端 gin.H{"list": ...} 规约） */
+import type { AxiosResponse } from 'axios';
+import type { ApiResponse } from '@/types/api';
+import {
+  authzClient,
+  type RoleTemplate,
+  type Grant,
+  type CreateRoleTemplateRequest,
+  type UpdateRoleTemplateRequest,
+  type CopyRoleTemplateRequest,
+  type CreateGrantRequest,
+  type RevokeGrantRequest,
+  type ExtendGrantRequest,
+  type ListGrantsQuery,
+  type UserAuthzView,
+  type ResourceAuthzView,
+  type ActionListResponse,
+  type UserActionSet,
+  type ResourceRef,
+  type ExplanationResult,
+  type IDResult,
+  type ExtendGrantResult,
+  type AuditLogQueryParams,
+  type AuditLogListResponse,
+  type ReportCounts,
+  type VendorUploadCounts,
+  type GrantDistribution,
+  type GrantsExpiringReport,
+  type TemplateListResp,
+  type GrantListResp,
+} from './gen/client';
+
+// 历史命名兼容（types/authz.ts 用 *Body）—— 不再单独 re-export，调用方应直接 import 自 client
+// 但保留 type alias 让本文件方法签名继续可用。
+type CreateRoleTemplateBody = CreateRoleTemplateRequest;
+type UpdateRoleTemplateBody = UpdateRoleTemplateRequest;
+type CopyRoleTemplateBody = CopyRoleTemplateRequest;
+type CreateGrantBody = CreateGrantRequest;
+type RevokeGrantBody = RevokeGrantRequest;
+type ExtendGrantBody = ExtendGrantRequest;
+type ExplainResult = ExplanationResult;
+
 interface ListWrap<T> {
   list: T[];
+}
+
+function envelope<T>(data: T): AxiosResponse<ApiResponse<T>> {
+  return {
+    data: { code: 0, message: 'ok', data },
+    status: 200,
+    statusText: 'OK',
+    headers: {} as never,
+    config: {} as never,
+  } as AxiosResponse<ApiResponse<T>>;
 }
 
 export const authzApi = {
   /* ---------------- 角色模板 ---------------- */
 
   listTemplates(): Promise<AxiosResponse<ApiResponse<ListWrap<RoleTemplate>>>> {
-    return request.get('/api/v1/authz/role-templates');
+    return authzClient
+      .listRoleTemplates()
+      .then((r: TemplateListResp) => envelope({ list: r.list }));
   },
 
   getTemplate(id: number): Promise<AxiosResponse<ApiResponse<RoleTemplate>>> {
-    return request.get(`/api/v1/authz/role-templates/${id}`);
+    return authzClient.getRoleTemplate(id).then(envelope);
   },
 
   createTemplate(
     body: CreateRoleTemplateBody,
   ): Promise<AxiosResponse<ApiResponse<RoleTemplate>>> {
-    return request.post('/api/v1/authz/role-templates', body);
+    return authzClient.createRoleTemplate(body).then(envelope);
   },
 
   updateTemplate(
     id: number,
     body: UpdateRoleTemplateBody,
   ): Promise<AxiosResponse<ApiResponse<{ id: number }>>> {
-    return request.put(`/api/v1/authz/role-templates/${id}`, body);
+    return authzClient.updateRoleTemplate(id, body).then((r: IDResult) => envelope({ id: r.id }));
   },
 
   deleteTemplate(id: number): Promise<AxiosResponse<ApiResponse<{ id: number }>>> {
-    return request.delete(`/api/v1/authz/role-templates/${id}`);
+    return authzClient.deleteRoleTemplate(id).then((r: IDResult) => envelope({ id: r.id }));
   },
 
   copyTemplate(
     sourceId: number,
     body: CopyRoleTemplateBody,
   ): Promise<AxiosResponse<ApiResponse<RoleTemplate>>> {
-    return request.post(`/api/v1/authz/role-templates/${sourceId}/copy`, body);
+    return authzClient.copyRoleTemplate(sourceId, body).then(envelope);
   },
 
   /**
@@ -87,16 +119,15 @@ export const authzApi = {
   listGrants(
     query: ListGrantsQuery = {},
   ): Promise<AxiosResponse<ApiResponse<ListWrap<Grant>>>> {
-    return request.get('/api/v1/authz/grants', { params: query });
+    return authzClient.listGrants(query).then((r: GrantListResp) => envelope({ list: r.list }));
   },
 
   createGrant(body: CreateGrantBody): Promise<AxiosResponse<ApiResponse<Grant>>> {
-    return request.post('/api/v1/authz/grants', body);
+    return authzClient.createGrant(body).then(envelope);
   },
 
   /**
    * 批量创建：后端暂无 /grants/batch（Phase 8 可选），前端顺序调 createGrant。
-   * 返回每条的成功/失败明细，供向导预览页显示进度条。
    */
   async createGrantBatch(bodies: CreateGrantBody[]): Promise<
     Array<{ body: CreateGrantBody; ok: boolean; grant?: Grant; error?: string }>
@@ -104,8 +135,8 @@ export const authzApi = {
     const results: Array<{ body: CreateGrantBody; ok: boolean; grant?: Grant; error?: string }> = [];
     for (const body of bodies) {
       try {
-        const res = await authzApi.createGrant(body);
-        results.push({ body, ok: true, grant: res.data.data });
+        const grant = await authzClient.createGrant(body);
+        results.push({ body, ok: true, grant });
       } catch (err) {
         const msg = err instanceof Error ? err.message : '未知错误';
         results.push({ body, ok: false, error: msg });
@@ -114,46 +145,45 @@ export const authzApi = {
     return results;
   },
 
-  /** 撤销：后端 DELETE /grants/:id（可带 body.reason，允许空） */
   revokeGrant(
     id: number,
     body?: RevokeGrantBody,
   ): Promise<AxiosResponse<ApiResponse<{ id: number }>>> {
-    return request.delete(`/api/v1/authz/grants/${id}`, { data: body ?? {} });
+    return authzClient.revokeGrant(id, body).then((r: IDResult) => envelope({ id: r.id }));
   },
 
   extendGrant(
     id: number,
     body: ExtendGrantBody,
   ): Promise<AxiosResponse<ApiResponse<{ id: number; new_expires_at: string }>>> {
-    return request.post(`/api/v1/authz/grants/${id}/extend`, body);
+    return authzClient
+      .extendGrant(id, body)
+      .then((r: ExtendGrantResult) =>
+        envelope({ id: r.id, new_expires_at: r.new_expires_at as unknown as string }),
+      );
   },
 
   /* ---------------- 视图 ---------------- */
 
-  getUserAuthzView(
-    userId: number,
-  ): Promise<AxiosResponse<ApiResponse<UserAuthzView>>> {
-    return request.get(`/api/v1/authz/users/${userId}/authz-view`);
+  getUserAuthzView(userId: number): Promise<AxiosResponse<ApiResponse<UserAuthzView>>> {
+    return authzClient.getUserAuthzView(userId).then(envelope);
   },
 
   getResourceAuthzView(
     type: string,
     id: string,
   ): Promise<AxiosResponse<ApiResponse<ResourceAuthzView>>> {
-    return request.get(`/api/v1/authz/resources/${type}/${encodeURIComponent(id)}/authz-view`);
+    return authzClient.getResourceAuthzView(type, id).then(envelope);
   },
 
   /* ---------------- 元数据 ---------------- */
 
   listActions(): Promise<AxiosResponse<ApiResponse<ActionListResponse>>> {
-    return request.get('/api/v1/authz/actions');
+    return authzClient.listActions().then(envelope);
   },
 
-  /* ---------------- re-export (Phase 5b 已在 authApi) ---------------- */
-
   getMyActionSet(): Promise<AxiosResponse<ApiResponse<UserActionSet>>> {
-    return request.get('/api/v1/authz/me/action-set');
+    return authzClient.getMyActionSet().then(envelope);
   },
 
   explainPermission(
@@ -161,12 +191,7 @@ export const authzApi = {
     action: string,
     resource?: ResourceRef,
   ): Promise<AxiosResponse<ApiResponse<ExplainResult>>> {
-    const params: Record<string, string | number> = { user_id: userId, action };
-    if (resource) {
-      params.resource_type = resource.type;
-      params.resource_id = resource.id;
-    }
-    return request.get('/api/v1/authz/explain', { params });
+    return authzClient.explainPermission(userId, action, resource).then(envelope);
   },
 
   /* ---------------- Phase 11.4：审计日志查询 / 导出 ---------------- */
@@ -174,7 +199,11 @@ export const authzApi = {
   queryAuditLogs(
     params: AuditLogQueryParams,
   ): Promise<AxiosResponse<ApiResponse<AuditLogListResponse>>> {
-    return request.get('/api/v1/authz/audit-logs', { params });
+    return authzClient.queryAuditLogs(params).then(envelope);
+  },
+
+  exportAuditLogsUrl(params: AuditLogQueryParams): string {
+    return authzClient.exportAuditLogsUrl(params);
   },
 
   /* ---------------- Phase 11.7：合规报表 ---------------- */
@@ -182,105 +211,39 @@ export const authzApi = {
   reportGrantChanges(
     days = 30,
   ): Promise<AxiosResponse<ApiResponse<ReportCounts>>> {
-    return request.get('/api/v1/authz/reports/grant-changes', { params: { days } });
+    return authzClient.reportGrantChanges(days).then(envelope);
   },
 
   reportRiskyActions(
     days = 30,
   ): Promise<AxiosResponse<ApiResponse<ReportCounts>>> {
-    return request.get('/api/v1/authz/reports/risky-actions', { params: { days } });
+    return authzClient.reportRiskyActions(days).then(envelope);
   },
 
   reportVendorUploads(
     days = 30,
   ): Promise<AxiosResponse<ApiResponse<VendorUploadCounts>>> {
-    return request.get('/api/v1/authz/reports/vendor-uploads', { params: { days } });
+    return authzClient.reportVendorUploads(days).then(envelope);
   },
 
   reportGrantDistribution(): Promise<AxiosResponse<ApiResponse<GrantDistribution>>> {
-    return request.get('/api/v1/authz/reports/grant-distribution');
+    return authzClient.reportGrantDistribution().then(envelope);
   },
 
   reportGrantsExpiring(
     days = 30,
   ): Promise<AxiosResponse<ApiResponse<GrantsExpiringReport>>> {
-    return request.get('/api/v1/authz/reports/grants-expiring', { params: { days } });
-  },
-
-  exportAuditLogsUrl(params: AuditLogQueryParams): string {
-    const q = new URLSearchParams();
-    Object.entries(params).forEach(([k, v]) => {
-      if (v !== undefined && v !== null && v !== '') {
-        q.append(k, String(v));
-      }
-    });
-    return `/api/v1/authz/audit-logs/export?${q.toString()}`;
+    return authzClient.reportGrantsExpiring(days).then(envelope);
   },
 };
 
-/* ==================== Phase 11.4 类型 ==================== */
+/* ==================== Phase 11.4 类型（保留兼容） ==================== */
+// 老 AuditLogRow / DatePointInt / KeyCount / VendorUploadCounts 等已 re-export 到 client.ts；
+// 这里只保留依赖 axios 形态的命名导出。
 
-export interface AuditLogQueryParams {
-  actor_user_id?: number;
-  action_code?: string;
-  resource_type?: string;
-  resource_id?: string;
-  status?: 'success' | 'failure';
-  from?: string; // RFC3339
-  to?: string; // RFC3339
-  page_size?: number;
-  offset?: number;
-}
+export type { AuditLogRow, DatePointInt, KeyCount } from './gen/client';
 
-export interface AuditLogRow {
-  id: number;
-  occurred_at: string;
-  actor_user_id: number;
-  actor_account_type: 'internal' | 'vendor';
-  actor_ip: string;
-  action_code: string;
-  resource_type?: string;
-  resource_id?: string;
-  before_value?: unknown;
-  after_value?: unknown;
-  reason?: string;
-  request_id?: string;
-  status: 'success' | 'failure';
-  error_msg?: string;
-}
-
-export interface AuditLogListResponse {
-  list: AuditLogRow[];
-  total: number;
-  limit: number;
-  offset: number;
-  archive_used: boolean;
-}
-
-export interface DatePointInt {
-  date: string;
-  value: number;
-}
-
-export interface KeyCount {
-  key: string;
-  count: number;
-}
-
-export interface ReportCounts {
-  total: number;
-  per_day?: DatePointInt[];
-  per_kind?: KeyCount[];
-}
-
-export interface VendorUploadCounts {
-  total: number;
-  per_day: DatePointInt[];
-}
-
-export interface GrantDistribution {
-  per_template: KeyCount[];
-}
+export type { ReportCounts as AuthzReportCounts } from './gen/client';
 
 export interface GrantExpiringSummary {
   id: number;
@@ -291,7 +254,4 @@ export interface GrantExpiringSummary {
   scope_id?: string;
 }
 
-export interface GrantsExpiringReport {
-  total: number;
-  list: GrantExpiringSummary[];
-}
+export type { AuditLogQueryParams, AuditLogListResponse, GrantsExpiringReport, VendorUploadCounts, GrantDistribution } from './gen/client';

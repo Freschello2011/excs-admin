@@ -8,7 +8,7 @@ import type {
   CostTrendDTO,
   RunningStatsDTO,
   StorageCapacityDTO,
-} from '@/types/platform';
+} from '@/api/gen/client';
 
 const BUSINESS_REFRESH_MS = 5 * 60_000;
 

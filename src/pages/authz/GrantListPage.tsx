@@ -28,8 +28,8 @@ import { authzApi } from '@/api/authz';
 import { hallApi } from '@/api/hall';
 import { userApi } from '@/api/user';
 import { queryKeys } from '@/api/queryKeys';
-import type { Grant, GrantStatusType, RoleTemplate, ScopeType } from '@/types/authz';
-import type { UserListItem } from '@/types/auth';
+import type { Grant, GrantStatusType, RoleTemplate, ScopeType } from '@/api/gen/client';
+import type { UserListItem } from '@/api/gen/client';
 
 const STATUS_META: Record<GrantStatusType, { label: string; color: string }> = {
   active: { label: '生效中', color: 'green' },
@@ -103,7 +103,7 @@ export default function GrantListPage() {
   const { data: users } = useQuery({
     queryKey: queryKeys.users({ page: 1, page_size: 200 }),
     queryFn: () => userApi.getUsers({ page: 1, page_size: 200 }),
-    select: (res) => res.data.data?.list ?? [],
+    select: (res) => res.list ?? [],
   });
 
   const templateMap = useMemo(() => {
@@ -230,7 +230,7 @@ export default function GrantListPage() {
       title: '范围',
       render: (_: unknown, record) => (
         <ScopeTag
-          scopeType={record.scope_type}
+          scopeType={record.scope_type as ScopeType}
           scopeId={record.scope_id}
           hallNameMap={hallMap}
         />

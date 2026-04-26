@@ -12,7 +12,7 @@ import { Alert, Avatar, Button, Card, Descriptions, Space, Tag, Tooltip } from '
 import { InfoCircleOutlined, KeyOutlined, SettingOutlined, UserOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import AccountTypeTag from '@/components/authz/common/AccountTypeTag';
-import { resolveAccountType, type UserDetail } from '@/types/auth';
+import { resolveAccountType, type UserDetail } from '@/api/gen/client';
 
 interface Props {
   user: UserDetail;

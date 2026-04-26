@@ -1,4 +1,5 @@
-import type { PanelCard } from '@/types/panel';
+import type { PanelCard } from '@/api/gen/client';
+import { cardBinding } from '@/api/gen/client';
 import type { NameMaps } from '../PreviewPanel';
 import { PT } from '../previewTokens';
 
@@ -12,7 +13,7 @@ interface Props {
  * 对齐 mockup `.player-row .card`（演出版本省略胶片纹）。
  */
 export default function ShowCard({ card, nameMaps: _nameMaps }: Props) {
-  const showId = card.binding?.id;
+  const showId = cardBinding(card)?.id;
   const showName = showId ? `演出 #${showId}` : '—';
 
   return (

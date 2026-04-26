@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Button, Card, Result, Spin, Typography } from 'antd';
 import { redirectToSSO } from '@/api/request';
 import { vendorApi } from '@/api/vendor';
-import type { InviteInfo } from '@/types/authz';
+import type { InviteInfo } from '@/api/gen/client';
 
 const { Paragraph, Text } = Typography;
 

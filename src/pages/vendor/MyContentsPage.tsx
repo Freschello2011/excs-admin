@@ -25,8 +25,8 @@ import ContentStatusTag from '@/components/content/ContentStatusTag';
 import ContentDetailDrawer from '@/components/content/ContentDetailDrawer';
 import { useMessage } from '@/hooks/useMessage';
 import { contentApi } from '@/api/content';
-import type { ContentDetail, ContentStatus } from '@/types/content';
-import { REJECT_REASON_LABEL, type ContentRejectReason } from '@/types/content';
+import type { ContentDetail } from '@/api/gen/client';
+import { REJECT_REASON_LABEL, type ContentRejectReason } from '@/api/gen/client';
 
 const { Text, Paragraph } = Typography;
 
@@ -248,7 +248,7 @@ export default function MyContentsPage() {
                       <span key="noop" />
                     ),
                     // 删除按钮：仅 pending_accept / rejected / withdrawn 可硬删（后端 STATUS_LOCKED 兜底）
-                    (['pending_accept', 'rejected', 'withdrawn'] as ContentStatus[]).includes(status) ? (
+                    (['pending_accept', 'rejected', 'withdrawn'] as readonly string[]).includes(status) ? (
                       <Popconfirm key="del" title="删除此条？" okText="删除" okButtonProps={{ danger: true }} onConfirm={() => deleteMutation.mutate(item.id)}>
                         <Button type="link" size="small" danger>删除</Button>
                       </Popconfirm>

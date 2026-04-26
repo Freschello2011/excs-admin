@@ -16,7 +16,7 @@ import type {
   ECSHostInfo,
   PlatformDashboardResp,
   ResourceMetricResult,
-} from '@/types/platform';
+} from '@/api/gen/client';
 
 const RESOURCE_COLOR: Record<'cpu' | 'mem' | 'disk', string> = {
   cpu: '#2F9E5A',
@@ -109,7 +109,8 @@ function ResourceCard({
 }) {
   const m = result.metric;
   const color = RESOURCE_COLOR[kind];
-  const level = m?.Level ?? 'ok';
+  // gen.ResourceMetric.Level 是 free-form string；service 层填 ok/warn/danger，前端窄化给 LevelPill。
+  const level = (m?.Level as 'ok' | 'warn' | 'danger') ?? 'ok';
   const current = m?.Current ?? 0;
   const series = m?.Series24h ?? [];
   const peak = m?.PeakValue ?? 0;

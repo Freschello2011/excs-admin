@@ -11,15 +11,18 @@ import { smarthomeApi } from '@/api/smarthome';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
 import { useHallStore } from '@/stores/hallStore';
-import type { HallListItem } from '@/types/hall';
-import type { AlertDTO, AlertLevel } from '@/types/smarthome';
+import type { HallListItem } from '@/api/gen/client';
+import type { AlertDTO, AlertLevel } from '@/api/gen/client';
 
 /* ==================== 常量映射 ==================== */
 
+// 注意：service 层 alert_service.go 实际填 "P0" / "P1" / "P2"（与 value_object.go 的
+// p0_critical 等遗留常量并存但未被使用）；老前端按 p0_critical/p1_important/p2_info 解读，
+// Phase 3-F 切 typed schema 后端到端暴露此漂移，本期校正与 wire 真相对齐。
 const ALERT_LEVEL_MAP: Record<AlertLevel, { color: string; text: string }> = {
-  p0_critical: { color: 'red', text: 'P0 紧急' },
-  p1_important: { color: 'orange', text: 'P1 重要' },
-  p2_info: { color: 'blue', text: 'P2 提示' },
+  P0: { color: 'red', text: 'P0 紧急' },
+  P1: { color: 'orange', text: 'P1 重要' },
+  P2: { color: 'blue', text: 'P2 提示' },
 };
 
 const ALERT_EVENT_LABELS: Record<string, string> = {
@@ -36,9 +39,9 @@ const ALERT_EVENT_LABELS: Record<string, string> = {
 
 const ALERT_LEVEL_OPTIONS = [
   { value: '', label: '全部级别' },
-  { value: 'p0_critical', label: 'P0 紧急' },
-  { value: 'p1_important', label: 'P1 重要' },
-  { value: 'p2_info', label: 'P2 提示' },
+  { value: 'P0', label: 'P0 紧急' },
+  { value: 'P1', label: 'P1 重要' },
+  { value: 'P2', label: 'P2 提示' },
 ];
 
 const ALERT_EVENT_OPTIONS = [
@@ -101,7 +104,7 @@ export default function AlertsPage() {
         return <Tag color={cfg.color}>{cfg.text}</Tag>;
       },
       sorter: (a, b) => {
-        const order: Record<string, number> = { p0_critical: 0, p1_important: 1, p2_info: 2 };
+        const order: Record<string, number> = { P0: 0, P1: 1, P2: 2 };
         return (order[a.level] ?? 3) - (order[b.level] ?? 3);
       },
       defaultSortOrder: 'ascend',

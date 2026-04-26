@@ -5,8 +5,8 @@ import { useQuery } from '@tanstack/react-query';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
 import WidgetRenderer from '@/components/device-catalog/WidgetRenderer';
-import type { DeviceListItem, EffectiveCommand } from '@/types/hall';
-import type { SceneAction } from '@/types/command';
+import type { DeviceListItem, EffectiveCommand } from '@/api/gen/client';
+import type { SceneAction } from '@/api/gen/client';
 import type { ParamsSchemaProperty } from '@/types/deviceCatalog';
 
 interface ParamsSchemaShape {

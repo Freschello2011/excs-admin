@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ShowDetail, ShowTrack, ShowAction, SpriteSheet, TrackType } from '@/types/show';
+import type { ShowDetail, ShowTrack, ShowAction, SpriteSheet, TrackType } from '@/api/gen/client';
 
 /* ==================== Constants ==================== */
 

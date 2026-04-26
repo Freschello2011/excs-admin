@@ -27,7 +27,7 @@ import { Button, Input } from 'antd';
 import type { ButtonProps } from 'antd';
 import { useMessage } from '@/hooks/useMessage';
 import { useAuthzMetaStore } from '@/stores/authzMetaStore';
-import type { ActionDef, RiskLevel, ResourceRef } from '@/types/authz';
+import type { ActionDef, RiskLevel, ResourceRef } from '@/api/gen/client';
 
 interface RiskyActionButtonProps
   extends Omit<
@@ -56,7 +56,9 @@ const DEFAULT_REASON_MIN_LENGTH = 5;
 function riskFromRegistry(actions: ActionDef[] | null, code: string): RiskLevel {
   if (!actions) return 'info';
   const def = actions.find((a) => a.code === code);
-  return def?.risk ?? 'info';
+  // gen.ActionDef.risk 是 free-form string；service 层只填 5 种值（info/low/medium/high/critical），
+  // 前端窄化为 RiskLevel（Phase 3-G 后端 service 层未做 oneof 校验，前端兜底）。
+  return (def?.risk as RiskLevel) ?? 'info';
 }
 
 export default function RiskyActionButton({

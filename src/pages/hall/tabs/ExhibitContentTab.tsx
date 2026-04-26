@@ -11,8 +11,8 @@ import InlinePipeline from '@/components/content/InlinePipeline';
 import { contentApi } from '@/api/content';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
-import type { ExhibitContentItem } from '@/types/content';
-import type { ExhibitListItem } from '@/types/hall';
+import type { ExhibitContentItem } from '@/api/gen/client';
+import type { ExhibitListItem } from '@/api/gen/client';
 import styles from './ExhibitContentTab.module.scss';
 
 interface Props {

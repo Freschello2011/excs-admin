@@ -1,4 +1,5 @@
-import type { PanelCard } from '@/types/panel';
+import type { PanelCard } from '@/api/gen/client';
+import { cardBinding } from '@/api/gen/client';
 import type { NameMaps } from '../PreviewPanel';
 import { PT } from '../previewTokens';
 
@@ -14,7 +15,7 @@ interface Props {
  * 对齐 mockup `.overview` / `.chip` / `.chip.offline`.
  */
 export default function DeviceStatusCard({ card, nameMaps }: Props) {
-  const deviceIds = card.binding?.ids ?? [];
+  const deviceIds = cardBinding(card)?.ids ?? [];
   const devices = deviceIds.map((id, i) => ({
     id,
     name: nameMaps.device.get(id) ?? `设备 #${id}`,

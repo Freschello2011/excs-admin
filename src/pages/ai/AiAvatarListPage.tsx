@@ -14,7 +14,7 @@ import { queryKeys } from '@/api/queryKeys';
 import { useCan } from '@/lib/authz/can';
 import { useHallStore } from '@/stores/hallStore';
 import { useExhibitContextSync } from '@/hooks/useExhibitContextSync';
-import type { ExhibitListItem } from '@/types/hall';
+import type { ExhibitListItem, AiAvatarConfig } from '@/api/gen/client';
 import AiAvatarConfigPanel from './AiAvatarConfigPanel';
 
 export default function AiAvatarListPage() {
@@ -47,7 +47,7 @@ export default function AiAvatarListPage() {
   });
 
   const activateMutation = useMutation({
-    mutationFn: (exhibitId: number) => aiApi.activateAvatar(exhibitId),
+    mutationFn: (exhibitId: number) => aiApi.activateAvatar(exhibitId, selectedHallId!),
     onSuccess: () => {
       message.success('数字人已激活');
       queryClient.invalidateQueries({ queryKey: ['ai'] });
@@ -55,7 +55,7 @@ export default function AiAvatarListPage() {
   });
 
   const deactivateMutation = useMutation({
-    mutationFn: (exhibitId: number) => aiApi.deactivateAvatar(exhibitId),
+    mutationFn: (exhibitId: number) => aiApi.deactivateAvatar(exhibitId, selectedHallId!),
     onSuccess: () => {
       message.success('数字人已停用');
       queryClient.invalidateQueries({ queryKey: ['ai'] });
@@ -155,8 +155,8 @@ export default function AiAvatarListPage() {
             <Descriptions.Item label="状态"><StatusTag status={avatarDetail.status} /></Descriptions.Item>
             <Descriptions.Item label="形象模板" span={2}>{avatarDetail.template_name ?? '-'}</Descriptions.Item>
             <Descriptions.Item label="访客输入">{avatarDetail.visitor_input_enabled ? '允许' : '禁止'}</Descriptions.Item>
-            <Descriptions.Item label="语音 ID">{avatarDetail.config?.voice_id ?? '-'}</Descriptions.Item>
-            <Descriptions.Item label="语速">{avatarDetail.config?.speech_rate ?? '-'}</Descriptions.Item>
+            <Descriptions.Item label="语音 ID">{(avatarDetail.config as AiAvatarConfig | undefined)?.voice_id ?? '-'}</Descriptions.Item>
+            <Descriptions.Item label="语速">{(avatarDetail.config as AiAvatarConfig | undefined)?.speech_rate ?? '-'}</Descriptions.Item>
             <Descriptions.Item label="更新时间">{avatarDetail.updated_at}</Descriptions.Item>
             <Descriptions.Item label="开场白" span={2}>
               <div style={{ maxHeight: 100, overflow: 'auto', whiteSpace: 'pre-wrap' }}>

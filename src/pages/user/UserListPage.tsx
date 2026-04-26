@@ -11,7 +11,7 @@ import Can from '@/components/authz/Can';
 import QuickGrantDrawer, { type QuickGrantTarget } from '@/components/authz/QuickGrantDrawer';
 import { userApi } from '@/api/user';
 import { queryKeys } from '@/api/queryKeys';
-import type { UserListItem } from '@/types/auth';
+import type { UserListItem } from '@/api/gen/client';
 import ImportSupplierModal from './ImportSupplierModal';
 import dayjs from 'dayjs';
 
@@ -99,13 +99,11 @@ export default function UserListPage() {
   const { data, isLoading } = useQuery({
     queryKey: queryKeys.users(params as Record<string, unknown>),
     queryFn: () => userApi.getUsers(params),
-    select: (res) => res.data.data,
   });
 
   const syncMutation = useMutation({
     mutationFn: () => userApi.syncMDMEmployees(),
-    onSuccess: (res) => {
-      const result = res.data.data;
+    onSuccess: (result) => {
       modal.success({
         title: 'MDM 员工同步完成',
         content: `共 ${result.total} 名员工，新增 ${result.created} 人，跳过 ${result.skipped} 人，失败 ${result.failed} 人`,

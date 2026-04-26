@@ -29,8 +29,8 @@ import { useMessage } from '@/hooks/useMessage';
 import { contentApi } from '@/api/content';
 import { hallApi } from '@/api/hall';
 import { useCan } from '@/lib/authz/can';
-import type { ContentDetail, ContentRejectReason, ContentStatus } from '@/types/content';
-import type { HallListItem, ExhibitListItem } from '@/types/hall';
+import type { ContentDetail, ContentRejectReason, ContentStatus } from '@/api/gen/client';
+import type { HallListItem, ExhibitListItem } from '@/api/gen/client';
 
 interface Props {
   vendorId: number;

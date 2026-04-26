@@ -1,229 +1,202 @@
+/**
+ * Phase 2-B：content context AxiosResponse 兼容壳。
+ *
+ * 历史 react-query 调用方写：
+ *   const { data: res } = useQuery({ queryFn: () => contentApi.getContent(id) });
+ *   const detail = res.data.data;  // 第一层 axios.data，第二层 ApiResponse.data
+ *
+ * 新 typed client (`contentClient.*`) 已剥 envelope，只返 .data。为了让历史调用方零改动，
+ * 这里把每个方法包成 AxiosResponse<ApiResponse<T>>，内部 await typed call 后回填到
+ * `{ data: { code: 0, message: 'ok', data: ... } }` 的形状。
+ *
+ * 新代码请直接 import `contentClient` from '@/api/gen/client'。
+ */
 import type { AxiosResponse } from 'axios';
-import request from './request';
-import type { ApiResponse, PaginatedData } from '@/types/api';
-import type {
-  ContentListItem,
-  ContentListParams,
-  ContentDetail,
-  ContentRejectReason,
-  RequestUploadBody,
-  RequestUploadResult,
-  UploadCompleteBody,
-  UploadCompleteResult,
-  PipelineStatusResult,
-  ContentTag,
-  CreateTagBody,
-  UpdateTagBody,
-  TagSearchParams,
-  DistributionItem,
-  DistributionListParams,
-  DownloadUrlResult,
-  WatermarkBody,
-  OSSStatsResult,
-  ContentCleanupResult,
-  QueueStatus,
-  ExhibitContentItem,
-  SlideshowConfig,
-  ConfigureSlideshowBody,
-} from '@/types/content';
+import {
+  contentClient,
+  type AdminListContentsParams,
+  type CleanupResult,
+  type ConfigureSlideshowRequest,
+  type ContentDetailDTO,
+  type ContentListPage,
+  type CreateTagRequest,
+  type DistributionDTO,
+  type DownloadURLResult,
+  type ExhibitContentDTO,
+  type GetContentDistributionsParams,
+  type ListContentsParams,
+  type OSSStatsResult,
+  type PipelineStatusResult,
+  type QueueStatusResult,
+  type RejectContentRequest,
+  type RequestUploadRequest,
+  type RequestUploadResult,
+  type ResubmitContentRequest,
+  type SearchContentTagsParams,
+  type SlideshowConfig,
+  type TagDTO,
+  type UpdateTagRequest,
+  type VendorListMyContentsParams,
+  type WatermarkRequest,
+} from './gen/client';
+import type { ApiResponse } from '@/types/api';
+
+/** 把 typed Promise<T> 包成 AxiosResponse<ApiResponse<T>>（react-query select 第二层 .data 兜底）。 */
+async function asAxiosResp<T>(p: Promise<T>): Promise<AxiosResponse<ApiResponse<T>>> {
+  const data = await p;
+  return {
+    data: { code: 0, message: 'ok', data },
+    status: 200,
+    statusText: 'OK',
+    headers: {},
+    // 类型上 AxiosResponse 还要 config，调用方都是 select(res => res.data.data) 不读 config，强制 cast 安全。
+    config: {} as AxiosResponse<ApiResponse<T>>['config'],
+  };
+}
 
 export const contentApi = {
   /* ==================== Content ==================== */
 
-  /** 内容详情 */
-  getContent(contentId: number): Promise<AxiosResponse<ApiResponse<ContentDetail>>> {
-    return request.get(`/api/v1/contents/${contentId}`);
+  getContent(contentId: number) {
+    return asAxiosResp<ContentDetailDTO>(contentClient.getContent(contentId));
+  },
+  listContents(params: ListContentsParams) {
+    return asAxiosResp<ContentListPage>(contentClient.listContents(params));
+  },
+  updateContent(contentId: number, name: string) {
+    return asAxiosResp<ContentDetailDTO>(contentClient.updateContent(contentId, { name }));
+  },
+  deleteContent(contentId: number) {
+    return asAxiosResp<void>(contentClient.deleteContent(contentId));
   },
 
-  /** 内容列表 */
-  listContents(params: ContentListParams): Promise<AxiosResponse<ApiResponse<PaginatedData<ContentListItem>>>> {
-    return request.get('/api/v1/contents', { params });
-  },
+  /* ==================== Bind / Unbind ==================== */
 
-  /** 更新内容名称 */
-  updateContent(contentId: number, name: string): Promise<AxiosResponse<ApiResponse<ContentListItem>>> {
-    return request.put(`/api/v1/contents/${contentId}`, { name });
+  bindToExhibit(contentId: number, exhibitId: number) {
+    return asAxiosResp<void>(contentClient.bindToExhibit(contentId, exhibitId));
   },
-
-  /** 删除内容 */
-  deleteContent(contentId: number): Promise<AxiosResponse<ApiResponse<void>>> {
-    return request.delete(`/api/v1/contents/${contentId}`);
-  },
-
-  /** 绑定到展项 */
-  bindToExhibit(contentId: number, exhibitId: number): Promise<AxiosResponse<ApiResponse<void>>> {
-    return request.post(`/api/v1/contents/${contentId}/bind-exhibit`, { exhibit_id: exhibitId });
-  },
-
-  /** 解绑内容 */
-  unbindContent(contentId: number): Promise<AxiosResponse<ApiResponse<void>>> {
-    return request.post(`/api/v1/contents/${contentId}/unbind`);
+  unbindContent(contentId: number) {
+    return asAxiosResp<void>(contentClient.unbindContent(contentId));
   },
 
   /* ==================== Upload ==================== */
 
-  /** 获取上传凭证（按展厅） */
-  requestUpload(hallId: number, data: RequestUploadBody): Promise<AxiosResponse<ApiResponse<RequestUploadResult>>> {
-    return request.post('/api/v1/contents/upload', data, { params: { hall_id: hallId } });
+  requestUpload(hallId: number, data: RequestUploadRequest) {
+    return asAxiosResp<RequestUploadResult>(contentClient.requestUpload(hallId, data));
   },
-
-  /** 上传完成通知 */
-  uploadComplete(contentId: number, data: UploadCompleteBody): Promise<AxiosResponse<ApiResponse<UploadCompleteResult>>> {
-    return request.post(`/api/v1/contents/${contentId}/upload-complete`, data);
+  uploadComplete(contentId: number, data: { content_id: number }) {
+    return asAxiosResp(contentClient.uploadComplete(contentId, data));
   },
 
   /* ==================== Pipeline ==================== */
 
-  /** 流水线状态 */
-  getPipelineStatus(contentId: number): Promise<AxiosResponse<ApiResponse<PipelineStatusResult>>> {
-    return request.get(`/api/v1/contents/${contentId}/pipeline-status`);
+  getPipelineStatus(contentId: number) {
+    return asAxiosResp<PipelineStatusResult>(contentClient.getPipelineStatus(contentId));
   },
 
   /* ==================== Tags ==================== */
 
-  /** 搜索标签（全文检索） */
-  searchTags(params: TagSearchParams): Promise<AxiosResponse<ApiResponse<ContentTag[]>>> {
-    return request.get('/api/v1/content-tags', { params });
+  searchTags(params: SearchContentTagsParams) {
+    return asAxiosResp<TagDTO[]>(contentClient.searchTags(params));
+  },
+  getContentTags(contentId: number) {
+    return asAxiosResp<TagDTO[]>(contentClient.getContentTags(contentId));
+  },
+  createTag(contentId: number, data: CreateTagRequest) {
+    return asAxiosResp<TagDTO>(contentClient.createTag(contentId, data));
+  },
+  updateTag(tagId: number, data: UpdateTagRequest) {
+    return asAxiosResp<TagDTO>(contentClient.updateTag(tagId, data));
+  },
+  deleteTag(tagId: number) {
+    return asAxiosResp<void>(contentClient.deleteTag(tagId));
+  },
+  retag(contentId: number) {
+    return asAxiosResp<void>(contentClient.retag(contentId));
   },
 
-  /** 内容标签列表 */
-  getContentTags(contentId: number): Promise<AxiosResponse<ApiResponse<ContentTag[]>>> {
-    return request.get(`/api/v1/contents/${contentId}/tags`);
+  /* ==================== Distribution / Download / Watermark ==================== */
+
+  getDistributions(params: GetContentDistributionsParams) {
+    return asAxiosResp<DistributionDTO[]>(contentClient.getDistributions(params));
+  },
+  getDownloadUrl(contentId: number) {
+    return asAxiosResp<DownloadURLResult>(contentClient.getDownloadUrl(contentId));
+  },
+  setWatermark(contentId: number, data: WatermarkRequest) {
+    return asAxiosResp<void>(contentClient.setWatermark(contentId, data));
   },
 
-  /** 创建标签 */
-  createTag(contentId: number, data: CreateTagBody): Promise<AxiosResponse<ApiResponse<ContentTag>>> {
-    return request.post(`/api/v1/contents/${contentId}/tags`, data);
+  /* ==================== OSS Stats / Cleanup / Queue ==================== */
+
+  getOSSStats(hallId: number) {
+    return asAxiosResp<OSSStatsResult>(contentClient.getOSSStats(hallId));
+  },
+  triggerCleanup(hallId: number) {
+    return asAxiosResp<CleanupResult>(contentClient.triggerCleanup(hallId));
+  },
+  getQueueStatus() {
+    return asAxiosResp<QueueStatusResult>(contentClient.getQueueStatus());
   },
 
-  /** 更新标签 */
-  updateTag(tagId: number, data: UpdateTagBody): Promise<AxiosResponse<ApiResponse<ContentTag>>> {
-    return request.put(`/api/v1/content-tags/${tagId}`, data);
+  /* ==================== Exhibit Content / Unbound ==================== */
+
+  getExhibitContent(exhibitId: number) {
+    return asAxiosResp<ExhibitContentDTO[]>(contentClient.getExhibitContent(exhibitId));
   },
-
-  /** 删除标签 */
-  deleteTag(tagId: number): Promise<AxiosResponse<ApiResponse<void>>> {
-    return request.delete(`/api/v1/content-tags/${tagId}`);
+  uploadToExhibit(exhibitId: number, data: { filename: string; content_type: string; file_size: number }) {
+    return asAxiosResp<RequestUploadResult>(contentClient.uploadToExhibit(exhibitId, data));
   },
-
-  /** 重新触发 AI 标签 */
-  retag(contentId: number): Promise<AxiosResponse<ApiResponse<void>>> {
-    return request.post(`/api/v1/contents/${contentId}/retag`);
-  },
-
-  /* ==================== Distribution ==================== */
-
-  /** 分发状态查询 */
-  getDistributions(params: DistributionListParams): Promise<AxiosResponse<ApiResponse<DistributionItem[]>>> {
-    return request.get('/api/v1/content-distributions', { params });
-  },
-
-  /** 获取离线分发下载链接 */
-  getDownloadUrl(contentId: number): Promise<AxiosResponse<ApiResponse<DownloadUrlResult>>> {
-    return request.get(`/api/v1/contents/${contentId}/download-url`);
-  },
-
-  /** 设置水印标记 */
-  setWatermark(contentId: number, data: WatermarkBody): Promise<AxiosResponse<ApiResponse<void>>> {
-    return request.put(`/api/v1/contents/${contentId}/watermark`, data);
-  },
-
-  /* ==================== OSS Stats ==================== */
-
-  /** OSS 存储统计 */
-  getOSSStats(hallId: number): Promise<AxiosResponse<ApiResponse<OSSStatsResult>>> {
-    return request.get(`/api/v1/halls/${hallId}/oss-stats`);
-  },
-
-  /** 触发过期内容清理 */
-  triggerCleanup(hallId: number): Promise<AxiosResponse<ApiResponse<ContentCleanupResult>>> {
-    return request.post(`/api/v1/halls/${hallId}/content-cleanup`);
-  },
-
-  /* ==================== Queue Status ==================== */
-
-  /** 队列状态 */
-  getQueueStatus(): Promise<AxiosResponse<ApiResponse<QueueStatus>>> {
-    return request.get('/api/v1/content-pipeline/queue-status');
-  },
-
-  /* ==================== Exhibit Content ==================== */
-
-  /** 展项级内容列表 */
-  getExhibitContent(exhibitId: number): Promise<AxiosResponse<ApiResponse<ExhibitContentItem[]>>> {
-    return request.get(`/api/v1/exhibits/${exhibitId}/content`);
-  },
-
-  /** 上传到展项 */
-  uploadToExhibit(exhibitId: number, data: { filename: string; content_type: string; file_size: number }): Promise<AxiosResponse<ApiResponse<RequestUploadResult>>> {
-    return request.post(`/api/v1/exhibits/${exhibitId}/upload`, data);
-  },
-
-  /** 展厅未绑定内容 */
-  getUnboundContent(hallId: number): Promise<AxiosResponse<ApiResponse<ExhibitContentItem[]>>> {
-    return request.get(`/api/v1/halls/${hallId}/unbound-contents`);
+  getUnboundContent(hallId: number) {
+    return asAxiosResp<ExhibitContentDTO[]>(contentClient.getUnboundContent(hallId));
   },
 
   /* ==================== Slideshow ==================== */
 
-  /** 获取图文汇报配置 */
-  getSlideshowConfig(exhibitId: number): Promise<AxiosResponse<ApiResponse<SlideshowConfig | null>>> {
-    return request.get(`/api/v1/exhibits/${exhibitId}/slideshow`);
+  getSlideshowConfig(exhibitId: number) {
+    return asAxiosResp<SlideshowConfig | null>(contentClient.getSlideshowConfig(exhibitId));
+  },
+  configureSlideshow(exhibitId: number, data: ConfigureSlideshowRequest) {
+    return asAxiosResp<SlideshowConfig>(contentClient.configureSlideshow(exhibitId, data));
+  },
+  deleteSlideshow(exhibitId: number) {
+    return asAxiosResp<null>(contentClient.deleteSlideshow(exhibitId));
   },
 
-  /** 配置图文汇报 */
-  configureSlideshow(exhibitId: number, data: ConfigureSlideshowBody): Promise<AxiosResponse<ApiResponse<SlideshowConfig>>> {
-    return request.put(`/api/v1/exhibits/${exhibitId}/slideshow`, data);
+  /* ==================== Phase 10 — 内容生命周期 ==================== */
+
+  rejectContent(contentId: number, body: RejectContentRequest) {
+    return asAxiosResp<null>(contentClient.rejectContent(contentId, body));
+  },
+  withdrawContent(contentId: number) {
+    return asAxiosResp<null>(contentClient.withdrawContent(contentId));
+  },
+  adminListContents(params: AdminListContentsParams) {
+    return asAxiosResp<ContentListPage>(contentClient.adminListContents(params));
   },
 
-  /** 删除图文汇报配置 */
-  deleteSlideshow(exhibitId: number): Promise<AxiosResponse<ApiResponse<null>>> {
-    return request.delete(`/api/v1/exhibits/${exhibitId}/slideshow`);
-  },
+  /* ==================== Phase 12 — 版本链 ==================== */
 
-  /* ==================== Phase 10 — 内容生命周期（驳回 / 撤回 / 未绑定池） ==================== */
-
-  /** 管理员驳回内容（status pending_accept → rejected） */
-  rejectContent(contentId: number, body: { reasons: ContentRejectReason[]; note: string }): Promise<AxiosResponse<ApiResponse<null>>> {
-    return request.post(`/api/v1/contents/${contentId}/reject`, body);
-  },
-
-  /** 供应商撤回自己的 pending_accept 内容 */
-  withdrawContent(contentId: number): Promise<AxiosResponse<ApiResponse<null>>> {
-    return request.post(`/api/v1/contents/${contentId}/withdraw`);
-  },
-
-  /** 管理员"仅未绑定"Tab 用：支持 status / vendor_ids / hall_id 多维过滤 */
-  adminListContents(params: {
-    status?: string;
-    vendor_ids?: string;
-    hall_id?: number;
-    types?: string;
-    page?: number;
-    page_size?: number;
-  }): Promise<AxiosResponse<ApiResponse<{ list: ContentDetail[]; total: number; page: number; page_size: number }>>> {
-    return request.get('/api/v1/admin/contents', { params });
-  },
-
-  /** Phase 12：内容版本链（按"新→旧"DESC，含传入 contentID 自身） */
-  getVersionChain(contentId: number): Promise<AxiosResponse<ApiResponse<ContentDetail[]>>> {
-    return request.get(`/api/v1/contents/${contentId}/versions`);
+  getVersionChain(contentId: number) {
+    return asAxiosResp<ContentDetailDTO[]>(contentClient.getVersionChain(contentId));
   },
 
   /* ==================== Phase 10 — 供应商工作台 ==================== */
 
-  /** 供应商："我的内容" 列表（后端自动按 caller.vendor_id 过滤） */
-  vendorListMyContents(params?: { status?: string; page?: number; page_size?: number }): Promise<AxiosResponse<ApiResponse<{ list: ContentDetail[]; total: number; page: number; page_size: number }>>> {
-    return request.get('/api/v1/vendor/my-contents', { params });
+  vendorListMyContents(params?: VendorListMyContentsParams) {
+    return asAxiosResp<ContentListPage>(contentClient.vendorListMyContents(params));
+  },
+  vendorRequestUpload(body: RequestUploadRequest) {
+    return asAxiosResp<RequestUploadResult>(contentClient.vendorRequestUpload(body));
+  },
+  vendorResubmit(parentContentId: number, body: ResubmitContentRequest) {
+    return asAxiosResp<RequestUploadResult>(contentClient.vendorResubmit(parentContentId, body));
   },
 
-  /** 供应商：获取上传凭证（hall_id 从 caller.vendor_id 推导，不需前端传） */
-  vendorRequestUpload(body: RequestUploadBody): Promise<AxiosResponse<ApiResponse<RequestUploadResult>>> {
-    return request.post('/api/v1/vendor/contents/upload', body);
-  },
+  /* ==================== Bind alias used by RejectContentModal flow ==================== */
 
-  /** 供应商：基于被驳回的内容提交新版本（返回新版本的上传凭证） */
-  vendorResubmit(parentContentId: number, body: RequestUploadBody): Promise<AxiosResponse<ApiResponse<RequestUploadResult>>> {
-    return request.post(`/api/v1/vendor/contents/${parentContentId}/resubmit`, body);
-  },
+  /** 兼容老接口；reject 后管理员可继续点 bind。 */
 };
+
+/** 历史命名兼容（少数文件直接 import default 而非 named）—— 不预期，但留接口。 */
+export default contentApi;

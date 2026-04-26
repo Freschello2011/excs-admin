@@ -50,7 +50,6 @@ export default function UserDetailPage() {
   const { data: user, isLoading } = useQuery({
     queryKey: queryKeys.userDetail(id),
     queryFn: () => userApi.getUser(id),
-    select: (res) => res.data.data,
     enabled: !!id,
   });
 

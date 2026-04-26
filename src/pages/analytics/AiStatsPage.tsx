@@ -8,7 +8,7 @@ import { useHallStore } from '@/stores/hallStore';
 import { analyticsApi } from '@/api/analytics';
 import { queryKeys } from '@/api/queryKeys';
 import { useThemeTokens } from '@/hooks/useThemeTokens';
-import type { AiInteractionDailyStat, AiKeywordStat } from '@/types/analytics';
+import type { AiInteractionDailyStat, AiKeywordStat } from '@/api/gen/client';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 

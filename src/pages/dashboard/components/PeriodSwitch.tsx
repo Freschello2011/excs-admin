@@ -1,5 +1,5 @@
 import styles from '../DashboardPage.module.scss';
-import type { BusinessPeriod } from '@/types/platform';
+import type { BusinessPeriod } from '@/api/gen/client';
 
 interface PeriodSwitchProps {
   value: BusinessPeriod;

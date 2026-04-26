@@ -24,9 +24,9 @@ import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
 import { useAuthStore } from '@/stores/authStore';
 import { useMessage } from '@/hooks/useMessage';
-import type { OssObjectDTO } from '@/types/analytics';
-import type { HallListItem } from '@/types/hall';
-import type { NASArchiveListItem, NASArchiveListParams, NASSyncStatus } from '@/types/nas';
+import type { OssObjectDTO } from '@/api/gen/client';
+import type { HallListItem } from '@/api/gen/client';
+import type { NASArchiveListItem, NASArchiveListParams, NASSyncStatus } from '@/api/gen/client';
 
 function formatSize(bytes: number): string {
   if (!bytes || bytes <= 0) return '0 B';

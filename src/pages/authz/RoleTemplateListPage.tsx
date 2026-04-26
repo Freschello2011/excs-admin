@@ -9,7 +9,7 @@ import PageHeader from '@/components/common/PageHeader';
 import { useMessage } from '@/hooks/useMessage';
 import Can from '@/components/authz/Can';
 import { authzApi } from '@/api/authz';
-import type { RoleTemplate, CopyRoleTemplateBody } from '@/types/authz';
+import type { RoleTemplate, CopyRoleTemplateBody } from '@/api/gen/client';
 
 const queryKey = ['authz', 'role-templates'];
 

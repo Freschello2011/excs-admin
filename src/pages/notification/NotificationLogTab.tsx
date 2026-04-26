@@ -5,7 +5,7 @@ import type { TableColumnsType } from 'antd';
 import { notificationApi } from '@/api/notification';
 import { queryKeys } from '@/api/queryKeys';
 import { useHallStore } from '@/stores/hallStore';
-import type { NotificationLogItem } from '@/types/notification';
+import type { NotificationLogItem } from '@/api/gen/client';
 import dayjs from 'dayjs';
 
 const EVENT_TYPE_OPTIONS = [

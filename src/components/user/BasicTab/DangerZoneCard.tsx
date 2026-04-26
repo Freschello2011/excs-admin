@@ -18,7 +18,7 @@ import RiskyActionButton from '@/components/authz/RiskyActionButton';
 import Can from '@/components/authz/Can';
 import { userApi } from '@/api/user';
 import { useMessage } from '@/hooks/useMessage';
-import type { UserDetail } from '@/types/auth';
+import type { UserDetail } from '@/api/gen/client';
 
 interface Props {
   user: UserDetail;

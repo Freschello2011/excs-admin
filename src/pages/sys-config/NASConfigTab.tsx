@@ -26,7 +26,7 @@ import { sysConfigApi } from '@/api/sysConfig';
 import { nasArchiveApi } from '@/api/nasArchive';
 import { queryKeys } from '@/api/queryKeys';
 import { useMessage } from '@/hooks/useMessage';
-import type { ConfigItem } from '@/types/sysConfig';
+import type { ConfigItem } from '@/api/gen/client';
 
 const { Paragraph, Text } = Typography;
 

@@ -1,4 +1,4 @@
-import type { PanelSection, PanelCard } from '@/types/panel';
+import type { PanelSection, PanelCard } from '@/api/gen/client';
 import type { NameMaps } from './PreviewPanel';
 import { PT } from './previewTokens';
 import PreviewCard from './PreviewCard';
@@ -255,6 +255,7 @@ function buildLayoutRows(cards: PanelCard[]): LayoutRow[] {
 
     switch (card.card_type) {
       case 'scene_group':
+      case 'device_command':
       case 'device_status':
       case 'smarthome_status' as string:
         rows.push({ type: 'full', cards: [card] });

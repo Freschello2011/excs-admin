@@ -21,8 +21,8 @@ import { showApi } from '@/api/show';
 import { contentApi } from '@/api/content';
 import { queryKeys } from '@/api/queryKeys';
 import { useTimelineStore } from '@/stores/timelineStore';
-import type { ShowAction, TrackType, SaveTimelineBody } from '@/types/show';
-import type { ContentListItem } from '@/types/content';
+import type { ShowAction, TrackType, SaveTimelineBody } from '@/api/gen/client';
+import type { ContentListItem } from '@/api/gen/client';
 import {
   TimeRuler, SpriteStrip, WaveformStrip, PlaybackCursor,
   TrackArea, PropertyPanel, VideoPreview,
@@ -181,7 +181,7 @@ export default function ShowTimelinePage() {
           name: data.content.name,
           action_type: 'media',
           start_time_ms: dropTimeMs,
-          duration_ms: data.content.duration > 0 ? data.content.duration : 5000,
+          duration_ms: data.content.duration_ms > 0 ? data.content.duration_ms : 5000,
           command: String(data.content.id),
           params: {},
         };
@@ -230,8 +230,8 @@ export default function ShowTimelinePage() {
     enabled: !!show?.hall_id,
   });
   const videoOptions = (videoContents ?? []).map((c: ContentListItem) => {
-    const dur = c.duration > 0 ? ` (${Math.floor(c.duration / 60000)}:${String(Math.floor((c.duration % 60000) / 1000)).padStart(2, '0')})` : '';
-    return { value: c.id, label: `${c.name}${dur}`, duration: c.duration };
+    const dur = c.duration_ms > 0 ? ` (${Math.floor(c.duration_ms / 60000)}:${String(Math.floor((c.duration_ms % 60000) / 1000)).padStart(2, '0')})` : '';
+    return { value: c.id, label: `${c.name}${dur}`, duration: c.duration_ms };
   });
 
   const updateShowMutation = useMutation({

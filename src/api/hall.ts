@@ -1,231 +1,336 @@
+/**
+ * Phase 2-C：api/hall.ts 重写为 AxiosResponse 兼容壳，背后代理到 typed
+ * `hallClient`（src/api/gen/client.ts）。
+ *
+ * 设计原则（沿用 Phase 2-B content.ts 模板）：
+ *   - **零调用方改动**：所有 `hallApi.xxx().then(res => res.data.data)` 老调用继续工作
+ *     （保留 AxiosResponse<ApiResponse<T>> 的形状）。
+ *   - **新代码直接走 hallClient**：拿到剥 envelope 后的 typed 对象。
+ *   - **类型从 `@/api/gen/client` 单源派生**：types/hall.ts 删除后，调用方 import
+ *     批量改到这里。
+ */
+
 import type { AxiosResponse } from 'axios';
-import request from './request';
-import type { ApiResponse, PaginatedData } from '@/types/api';
 import type {
-  HallListItem,
-  HallListParams,
-  HallDetail,
-  HallConfigBody,
-  ServicePeriodBody,
-  HallRuntimeStatus,
-  SyncMdmBody,
-  SyncMdmResult,
-  ExhibitListItem,
-  ExhibitBody,
-  ExhibitScript,
-  DeviceListItem,
-  DeviceListParams,
-  DeviceBody,
-  EffectiveCommand,
-  AppInstanceListItem,
-  SwitchMasterBody,
-  PairingCodeListItem,
-  BatchGenerateResult,
-  ExportPairingCodeItem,
-  GeneratePairingCodeBody,
-  ControlAppSessionItem,
-  SwitchControlHallBody,
   AnnouncedDevice,
-} from '@/types/hall';
+  AppInstanceListItem,
+  BatchGenerateResult,
+  ControlAppSessionItem,
+  CreateDeviceRequest,
+  CreateExhibitRequest,
+  CreateHallViaMdmRequest,
+  DeviceDTO,
+  DeviceListItem,
+  EffectiveCommand,
+  ElectionResultDTO,
+  ExhibitDTO,
+  ExhibitListItem,
+  ExhibitScript,
+  ExportPairingCodeItem,
+  ExtendDebugInstanceRequest,
+  GenerateDebugPairingCodeRequest,
+  GeneratePairingCodeBody,
+  HallConfigBody,
+  HallDetail,
+  HallListItem,
+  HallListPage,
+  HallMasterStatusDTO,
+  HallRuntimeStatus,
+  ListDevicesParams,
+  ListHallsParams,
+  ListPairingCodesParams,
+  MdmCustomer,
+  PairAnnouncedRequest,
+  PairingCodeListItem,
+  ServicePeriodBody,
+  SwitchControlHallBody,
+  SyncMdmBody,
+  SyncMdmResultLegacy,
+  UpdateDeviceRequest,
+  UpdateExhibitRequest,
+  UpdateHallMasterPriorityRequest,
+} from './gen/client';
+import { hallClient } from './gen/client';
+
+type ApiResponse<T> = {
+  code: number;
+  message: string;
+  data: T;
+};
+
+type PaginatedData<T> = {
+  list: T[];
+  total: number;
+  page: number;
+  page_size: number;
+};
+
+/**
+ * 把 typed `hallClient.xxx()` 的 Promise<T>（已剥 envelope）反向包装回
+ * AxiosResponse<ApiResponse<T>>，给老调用方保留 res.data / res.data.data 写法。
+ */
+async function asAxiosResp<T>(p: Promise<T>): Promise<AxiosResponse<ApiResponse<T>>> {
+  const data = await p;
+  return {
+    data: { code: 0, message: 'ok', data },
+    status: 200,
+    statusText: 'OK',
+    headers: {},
+    config: {} as never,
+  } as AxiosResponse<ApiResponse<T>>;
+}
 
 export const hallApi = {
   /* ==================== Hall ==================== */
 
-  /** 1. 从 MDM 同步展厅数据 */
-  syncMdm(data?: SyncMdmBody): Promise<AxiosResponse<ApiResponse<SyncMdmResult>>> {
-    return request.post('/api/v1/halls/sync-mdm', data || {});
+  syncMdm(data?: SyncMdmBody): Promise<AxiosResponse<ApiResponse<SyncMdmResultLegacy>>> {
+    return asAxiosResp(hallClient.syncFromMdm(data ?? {}));
   },
 
-  /** 1b. 通过 MDM 创建展厅（数据写回 MDM + 本地同步） */
-  createHallViaMdm(data: {
-    showroom_name: string;
-    customer_id: number;
-    contact_id?: number;
-    address?: string;
-    available_from?: string;
-    available_to?: string;
-    remark?: string;
-  }): Promise<AxiosResponse<ApiResponse<HallListItem>>> {
-    return request.post('/api/v1/halls/create-via-mdm', data);
+  createHallViaMdm(data: CreateHallViaMdmRequest): Promise<AxiosResponse<ApiResponse<HallDetail>>> {
+    return asAxiosResp(hallClient.createViaMdm(data));
   },
 
-  /** 1c. 获取 MDM 客户列表（代理） */
-  getMdmCustomers(): Promise<AxiosResponse<ApiResponse<{ list: Array<{ id: number; company_name: string; short_name: string }>; total: number }>>> {
-    return request.get('/api/v1/mdm-proxy/customers');
+  getMdmCustomers(): Promise<AxiosResponse<ApiResponse<MdmCustomer[]>>> {
+    return asAxiosResp(hallClient.getMdmCustomers());
   },
 
-  /** 2. 展厅列表 */
-  getHalls(params: HallListParams): Promise<AxiosResponse<ApiResponse<PaginatedData<HallListItem>>>> {
-    return request.get('/api/v1/halls', { params });
+  getHalls(params: ListHallsParams): Promise<AxiosResponse<ApiResponse<PaginatedData<HallListItem>>>> {
+    return asAxiosResp(
+      hallClient.listHalls(params).then<PaginatedData<HallListItem>>((p: HallListPage) => ({
+        list: p.list,
+        total: p.total,
+        page: p.page,
+        page_size: p.page_size,
+      })),
+    );
   },
 
-  /** 3. 展厅详情 */
   getHall(hallId: number): Promise<AxiosResponse<ApiResponse<HallDetail>>> {
-    return request.get(`/api/v1/halls/${hallId}`);
+    return asAxiosResp(hallClient.getHall(hallId));
   },
 
-  /** 4. 更新展厅配置 */
   updateHallConfig(hallId: number, data: HallConfigBody): Promise<AxiosResponse<ApiResponse<void>>> {
-    return request.put(`/api/v1/halls/${hallId}/config`, data);
+    return asAxiosResp(hallClient.updateHallConfig(hallId, data));
   },
 
-  /** 5. 更新服务期 */
-  updateServicePeriod(hallId: number, data: ServicePeriodBody): Promise<AxiosResponse<ApiResponse<void>>> {
-    return request.put(`/api/v1/halls/${hallId}/service-period`, data);
+  updateServicePeriod(
+    hallId: number,
+    data: ServicePeriodBody,
+  ): Promise<AxiosResponse<ApiResponse<void>>> {
+    return asAxiosResp(hallClient.updateServicePeriod(hallId, data));
   },
 
-  /** 6. 展厅运行状态 */
   getHallStatus(hallId: number): Promise<AxiosResponse<ApiResponse<HallRuntimeStatus>>> {
-    return request.get(`/api/v1/halls/${hallId}/status`);
+    return asAxiosResp(hallClient.getHallStatus(hallId));
   },
 
   /* ==================== Exhibit ==================== */
 
-  /** 7. 创建展项 */
-  createExhibit(hallId: number, data: ExhibitBody): Promise<AxiosResponse<ApiResponse<ExhibitListItem>>> {
-    return request.post(`/api/v1/halls/${hallId}/exhibits`, data);
+  createExhibit(
+    hallId: number,
+    data: CreateExhibitRequest,
+  ): Promise<AxiosResponse<ApiResponse<ExhibitDTO>>> {
+    return asAxiosResp(hallClient.createExhibit(hallId, data));
   },
 
-  /** 8. 更新展项 */
-  updateExhibit(hallId: number, exhibitId: number, data: Partial<ExhibitBody>): Promise<AxiosResponse<ApiResponse<ExhibitListItem>>> {
-    return request.put(`/api/v1/halls/${hallId}/exhibits/${exhibitId}`, data);
+  updateExhibit(
+    hallId: number,
+    exhibitId: number,
+    data: UpdateExhibitRequest,
+  ): Promise<AxiosResponse<ApiResponse<ExhibitDTO>>> {
+    return asAxiosResp(hallClient.updateExhibit(hallId, exhibitId, data));
   },
 
-  /** 9. 删除展项 */
   deleteExhibit(hallId: number, exhibitId: number): Promise<AxiosResponse<ApiResponse<void>>> {
-    return request.delete(`/api/v1/halls/${hallId}/exhibits/${exhibitId}`);
+    return asAxiosResp(hallClient.deleteExhibit(hallId, exhibitId));
   },
 
-  /** 10. 展项列表 */
   getExhibits(hallId: number): Promise<AxiosResponse<ApiResponse<ExhibitListItem[]>>> {
-    return request.get(`/api/v1/halls/${hallId}/exhibits`);
+    return asAxiosResp(hallClient.listExhibits(hallId));
   },
 
-  /** 11. 更新讲解词 */
-  updateExhibitScripts(hallId: number, exhibitId: number, scripts: ExhibitScript[]): Promise<AxiosResponse<ApiResponse<void>>> {
-    return request.put(`/api/v1/halls/${hallId}/exhibits/${exhibitId}/scripts`, { scripts });
+  updateExhibitScripts(
+    hallId: number,
+    exhibitId: number,
+    scripts: ExhibitScript[],
+  ): Promise<AxiosResponse<ApiResponse<void>>> {
+    return asAxiosResp(hallClient.updateExhibitScripts(hallId, exhibitId, scripts));
   },
 
-  /** 11a. 获取讲解词 */
-  getExhibitScripts(hallId: number, exhibitId: number): Promise<AxiosResponse<ApiResponse<ExhibitScript[]>>> {
-    return request.get(`/api/v1/halls/${hallId}/exhibits/${exhibitId}/scripts`);
+  getExhibitScripts(
+    hallId: number,
+    exhibitId: number,
+  ): Promise<AxiosResponse<ApiResponse<ExhibitScript[]>>> {
+    return asAxiosResp(hallClient.getExhibitScripts(hallId, exhibitId));
   },
 
   /* ==================== Device ==================== */
 
-  /** 12. 创建设备 */
-  createDevice(data: DeviceBody): Promise<AxiosResponse<ApiResponse<DeviceListItem>>> {
-    return request.post('/api/v1/devices', data);
+  createDevice(data: CreateDeviceRequest): Promise<AxiosResponse<ApiResponse<DeviceListItem>>> {
+    return asAxiosResp(hallClient.createDevice(data));
   },
 
-  /** 13. 更新设备 */
-  updateDevice(deviceId: number, data: Partial<DeviceBody>): Promise<AxiosResponse<ApiResponse<DeviceListItem>>> {
-    return request.put(`/api/v1/devices/${deviceId}`, data);
+  updateDevice(
+    deviceId: number,
+    data: UpdateDeviceRequest,
+  ): Promise<AxiosResponse<ApiResponse<DeviceListItem>>> {
+    return asAxiosResp(hallClient.updateDevice(deviceId, data));
   },
 
-  /** 14. 删除设备 */
   deleteDevice(deviceId: number): Promise<AxiosResponse<ApiResponse<void>>> {
-    return request.delete(`/api/v1/devices/${deviceId}`);
+    return asAxiosResp(hallClient.deleteDevice(deviceId));
   },
 
-  /** 15. 设备列表 */
-  getDevices(params: DeviceListParams): Promise<AxiosResponse<ApiResponse<DeviceListItem[]>>> {
-    return request.get('/api/v1/devices', { params });
+  getDevices(params: ListDevicesParams): Promise<AxiosResponse<ApiResponse<DeviceDTO[]>>> {
+    return asAxiosResp(hallClient.listDevices(params));
   },
 
-  /** 16. 设备有效命令（模板+覆盖合并） */
   getEffectiveCommands(deviceId: number): Promise<AxiosResponse<ApiResponse<EffectiveCommand[]>>> {
-    return request.get(`/api/v1/devices/${deviceId}/effective-commands`);
+    return asAxiosResp(hallClient.getEffectiveCommands(deviceId));
   },
 
   /* ==================== App Instance ==================== */
 
-  /** 16. App 实例列表 */
   getAppInstances(hallId: number): Promise<AxiosResponse<ApiResponse<AppInstanceListItem[]>>> {
-    return request.get(`/api/v1/halls/${hallId}/app-instances`);
+    return asAxiosResp(hallClient.listAppInstances(hallId));
   },
 
-  /** 17. 解绑 App 实例 */
-  unpairAppInstance(hallId: number, instanceId: number): Promise<AxiosResponse<ApiResponse<void>>> {
-    return request.delete(`/api/v1/halls/${hallId}/app-instances/${instanceId}`);
+  unpairAppInstance(
+    hallId: number,
+    instanceId: number,
+  ): Promise<AxiosResponse<ApiResponse<void>>> {
+    return asAxiosResp(hallClient.unpairAppInstance(hallId, instanceId));
   },
 
-  /** 18. 切换主控实例 */
-  switchMaster(hallId: number, data: SwitchMasterBody): Promise<AxiosResponse<ApiResponse<void>>> {
-    return request.post(`/api/v1/halls/${hallId}/switch-master`, data);
+  /* ==================== hall_master 选举 v2（hall.md §1.5）====================
+   * 高风险：action=hall.switch_master RequireReason=true。reason ≥ 5 字必填。
+   */
+
+  updateHallMasterPriority(
+    hallId: number,
+    data: UpdateHallMasterPriorityRequest,
+    reason?: string,
+  ): Promise<AxiosResponse<ApiResponse<void>>> {
+    return asAxiosResp(hallClient.updateHallMasterPriority(hallId, data, reason));
   },
 
-  /* ==================== Pairing Code ==================== */
-
-  /** 19. 生成配对码 */
-  generatePairingCode(hallId: number, data: GeneratePairingCodeBody): Promise<AxiosResponse<ApiResponse<PairingCodeListItem>>> {
-    return request.post(`/api/v1/halls/${hallId}/pairing-codes`, data);
+  getHallMasterStatus(
+    hallId: number,
+  ): Promise<AxiosResponse<ApiResponse<HallMasterStatusDTO>>> {
+    return asAxiosResp(hallClient.getHallMasterStatus(hallId));
   },
 
-  /** 20. 批量生成配对码 */
-  batchGeneratePairingCodes(hallId: number): Promise<AxiosResponse<ApiResponse<BatchGenerateResult>>> {
-    return request.post(`/api/v1/halls/${hallId}/pairing-codes/batch`);
+  electHallMaster(
+    hallId: number,
+    reason?: string,
+  ): Promise<AxiosResponse<ApiResponse<ElectionResultDTO>>> {
+    return asAxiosResp(hallClient.electHallMaster(hallId, reason));
   },
 
-  /** 21. 重新生成配对码 */
-  regeneratePairingCode(hallId: number, codeId: number): Promise<AxiosResponse<ApiResponse<PairingCodeListItem>>> {
-    return request.post(`/api/v1/halls/${hallId}/pairing-codes/${codeId}/regenerate`);
+  /* ==================== Pairing Code ====================
+   * pairing.manage / pairing.debug 标了 RequireReason: true（critical action）。
+   * 后端 middleware 会拒绝缺 reason 的请求（HTTP 400 + reason_required）。
+   * reason 通过 hallClient 第三参数注入 X-Action-Reason header。
+   */
+
+  generatePairingCode(
+    hallId: number,
+    data: GeneratePairingCodeBody,
+    reason?: string,
+  ): Promise<AxiosResponse<ApiResponse<PairingCodeListItem>>> {
+    return asAxiosResp(hallClient.generatePairingCode(hallId, data, reason));
   },
 
-  /** 22. 解锁配对码 */
-  unlockPairingCode(hallId: number, codeId: number): Promise<AxiosResponse<ApiResponse<void>>> {
-    return request.post(`/api/v1/halls/${hallId}/pairing-codes/${codeId}/unlock`);
+  batchGeneratePairingCodes(
+    hallId: number,
+    reason?: string,
+  ): Promise<AxiosResponse<ApiResponse<BatchGenerateResult>>> {
+    return asAxiosResp(hallClient.batchGeneratePairingCodes(hallId, reason));
   },
 
-  /** 23. 配对码列表 */
-  listPairingCodes(hallId: number, params?: { target_type?: string; status?: string }): Promise<AxiosResponse<ApiResponse<PairingCodeListItem[]>>> {
-    return request.get(`/api/v1/halls/${hallId}/pairing-codes`, { params });
+  regeneratePairingCode(
+    hallId: number,
+    codeId: number,
+    reason?: string,
+  ): Promise<AxiosResponse<ApiResponse<PairingCodeListItem>>> {
+    return asAxiosResp(hallClient.regeneratePairingCode(hallId, codeId, reason));
   },
 
-  /** 24. 导出配对码 */
-  exportPairingCodes(hallId: number): Promise<AxiosResponse<ApiResponse<ExportPairingCodeItem[]>>> {
-    return request.get(`/api/v1/halls/${hallId}/pairing-codes/export`);
+  unlockPairingCode(
+    hallId: number,
+    codeId: number,
+    reason?: string,
+  ): Promise<AxiosResponse<ApiResponse<void>>> {
+    return asAxiosResp(hallClient.unlockPairingCode(hallId, codeId, reason));
   },
 
-  /** 设备播报 — 获取待配对设备列表 */
+  listPairingCodes(
+    hallId: number,
+    params?: ListPairingCodesParams,
+  ): Promise<AxiosResponse<ApiResponse<PairingCodeListItem[]>>> {
+    return asAxiosResp(hallClient.listPairingCodes(hallId, params ?? {}));
+  },
+
+  exportPairingCodes(
+    hallId: number,
+  ): Promise<AxiosResponse<ApiResponse<ExportPairingCodeItem[]>>> {
+    return asAxiosResp(hallClient.exportPairingCodes(hallId));
+  },
+
   listAnnouncedDevices(): Promise<AxiosResponse<ApiResponse<AnnouncedDevice[]>>> {
-    return request.get('/api/v1/announced-devices');
+    return asAxiosResp(hallClient.listAnnouncedDevices());
   },
 
-  /** 管理员确认配对播报设备 */
-  pairAnnouncedDevice(hallId: number, data: { announce_code: string; exhibit_id: number }): Promise<AxiosResponse<ApiResponse<void>>> {
-    return request.post(`/api/v1/halls/${hallId}/pair-announced`, data);
+  pairAnnouncedDevice(
+    hallId: number,
+    data: PairAnnouncedRequest,
+  ): Promise<AxiosResponse<ApiResponse<void>>> {
+    return asAxiosResp(hallClient.pairAnnouncedDevice(hallId, data));
   },
 
-  /** 25d. 生成调试配对码 */
-  generateDebugPairingCode(hallId: number, data: { exhibit_id: number; ttl_hours?: number }): Promise<AxiosResponse<ApiResponse<PairingCodeListItem>>> {
-    return request.post(`/api/v1/halls/${hallId}/pairing-codes/debug`, data);
+  generateDebugPairingCode(
+    hallId: number,
+    data: GenerateDebugPairingCodeRequest,
+    reason?: string,
+  ): Promise<AxiosResponse<ApiResponse<PairingCodeListItem>>> {
+    return asAxiosResp(hallClient.generateDebugPairingCode(hallId, data, reason));
   },
 
-  /** 26d. 断开调试实例 */
-  disconnectDebugInstance(hallId: number, instanceId: number): Promise<AxiosResponse<ApiResponse<void>>> {
-    return request.delete(`/api/v1/halls/${hallId}/debug-instances/${instanceId}`);
+  disconnectDebugInstance(
+    hallId: number,
+    instanceId: number,
+  ): Promise<AxiosResponse<ApiResponse<void>>> {
+    return asAxiosResp(hallClient.disconnectDebugInstance(hallId, instanceId));
   },
 
-  /** 27d. 延长调试实例 TTL */
-  extendDebugInstance(hallId: number, instanceId: number, data: { extend_hours: number }): Promise<AxiosResponse<ApiResponse<AppInstanceListItem>>> {
-    return request.post(`/api/v1/halls/${hallId}/debug-instances/${instanceId}/extend`, data);
+  extendDebugInstance(
+    hallId: number,
+    instanceId: number,
+    data: ExtendDebugInstanceRequest,
+  ): Promise<AxiosResponse<ApiResponse<AppInstanceListItem>>> {
+    return asAxiosResp(hallClient.extendDebugInstance(hallId, instanceId, data));
   },
 
   /* ==================== Control App Session ==================== */
 
-  /** 25. 中控会话列表 */
-  listControlAppSessions(hallId: number): Promise<AxiosResponse<ApiResponse<ControlAppSessionItem[]>>> {
-    return request.get(`/api/v1/halls/${hallId}/control-app-sessions`);
+  listControlAppSessions(
+    hallId: number,
+  ): Promise<AxiosResponse<ApiResponse<ControlAppSessionItem[]>>> {
+    return asAxiosResp(hallClient.listControlAppSessions(hallId));
   },
 
-  /** 26. 切换中控展厅 */
-  switchControlAppHall(hallId: number, sessionId: number, data: SwitchControlHallBody): Promise<AxiosResponse<ApiResponse<void>>> {
-    return request.post(`/api/v1/halls/${hallId}/control-app-sessions/${sessionId}/switch-hall`, data);
+  switchControlAppHall(
+    hallId: number,
+    sessionId: number,
+    data: SwitchControlHallBody,
+  ): Promise<AxiosResponse<ApiResponse<void>>> {
+    return asAxiosResp(hallClient.switchControlAppHall(hallId, sessionId, data));
   },
 
-  /** 27. 清理离线中控会话（last_active_at 超 5 分钟） */
-  cleanupStaleControlSessions(hallId: number): Promise<AxiosResponse<ApiResponse<{ deleted: number }>>> {
-    return request.delete(`/api/v1/halls/${hallId}/control-app-sessions/stale`);
+  cleanupStaleControlSessions(
+    hallId: number,
+  ): Promise<AxiosResponse<ApiResponse<{ deleted: number }>>> {
+    return asAxiosResp(hallClient.cleanupStaleControlSessions(hallId));
   },
 };

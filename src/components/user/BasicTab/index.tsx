@@ -14,7 +14,7 @@
 import { Col, Row } from 'antd';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/authStore';
-import type { UserDetail } from '@/types/auth';
+import type { UserDetail } from '@/api/gen/client';
 import UserProfileCard from './UserProfileCard';
 import VendorInfoCard from './VendorInfoCard';
 import DangerZoneCard from './DangerZoneCard';

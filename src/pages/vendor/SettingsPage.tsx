@@ -7,9 +7,12 @@
  *   - 改密码同理：跳 SSO /user/change-password。
  *   - "通知偏好" 预留一个分类开关骨架，后端 API 到位前只是 UI 占位。
  */
+import { useEffect, useState } from 'react';
 import { Alert, Button, Card, Descriptions, Space, Switch, Typography } from 'antd';
 import PageHeader from '@/components/common/PageHeader';
 import { useAuthStore } from '@/stores/authStore';
+// OpenAPI Phase 1：从 yaml 生成的 typed client；改 yaml 字段名 IDE 立即抓到不一致。
+import { authClient, type LoginUser } from '@/api/gen/client';
 
 const { Text } = Typography;
 
@@ -17,7 +20,18 @@ const SSO_PROFILE_URL = 'https://sso.crossovercg.com.cn/user/profile';
 const SSO_CHANGE_PASSWORD_URL = 'https://sso.crossovercg.com.cn/user/change-password';
 
 export default function SettingsPage() {
-  const user = useAuthStore((s) => s.user);
+  const stored = useAuthStore((s) => s.user);
+  // Pilot：进入页面时主动拉一次 /auth/me（typed），让本页拿到的字段走的是 yaml 契约。
+  // store 里 user 是登录瞬间的快照，可能落后；典型场景如主账号刚被移交。
+  const [user, setUser] = useState<LoginUser | null>(stored);
+  useEffect(() => {
+    authClient
+      .getAuthMe()
+      .then((u) => setUser(u))
+      .catch(() => {
+        /* axios 拦截器已 emitError，本页继续用 store 兜底 */
+      });
+  }, []);
 
   return (
     <div>

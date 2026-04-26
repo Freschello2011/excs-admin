@@ -1,4 +1,5 @@
-import type { PanelCard } from '@/types/panel';
+import type { PanelCard } from '@/api/gen/client';
+import { cardBinding } from '@/api/gen/client';
 import type { NameMaps } from '../PreviewPanel';
 import { PT } from '../previewTokens';
 
@@ -15,7 +16,7 @@ interface Props {
  *  - Spacer 撑开 → 右侧音量：speaker icon(16pt) + 120pt 青色 slider + 数字百分比
  */
 export default function MediaCard({ card, nameMaps }: Props) {
-  const exhibitId = card.binding?.id;
+  const exhibitId = cardBinding(card)?.id;
   const exhibitName = exhibitId ? (nameMaps.exhibit.get(exhibitId) ?? `展项 #${exhibitId}`) : '—';
 
   return (

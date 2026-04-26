@@ -15,7 +15,7 @@ import { hallApi } from '@/api/hall';
 import { contentApi } from '@/api/content';
 import { commandApi } from '@/api/command';
 import { queryKeys } from '@/api/queryKeys';
-import type { NavNode, HotZone, HotZoneRegion, NavTransition } from '@/types/command';
+import type { NavNode, HotZone, HotZoneRegion, NavTransition } from '@/api/gen/client';
 
 /* ─── Helper: generate unique node key ─── */
 let keyCounter = 0;

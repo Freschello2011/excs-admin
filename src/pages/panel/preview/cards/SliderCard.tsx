@@ -1,4 +1,5 @@
-import type { PanelCard } from '@/types/panel';
+import type { PanelCard } from '@/api/gen/client';
+import { cardBinding } from '@/api/gen/client';
 import type { NameMaps } from '../PreviewPanel';
 import { PT } from '../previewTokens';
 
@@ -11,7 +12,7 @@ interface Props {
  * v2.0 滑块控制：玻璃 + 青霓虹轨道 + 白色拇指（青光晕）。
  */
 export default function SliderCard({ card, nameMaps }: Props) {
-  const deviceId = card.binding?.id;
+  const deviceId = cardBinding(card)?.id;
   const deviceName = deviceId ? (nameMaps.device.get(deviceId) ?? `设备 #${deviceId}`) : '—';
 
   return (

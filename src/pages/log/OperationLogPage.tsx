@@ -7,7 +7,7 @@ import { DownloadOutlined } from '@ant-design/icons';
 import PageHeader from '@/components/common/PageHeader';
 import { logApi } from '@/api/log';
 import { queryKeys } from '@/api/queryKeys';
-import type { OperationLogItem } from '@/types/log';
+import type { OperationLogItem } from '@/api/gen/client';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 

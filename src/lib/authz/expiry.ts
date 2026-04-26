@@ -9,7 +9,7 @@
  * 三步向导、续期、RiskyActionButton 默认值共用本函数。
  */
 import dayjs, { type Dayjs } from 'dayjs';
-import type { AccountType } from '@/types/authz';
+import type { AccountType } from '@/api/gen/client';
 
 /** 返回默认过期天数；null = 永久。 */
 export function defaultExpiryDays(

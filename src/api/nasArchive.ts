@@ -1,32 +1,58 @@
+/**
+ * Phase 3-D：nasArchiveApi 重写为 AxiosResponse 兼容壳，代理到 nasArchiveClient（src/api/gen/client.ts）。
+ *
+ * 设计：保留 AxiosResponse<ApiResponse<T>> 返回形状，让 react-query 老调用方
+ * （`select: (res) => res.data.data`）零改动。
+ *
+ * Phase 3-E：regenerateToken 迁到 sysConfigClient.regenerateNASToken（端点实质归 sys-config context）。
+ */
 import type { AxiosResponse } from 'axios';
-import request from './request';
-import type { ApiResponse } from '@/types/api';
-import type {
-  NASArchiveListItem,
-  NASArchiveListParams,
-  NASStats,
-  NASRegenerateTokenResp,
-} from '@/types/nas';
-import type { PaginatedData } from '@/types/api';
+import {
+  nasArchiveClient,
+  sysConfigClient,
+  type NASArchiveListItem,
+  type NASArchiveListParams,
+  type NASStats,
+  type NASRegenerateTokenResp,
+} from './gen/client';
+
+interface ApiResponse<T> {
+  code: number;
+  message: string;
+  data: T;
+}
+
+interface PaginatedData<T> {
+  list: T[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+function ok<T>(data: T): AxiosResponse<ApiResponse<T>> {
+  return {
+    data: { code: 0, message: 'ok', data },
+    status: 200,
+    statusText: 'OK',
+    headers: {},
+    config: {} as AxiosResponse['config'],
+  };
+}
 
 export const nasArchiveApi = {
-  /** NAS 归档记录列表（分页 + 筛选） */
-  list(params: NASArchiveListParams): Promise<AxiosResponse<ApiResponse<PaginatedData<NASArchiveListItem>>>> {
-    return request.get('/api/v1/nas-archive/list', { params });
+  list(
+    params: NASArchiveListParams,
+  ): Promise<AxiosResponse<ApiResponse<PaginatedData<NASArchiveListItem>>>> {
+    return nasArchiveClient.listNASArchives(params).then((d) => ok(d));
   },
-
-  /** 存储统计页 NAS 卡片数据 */
   stats(): Promise<AxiosResponse<ApiResponse<NASStats>>> {
-    return request.get('/api/v1/nas-archive/stats');
+    return nasArchiveClient.getNASArchiveStats().then((d) => ok(d));
   },
-
-  /** 失败记录手动重试 */
   retry(id: number): Promise<AxiosResponse<ApiResponse<{ ok: boolean }>>> {
-    return request.post(`/api/v1/nas-archive/${id}/retry`);
+    return nasArchiveClient.retryNASArchive(id).then((d) => ok({ ok: d.ok }));
   },
-
-  /** 重新生成 Agent Token（明文仅返回一次） */
+  /** Phase 3-E：迁移到 sysConfigClient.regenerateNASToken。NASConfigTab 调用方零改动。 */
   regenerateToken(): Promise<AxiosResponse<ApiResponse<NASRegenerateTokenResp>>> {
-    return request.post('/api/v1/sys-configs/nas/regenerate-token');
+    return sysConfigClient.regenerateNASToken().then((d) => ok(d));
   },
 };

@@ -13,8 +13,8 @@ import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
 import { useCan } from '@/lib/authz/can';
 import { useHallStore } from '@/stores/hallStore';
-import type { SceneListItem, SceneAction } from '@/types/command';
-import type { DeviceListItem } from '@/types/hall';
+import type { SceneListItem, SceneAction } from '@/api/gen/client';
+import type { DeviceListItem } from '@/api/gen/client';
 import SceneActionRow from './SceneActionRow';
 
 const ICON_OPTIONS = [
@@ -292,7 +292,7 @@ export default function SceneListPage() {
                 <Space>
                   <span><strong>设备：</strong>{device?.name ?? `#${action.device_id}`}</span>
                   <span><strong>指令：</strong>{action.command}</span>
-                  {Object.keys(action.params).length > 0 && (
+                  {action.params && Object.keys(action.params).length > 0 && (
                     <span><strong>参数：</strong>{JSON.stringify(action.params)}</span>
                   )}
                 </Space>

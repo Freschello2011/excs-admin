@@ -9,8 +9,8 @@ import { smarthomeApi } from '@/api/smarthome';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
 import { useHallStore } from '@/stores/hallStore';
-import type { HallListItem } from '@/types/hall';
-import type { TriggerLogDTO, EventRuleDTO } from '@/types/smarthome';
+import type { HallListItem } from '@/api/gen/client';
+import type { TriggerLogDTO, EventRuleDTO } from '@/api/gen/client';
 import type { Dayjs } from 'dayjs';
 
 const { RangePicker } = DatePicker;

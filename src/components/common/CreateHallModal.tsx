@@ -28,7 +28,7 @@ export default function CreateHallModal({
   const { data: customers = [], isLoading: customersLoading } = useQuery({
     queryKey: queryKeys.mdmCustomers(),
     queryFn: () => hallApi.getMdmCustomers(),
-    select: (res) => res.data.data?.list ?? [],
+    select: (res) => res.data.data ?? [],
     enabled: open,
   });
 
@@ -83,9 +83,9 @@ export default function CreateHallModal({
             loading={customersLoading}
             placeholder="选择客户"
             optionFilterProp="label"
-            options={customers.map((c: { id: number; company_name: string }) => ({
+            options={customers.map((c) => ({
               value: c.id,
-              label: c.company_name,
+              label: c.customer_name,
             }))}
           />
         </Form.Item>

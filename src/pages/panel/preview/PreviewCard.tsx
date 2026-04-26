@@ -1,5 +1,5 @@
-import type { PanelCard } from '@/types/panel';
-import { CARD_TYPE_LABELS } from '@/types/panel';
+import type { PanelCard, CardType } from '@/api/gen/client';
+import { CARD_TYPE_LABELS } from '@/api/gen/client';
 import type { NameMaps } from './PreviewPanel';
 import { PT } from './previewTokens';
 
@@ -8,6 +8,7 @@ import SceneGroupCard from './cards/SceneGroupCard';
 import MediaCard from './cards/MediaCard';
 import ShowCard from './cards/ShowCard';
 import DeviceToggleCard from './cards/DeviceToggleCard';
+import DeviceCommandCard from './cards/DeviceCommandCard';
 import DeviceStatusCard from './cards/DeviceStatusCard';
 import SliderCard from './cards/SliderCard';
 import ScriptCard from './cards/ScriptCard';
@@ -40,6 +41,8 @@ export default function PreviewCard({
         return <ShowCard card={card} nameMaps={nameMaps} />;
       case 'device_toggle':
         return <DeviceToggleCard card={card} nameMaps={nameMaps} />;
+      case 'device_command':
+        return <DeviceCommandCard card={card} nameMaps={nameMaps} />;
       case 'device_status':
         return <DeviceStatusCard card={card} nameMaps={nameMaps} />;
       case 'slider':
@@ -49,7 +52,7 @@ export default function PreviewCard({
       case 'ai':
         return <AiCard />;
       default:
-        return <FallbackCard label={CARD_TYPE_LABELS[card.card_type] ?? card.card_type} />;
+        return <FallbackCard label={CARD_TYPE_LABELS[card.card_type as CardType] ?? card.card_type} />;
     }
   })();
 

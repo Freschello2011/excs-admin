@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { sysConfigApi } from '@/api/sysConfig';
 import { useBrandingStore } from '@/stores/brandingStore';
 import { queryKeys } from '@/api/queryKeys';
-import type { ConfigItem } from '@/types/sysConfig';
+import type { ConfigItem } from '@/api/gen/client';
 
 export default function BrandingForm() {
   const { message } = useMessage();

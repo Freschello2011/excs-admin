@@ -11,7 +11,7 @@ import { useBrandingStore } from '@/stores/brandingStore';
 import { useHallStore } from '@/stores/hallStore';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
-import type { HallListItem, ExhibitListItem } from '@/types/hall';
+import type { HallListItem, ExhibitListItem } from '@/api/gen/client';
 import CreateHallModal from '@/components/common/CreateHallModal';
 import CreateExhibitModal from '@/components/common/CreateExhibitModal';
 import NotificationBell from '@/components/notification/NotificationBell';

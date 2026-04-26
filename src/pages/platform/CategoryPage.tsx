@@ -5,7 +5,7 @@ import { AppstoreOutlined, BlockOutlined } from '@ant-design/icons';
 import PageHeader from '@/components/common/PageHeader';
 import { deviceCategoryApi } from '@/api/deviceCategory';
 import { queryKeys } from '@/api/queryKeys';
-import type { DeviceCategoryDTO, DeviceSubcategoryDTO } from '@/types/deviceCategory';
+import type { DeviceCategoryDTO, DeviceSubcategoryDTO } from '@/api/gen/client';
 
 const { Text } = Typography;
 

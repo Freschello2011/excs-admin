@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import styles from '../DashboardPage.module.scss';
-import type { TodoItem } from '@/types/platform';
+import type { TodoItem } from '@/api/gen/client';
 
 interface TodoBannerProps {
   items: TodoItem[];

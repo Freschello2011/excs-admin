@@ -33,9 +33,9 @@ import { hallApi } from '@/api/hall';
 import { vendorApi } from '@/api/vendor';
 import { useCan } from '@/lib/authz/can';
 import { useHallStore } from '@/stores/hallStore';
-import type { ExhibitListItem } from '@/types/hall';
-import type { ContentDetail, ContentRejectReason, ContentStatus } from '@/types/content';
-import type { Vendor } from '@/types/authz';
+import type { ExhibitListItem } from '@/api/gen/client';
+import type { ContentDetail, ContentRejectReason, ContentStatus } from '@/api/gen/client';
+import type { Vendor } from '@/api/gen/client';
 
 type StatusFilter = 'all' | 'pending_accept' | 'bound' | 'rejected' | 'withdrawn' | 'archived';
 

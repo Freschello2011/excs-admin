@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { hallApi } from '@/api/hall';
 import { commandApi } from '@/api/command';
 import { queryKeys } from '@/api/queryKeys';
-import type { ShowAction, ActionType } from '@/types/show';
+import type { ShowAction, ActionType } from '@/api/gen/client';
 
 /* ==================== Constants ==================== */
 

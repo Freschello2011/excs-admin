@@ -3,7 +3,7 @@ import { Button, Input, Switch, Tooltip } from 'antd';
 import { useMessage } from '@/hooks/useMessage';
 import { SoundOutlined, SendOutlined, LoadingOutlined, ClearOutlined } from '@ant-design/icons';
 import { aiApi } from '@/api/ai';
-import type { TestChatEvent, VideoType, PlayByTagResult, PlaylistItem } from '@/types/ai';
+import type { TestChatEvent, VideoType, PlayByTagResult, PlaylistItem } from '@/api/gen/client';
 
 /* ─── Types ─── */
 interface ToolCallInfo {

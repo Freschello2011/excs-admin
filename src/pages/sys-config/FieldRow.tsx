@@ -1,6 +1,6 @@
 import { Form, Input, InputNumber, Switch, Tooltip, Typography } from 'antd';
 import { EyeInvisibleOutlined, EyeTwoTone, InfoCircleOutlined } from '@ant-design/icons';
-import type { ConfigItem } from '@/types/sysConfig';
+import type { ConfigItem } from '@/api/gen/client';
 import type { FieldRef } from './ia';
 
 const { Text } = Typography;

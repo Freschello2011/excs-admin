@@ -16,8 +16,8 @@ import { showApi } from '@/api/show';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
 import { useCan } from '@/lib/authz/can';
-import type { ShowTrack, ShowAction, TrackType } from '@/types/show';
-import type { DeviceListItem } from '@/types/hall';
+import type { ShowTrack, ShowAction, TrackType } from '@/api/gen/client';
+import type { DeviceListItem } from '@/api/gen/client';
 
 const TRACK_TYPE_LABELS: Record<TrackType, string> = {
   video: '视频',
@@ -151,7 +151,7 @@ export default function ShowDetailPage() {
       start_time_ms: action.start_time_ms,
       duration_ms: action.duration_ms,
       command: action.command,
-      params_json: Object.keys(action.params).length > 0 ? JSON.stringify(action.params) : '',
+      params_json: action.params && Object.keys(action.params).length > 0 ? JSON.stringify(action.params) : '',
     });
     setActionModalOpen(true);
   };
@@ -210,7 +210,7 @@ export default function ShowDetailPage() {
     key: String(track.id),
     label: (
       <Space>
-        <Tag color={TRACK_TYPE_COLORS[track.track_type]}>{TRACK_TYPE_LABELS[track.track_type]}</Tag>
+        <Tag color={TRACK_TYPE_COLORS[track.track_type as TrackType]}>{TRACK_TYPE_LABELS[track.track_type as TrackType]}</Tag>
         <span>{track.name}</span>
         <span style={{ color: 'var(--ant-color-text-quaternary)' }}>（{track.actions?.length ?? 0} 个动作）</span>
       </Space>
@@ -241,7 +241,7 @@ export default function ShowDetailPage() {
                     <span>时长 {formatMs(action.duration_ms)}</span>
                     <span><strong>{action.device_name || `设备#${action.device_id}`}</strong></span>
                     <Tag color="blue">{action.command}</Tag>
-                    {Object.keys(action.params).length > 0 && (
+                    {action.params && Object.keys(action.params).length > 0 && (
                       <span style={{ color: 'var(--ant-color-text-secondary)', fontSize: 12 }}>
                         {JSON.stringify(action.params)}
                       </span>

@@ -13,7 +13,7 @@ import type {
   RunningStatsDTO,
   StorageBucketDTO,
   StorageCapacityDTO,
-} from '@/types/platform';
+} from '@/api/gen/client';
 
 interface BusinessTabProps {
   active: boolean;

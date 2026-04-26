@@ -1,10 +1,80 @@
-import { useEffect } from 'react';
+/**
+ * 展厅配置 Tab —— hall_master 选举 v2（hall.md §1.5）
+ *
+ * 把原 master + fallback 两个 Select 控件改造成「拖拽优先级列表」+ 自动回迁开关 +
+ * 立即重选按钮，对接 PUT /halls/:id/master-priority + POST /halls/:id/elect-master。
+ *
+ * 候选项 = listExhibits 的结果。前端拖拽产出 priority 数组（顺序即优先级）；
+ * 未列入数组的展项会按 sort_order 兜底（后端 `parsePriorityArray` + `addCandidate`
+ * 一致语义），底部小字提示。
+ *
+ * 高风险（action=hall.switch_master, RequireReason=true）：保存 / 立即重选都走
+ * `RiskyActionButton`，弹 Modal 强制 ≥ 5 字操作原因。reason 走 body（中文友好）。
+ */
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Card, Form, Input, Select, Button, Space } from 'antd';
+import {
+  Card,
+  Form,
+  Input,
+  Switch,
+  Space,
+  Tag,
+  Tooltip,
+  Empty,
+  Divider,
+  Typography,
+  Select,
+  Button,
+} from 'antd';
+import {
+  HolderOutlined,
+  CloseOutlined,
+  PlusOutlined,
+  CheckCircleFilled,
+  ExclamationCircleFilled,
+} from '@ant-design/icons';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import dayjs from 'dayjs';
+import relativeTime from 'dayjs/plugin/relativeTime';
+import 'dayjs/locale/zh-cn';
+
 import { useMessage } from '@/hooks/useMessage';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
-import type { HallDetail, ExhibitListItem } from '@/types/hall';
+import RiskyActionButton from '@/components/authz/RiskyActionButton';
+import type {
+  HallDetail,
+  ExhibitListItem,
+  MasterCandidateDTO,
+} from '@/api/gen/client';
+
+dayjs.extend(relativeTime);
+dayjs.locale('zh-cn');
+
+const REASON_ENUM_ZH: Record<string, string> = {
+  bootstrap: '服务启动',
+  master_offline: '原主控离线',
+  priority_promote: '优先级调整',
+  manual_override: '管理员手动',
+  no_candidate: '候补全离线',
+};
 
 interface HallConfigTabProps {
   hallId: number;
@@ -12,10 +82,87 @@ interface HallConfigTabProps {
   canConfig: boolean;
 }
 
+interface SortableExhibitRowProps {
+  exhibitId: number;
+  exhibitName: string;
+  isCurrentMaster: boolean;
+  isOnline?: boolean;
+  onRemove: () => void;
+  disabled: boolean;
+}
+
+function SortableExhibitRow({
+  exhibitId,
+  exhibitName,
+  isCurrentMaster,
+  isOnline,
+  onRemove,
+  disabled,
+}: SortableExhibitRowProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: `prio-${exhibitId}`,
+    disabled,
+  });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.6 : 1,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    padding: '8px 12px',
+    border: '1px solid var(--ant-color-border-secondary, #e5e7eb)',
+    borderRadius: 6,
+    background: 'var(--ant-color-bg-container, #fff)',
+  };
+  return (
+    <div ref={setNodeRef} style={style}>
+      <span
+        {...(disabled ? {} : attributes)}
+        {...(disabled ? {} : listeners)}
+        style={{
+          cursor: disabled ? 'not-allowed' : 'grab',
+          color: 'rgba(0,0,0,0.45)',
+          fontSize: 16,
+        }}
+      >
+        <HolderOutlined />
+      </span>
+      <span style={{ flex: 1, fontWeight: 500 }}>{exhibitName}</span>
+      {isCurrentMaster && <Tag color="blue">当前主控</Tag>}
+      {isOnline === true && <Tag color="green">在线</Tag>}
+      {isOnline === false && <Tag>离线</Tag>}
+      {!disabled && (
+        <Button
+          type="text"
+          size="small"
+          icon={<CloseOutlined />}
+          onClick={onRemove}
+          aria-label="移除"
+        />
+      )}
+    </div>
+  );
+}
+
 export default function HallConfigTab({ hallId, hall, canConfig }: HallConfigTabProps) {
   const { message } = useMessage();
   const queryClient = useQueryClient();
-  const [form] = Form.useForm();
+  const [form] = Form.useForm<{ ai_knowledge_text: string }>();
+
+  // 本地维护的优先级数组（拖拽改的就是它，提交时整体提交）
+  const [priority, setPriority] = useState<number[]>(() => hall.hall_master_priority ?? []);
+  const [autoFailback, setAutoFailback] = useState<boolean>(hall.master_auto_failback ?? true);
+  const [addPickerValue, setAddPickerValue] = useState<number | null>(null);
+
+  // master-status 拉一次，给「当前主控 / 候补在线状态 / 上次切换」展示用
+  const { data: masterStatus } = useQuery({
+    queryKey: queryKeys.hallMasterStatus(hallId),
+    queryFn: () => hallApi.getHallMasterStatus(hallId),
+    select: (res) => res.data.data,
+    refetchInterval: 30_000,
+    enabled: canConfig,
+  });
 
   const { data: exhibits = [] } = useQuery({
     queryKey: queryKeys.exhibits(hallId),
@@ -24,64 +171,292 @@ export default function HallConfigTab({ hallId, hall, canConfig }: HallConfigTab
   });
 
   useEffect(() => {
-    form.setFieldsValue({
-      ai_knowledge_text: hall.ai_knowledge_text || '',
-      hall_master_exhibit_id: hall.hall_master_exhibit_id,
-      hall_master_fallback_id: hall.hall_master_fallback_id,
-    });
+    form.setFieldsValue({ ai_knowledge_text: hall.ai_knowledge_text || '' });
   }, [hall, form]);
 
-  const updateConfig = useMutation({
-    mutationFn: (data: Parameters<typeof hallApi.updateHallConfig>[1]) =>
-      hallApi.updateHallConfig(hallId, data),
+  // hall 字段变化时（通常是 invalidate 后重新取）同步本地 state
+  useEffect(() => {
+    setPriority(hall.hall_master_priority ?? []);
+    setAutoFailback(hall.master_auto_failback ?? true);
+  }, [hall.hall_master_priority, hall.master_auto_failback]);
+
+  const exhibitMap = useMemo(() => {
+    const m = new Map<number, ExhibitListItem>();
+    exhibits.forEach((e) => m.set(e.id, e));
+    return m;
+  }, [exhibits]);
+
+  const candidateMap = useMemo(() => {
+    const m = new Map<number, MasterCandidateDTO>();
+    masterStatus?.candidates?.forEach((c) => m.set(c.exhibit_id, c));
+    return m;
+  }, [masterStatus]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const handleDragEnd = (e: DragEndEvent) => {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const from = priority.findIndex((id) => `prio-${id}` === active.id);
+    const to = priority.findIndex((id) => `prio-${id}` === over.id);
+    if (from < 0 || to < 0) return;
+    setPriority((prev) => arrayMove(prev, from, to));
+  };
+
+  const handleRemove = (exhibitId: number) => {
+    setPriority((prev) => prev.filter((id) => id !== exhibitId));
+  };
+
+  const handleAddExhibit = () => {
+    if (!addPickerValue) return;
+    if (priority.includes(addPickerValue)) {
+      message.info('该展项已在优先级队列中');
+      return;
+    }
+    setPriority((prev) => [...prev, addPickerValue]);
+    setAddPickerValue(null);
+  };
+
+  const updateConfigMutation = useMutation({
+    mutationFn: (data: { ai_knowledge_text: string }) => hallApi.updateHallConfig(hallId, data),
     onSuccess: () => {
-      message.success('配置已保存');
+      message.success('AI 知识文本已保存');
       queryClient.invalidateQueries({ queryKey: queryKeys.hallDetail(hallId) });
     },
   });
 
-  const handleSave = () => {
+  const updatePriorityMutation = useMutation({
+    mutationFn: ({
+      data,
+      reason,
+    }: {
+      data: { hall_master_priority: number[]; master_auto_failback: boolean };
+      reason: string;
+    }) => hallApi.updateHallMasterPriority(hallId, data, reason),
+    onSuccess: () => {
+      message.success('主控优先级已保存，选举已触发');
+      queryClient.invalidateQueries({ queryKey: queryKeys.hallDetail(hallId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.hallMasterStatus(hallId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.appInstances(hallId) });
+    },
+  });
+
+  const electMutation = useMutation({
+    mutationFn: ({ reason }: { reason: string }) => hallApi.electHallMaster(hallId, reason),
+    onSuccess: () => {
+      message.success('已触发重选');
+      queryClient.invalidateQueries({ queryKey: queryKeys.hallDetail(hallId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.hallMasterStatus(hallId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.appInstances(hallId) });
+    },
+  });
+
+  const handleSaveAi = () => {
     form.validateFields().then((values) => {
-      updateConfig.mutate({
-        ai_knowledge_text: values.ai_knowledge_text,
-        hall_master_exhibit_id: values.hall_master_exhibit_id ?? null,
-        hall_master_fallback_id: values.hall_master_fallback_id ?? null,
+      updateConfigMutation.mutate({
+        ai_knowledge_text: values.ai_knowledge_text || '',
       });
     });
   };
 
-  const exhibitOptions = exhibits.map((e: ExhibitListItem) => ({ value: e.id, label: e.name }));
+  const handleSavePriority = async (reason?: string) => {
+    if (!reason) return;
+    await updatePriorityMutation.mutateAsync({
+      data: {
+        hall_master_priority: priority,
+        master_auto_failback: autoFailback,
+      },
+      reason,
+    });
+  };
+
+  const handleElect = async (reason?: string) => {
+    if (!reason) return;
+    await electMutation.mutateAsync({ reason });
+  };
+
+  // priority 数组之外的展项（按 sort_order 升序展示，给"会按 sort_order 兜底"提示）
+  const tailExhibits = useMemo(
+    () =>
+      exhibits
+        .filter((e) => !priority.includes(e.id))
+        .slice()
+        .sort((a, b) =>
+          a.sort_order !== b.sort_order ? a.sort_order - b.sort_order : a.id - b.id,
+        ),
+    [exhibits, priority],
+  );
+
+  const addOptions = tailExhibits.map((e) => ({ value: e.id, label: e.name }));
+
+  const currentMaster = masterStatus?.current_master_exhibit_id ?? null;
+  const lastReasonZh = masterStatus?.last_election_reason
+    ? REASON_ENUM_ZH[masterStatus.last_election_reason] ?? masterStatus.last_election_reason
+    : '';
+  const noCandidate = masterStatus?.last_election_reason === 'no_candidate';
 
   return (
-    <Card
-      title="展厅配置"
-      extra={
-        canConfig ? (
-          <Button type="primary" loading={updateConfig.isPending} onClick={handleSave}>
-            保存配置
-          </Button>
-        ) : undefined
-      }
-    >
-      <Form form={form} layout="vertical" disabled={!canConfig} style={{ maxWidth: 640 }}>
-        <Form.Item name="ai_knowledge_text" label="AI 知识文本">
-          <Input.TextArea
-            rows={8}
-            maxLength={10000}
-            showCount
-            placeholder="输入展厅知识文本，AI 互动时会作为上下文参考..."
-          />
-        </Form.Item>
+    <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+      <Card
+        title="AI 知识文本"
+        extra={
+          canConfig ? (
+            <Button
+              type="primary"
+              loading={updateConfigMutation.isPending}
+              onClick={handleSaveAi}
+            >
+              保存
+            </Button>
+          ) : undefined
+        }
+      >
+        <Form form={form} layout="vertical" disabled={!canConfig} style={{ maxWidth: 720 }}>
+          <Form.Item name="ai_knowledge_text" label="AI 知识文本">
+            <Input.TextArea
+              rows={6}
+              maxLength={10000}
+              showCount
+              placeholder="输入展厅知识文本，AI 互动时会作为上下文参考..."
+            />
+          </Form.Item>
+        </Form>
+      </Card>
 
-        <Space style={{ width: '100%' }} styles={{ item: { flex: 1 } }}>
-          <Form.Item name="hall_master_exhibit_id" label="展厅主控展项">
-            <Select options={exhibitOptions} allowClear placeholder="选择主控展项" />
-          </Form.Item>
-          <Form.Item name="hall_master_fallback_id" label="备选主控展项">
-            <Select options={exhibitOptions} allowClear placeholder="选择备选展项" />
-          </Form.Item>
+      <Card
+        title="主控展项优先级"
+        extra={
+          <Space>
+            {canConfig && (
+              <RiskyActionButton
+                action="hall.switch_master"
+                onConfirm={handleElect}
+                confirmTitle="立即重选主控"
+                confirmContent="跳过 stable_window，立即按当前优先级队列重新选举主控。请填写操作原因（≥ 5 字，审计用）。"
+                loading={electMutation.isPending}
+              >
+                立即重选
+              </RiskyActionButton>
+            )}
+            {canConfig && (
+              <RiskyActionButton
+                type="primary"
+                action="hall.switch_master"
+                onConfirm={handleSavePriority}
+                confirmTitle="保存主控优先级"
+                confirmContent="保存后会立即触发一次选举（按新顺序）。请填写操作原因（≥ 5 字，审计用）。"
+                loading={updatePriorityMutation.isPending}
+              >
+                保存优先级
+              </RiskyActionButton>
+            )}
+          </Space>
+        }
+      >
+        <Space direction="vertical" size="small" style={{ width: '100%' }}>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            候补队列按拖拽顺序选举（第一个 online 实例即主控）；未列入的展项会按 sort_order
+            兜底追加。
+            {noCandidate && (
+              <Tag color="error" style={{ marginLeft: 8 }}>
+                <ExclamationCircleFilled /> 当前无主控（候补全离线）
+              </Tag>
+            )}
+          </Typography.Text>
+
+          <Space size="middle" wrap>
+            <Space>
+              <span style={{ color: 'rgba(0,0,0,0.55)' }}>当前主控：</span>
+              {currentMaster ? (
+                <Tag color="blue" icon={<CheckCircleFilled />}>
+                  {exhibitMap.get(currentMaster)?.name ?? `#${currentMaster}`}
+                </Tag>
+              ) : (
+                <Tag>无主控</Tag>
+              )}
+            </Space>
+            {masterStatus?.last_election_at && (
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                上次切换：{dayjs(masterStatus.last_election_at).fromNow()}
+                {lastReasonZh ? ` · ${lastReasonZh}` : ''}
+              </Typography.Text>
+            )}
+            <Space>
+              <span style={{ color: 'rgba(0,0,0,0.55)' }}>自动回迁：</span>
+              <Tooltip title="开启时，原主控离线后选举器立即切到队列下一个；关闭时，需要手动重选才会切。">
+                <Switch
+                  checked={autoFailback}
+                  disabled={!canConfig}
+                  onChange={setAutoFailback}
+                  checkedChildren="开"
+                  unCheckedChildren="关"
+                />
+              </Tooltip>
+            </Space>
+          </Space>
+
+          <Divider style={{ margin: '12px 0' }} />
+
+          {priority.length === 0 ? (
+            <Empty description="未配置优先级，将完全按展项 sort_order 兜底选举" />
+          ) : (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={priority.map((id) => `prio-${id}`)}
+                strategy={verticalListSortingStrategy}
+              >
+                <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                  {priority.map((id) => {
+                    const ex = exhibitMap.get(id);
+                    const cand = candidateMap.get(id);
+                    return (
+                      <SortableExhibitRow
+                        key={id}
+                        exhibitId={id}
+                        exhibitName={ex?.name ?? `已删除展项 #${id}`}
+                        isCurrentMaster={cand?.is_current_master ?? false}
+                        isOnline={cand?.is_online}
+                        onRemove={() => handleRemove(id)}
+                        disabled={!canConfig}
+                      />
+                    );
+                  })}
+                </Space>
+              </SortableContext>
+            </DndContext>
+          )}
+
+          {canConfig && tailExhibits.length > 0 && (
+            <Space style={{ marginTop: 12 }}>
+              <Select
+                placeholder="选择要加入队列的展项"
+                style={{ width: 240 }}
+                value={addPickerValue ?? undefined}
+                options={addOptions}
+                onChange={(v) => setAddPickerValue(v)}
+                allowClear
+              />
+              <Button icon={<PlusOutlined />} onClick={handleAddExhibit} disabled={!addPickerValue}>
+                追加到队列
+              </Button>
+            </Space>
+          )}
+
+          {tailExhibits.length > 0 && (
+            <Typography.Text type="secondary" style={{ fontSize: 12, marginTop: 8 }}>
+              未列入的展项（按 sort_order 兜底选举）：
+              {tailExhibits.map((e) => e.name).join('、')}
+            </Typography.Text>
+          )}
         </Space>
-      </Form>
-    </Card>
+      </Card>
+    </Space>
   );
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Checkbox, Form, Input, Modal, Typography } from 'antd';
-import { REJECT_REASON_LABEL, type ContentRejectReason } from '@/types/content';
+import { REJECT_REASON_LABEL, type ContentRejectReason } from '@/api/gen/client';
 
 interface Props {
   open: boolean;

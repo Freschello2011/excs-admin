@@ -16,9 +16,9 @@ import { contentApi } from '@/api/content';
 import { queryKeys } from '@/api/queryKeys';
 import { useCan } from '@/lib/authz/can';
 import { useHallStore } from '@/stores/hallStore';
-import type { ShowListItem, ShowStatus } from '@/types/show';
-import type { ExhibitListItem } from '@/types/hall';
-import type { ContentListItem } from '@/types/content';
+import type { ShowListItem, ShowStatus } from '@/api/gen/client';
+import type { ExhibitListItem } from '@/api/gen/client';
+import type { ContentListItem } from '@/api/gen/client';
 
 const STATUS_OPTIONS = [
   { value: 'all', label: '全部状态' },
@@ -62,8 +62,8 @@ export default function ShowListPage() {
     enabled: !!selectedHallId,
   });
   const videoOptions = (videoContents ?? []).map((c: ContentListItem) => {
-    const dur = c.duration > 0 ? ` (${Math.floor(c.duration / 60000)}:${String(Math.floor((c.duration % 60000) / 1000)).padStart(2, '0')})` : '';
-    return { value: c.id, label: `${c.name}${dur}`, duration: c.duration };
+    const dur = c.duration_ms > 0 ? ` (${Math.floor(c.duration_ms / 60000)}:${String(Math.floor((c.duration_ms % 60000) / 1000)).padStart(2, '0')})` : '';
+    return { value: c.id, label: `${c.name}${dur}`, duration: c.duration_ms };
   });
 
   // Shows query
@@ -157,12 +157,6 @@ export default function ShowListPage() {
       dataIndex: 'status',
       width: 90,
       render: (s: string) => <StatusTag status={s} />,
-    },
-    {
-      title: '轨道 / 动作',
-      width: 100,
-      align: 'center',
-      render: (_: unknown, record) => `${record.track_count ?? 0} / ${record.action_count ?? 0}`,
     },
     {
       title: '操作',

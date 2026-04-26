@@ -1,4 +1,5 @@
-import type { PanelCard } from '@/types/panel';
+import type { PanelCard } from '@/api/gen/client';
+import { cardBinding } from '@/api/gen/client';
 import type { NameMaps } from '../PreviewPanel';
 import { PT } from '../previewTokens';
 
@@ -12,7 +13,7 @@ interface Props {
  * 对齐 mockup `.tile` / `.tile.offline`。
  */
 export default function DeviceToggleCard({ card, nameMaps }: Props) {
-  const deviceId = card.binding?.id;
+  const deviceId = cardBinding(card)?.id;
   const deviceName = deviceId ? (nameMaps.device.get(deviceId) ?? `设备 #${deviceId}`) : '—';
   // 预览：默认离线状态以展示 coral neon overlay
   const isOffline = true;

@@ -8,8 +8,7 @@ import { analyticsApi } from '@/api/analytics';
 import { logApi } from '@/api/log';
 import { queryKeys } from '@/api/queryKeys';
 import { useThemeTokens } from '@/hooks/useThemeTokens';
-import type { OperationDailyStat } from '@/types/analytics';
-import type { OperationLogItem } from '@/types/log';
+import type { OperationDailyStat, OperationLogItem } from '@/api/gen/client';
 import dayjs from 'dayjs';
 
 export default function OverviewPage({ embedded }: { embedded?: boolean } = {}) {

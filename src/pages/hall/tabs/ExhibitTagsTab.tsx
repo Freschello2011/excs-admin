@@ -9,7 +9,7 @@ import type { TableColumnsType } from 'antd';
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import { contentApi } from '@/api/content';
 import { queryKeys } from '@/api/queryKeys';
-import type { ContentTag, TagDimension, ExhibitContentItem } from '@/types/content';
+import type { ContentTag, TagDimension, ExhibitContentItem } from '@/api/gen/client';
 import styles from './ExhibitTagsTab.module.scss';
 
 interface Props {

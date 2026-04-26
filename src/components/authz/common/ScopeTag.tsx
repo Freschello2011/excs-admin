@@ -13,7 +13,7 @@
  *   → "全局"
  */
 import { Tag } from 'antd';
-import type { ScopeType } from '@/types/authz';
+import type { ScopeType } from '@/api/gen/client';
 
 const SCOPE_META: Record<ScopeType, { label: string; color: string }> = {
   G: { label: '全局', color: 'purple' },

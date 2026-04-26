@@ -44,7 +44,8 @@ import type {
   Grant,
   GrantStatusType,
   RoleTemplate,
-} from '@/types/authz';
+  ScopeType,
+} from '@/api/gen/client';
 
 const { Text } = Typography;
 
@@ -74,7 +75,6 @@ export default function UserAuthzPanel({ userId, onNavigateGrantWizard }: Props)
   const { data: user } = useQuery({
     queryKey: queryKeys.userDetail(userId),
     queryFn: () => userApi.getUser(userId),
-    select: (res) => res.data.data,
     enabled: userId > 0,
   });
   const quickGrantTarget: QuickGrantTarget | null = user
@@ -231,7 +231,7 @@ export default function UserAuthzPanel({ userId, onNavigateGrantWizard }: Props)
                 title: '范围',
                 render: (_, record) => (
                   <ScopeTag
-                    scopeType={record.scope_type}
+                    scopeType={record.scope_type as ScopeType}
                     scopeId={record.scope_id}
                     hallNameMap={hallMap}
                   />

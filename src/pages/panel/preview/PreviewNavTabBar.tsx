@@ -1,4 +1,4 @@
-import type { PanelSection } from '@/types/panel';
+import type { PanelSection } from '@/api/gen/client';
 import { PT } from './previewTokens';
 
 interface PreviewNavTabBarProps {

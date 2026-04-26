@@ -9,8 +9,8 @@ import { smarthomeApi } from '@/api/smarthome';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
 import { useHallStore } from '@/stores/hallStore';
-import type { HallListItem } from '@/types/hall';
-import type { DeviceHealthDTO, GatewayHealthDTO, GatewayStatus } from '@/types/smarthome';
+import type { HallListItem } from '@/api/gen/client';
+import type { DeviceHealthDTO, GatewayHealthDTO, GatewayStatus } from '@/api/gen/client';
 
 /* ==================== 常量 ==================== */
 
@@ -126,7 +126,7 @@ export default function DeviceHealthPage() {
       ) : (
         <Space direction="vertical" style={{ width: '100%' }} size={16}>
           {gateways.map((gw: GatewayHealthDTO) => {
-            const statusCfg = GATEWAY_STATUS_MAP[gw.status] ?? { color: 'default', text: gw.status };
+            const statusCfg = GATEWAY_STATUS_MAP[gw.status as GatewayStatus] ?? { color: 'default', text: gw.status };
             // In V1 we don't have per-gateway device grouping from API, so we show all devices
             // Future: filter deviceHealthList by gateway association
             return (

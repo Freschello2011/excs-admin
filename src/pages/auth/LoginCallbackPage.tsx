@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { useBrandingStore } from '@/stores/brandingStore';
 import { redirectToSSO } from '@/api/request';
-import { resolveAccountType } from '@/types/auth';
+import { resolveAccountType } from '@/api/gen/client';
 
 export default function LoginCallbackPage() {
   const [searchParams] = useSearchParams();

@@ -8,7 +8,7 @@ import PageHeader from '@/components/common/PageHeader';
 import Can from '@/components/authz/Can';
 import ExpiryTag from '@/components/authz/common/ExpiryTag';
 import { vendorApi } from '@/api/vendor';
-import type { Vendor, VendorStatus } from '@/types/authz';
+import type { Vendor, VendorStatus } from '@/api/gen/client';
 
 const STATUS_META: Record<VendorStatus, { label: string; color: string }> = {
   active: { label: '启用', color: 'green' },

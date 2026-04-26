@@ -1,4 +1,5 @@
-import type { PanelCard } from '@/types/panel';
+import type { PanelCard } from '@/api/gen/client';
+import { cardBinding } from '@/api/gen/client';
 import type { NameMaps } from '../PreviewPanel';
 import { PT, SCENE_NEON } from '../previewTokens';
 
@@ -14,7 +15,7 @@ interface Props {
  * **当前运行**的场景额外加 box-shadow 外发光，并把 `[ 待命 ]` 换成 mint `[ 运行中 ]` + 右上角 "当前" 角标。
  */
 export default function SceneGroupCard({ card, nameMaps }: Props) {
-  const sceneIds = card.binding?.ids ?? [];
+  const sceneIds = cardBinding(card)?.ids ?? [];
   const buttons = sceneIds.length > 0
     ? sceneIds.map((id) => ({ id, name: nameMaps.scene.get(id) ?? `场景 #${id}` }))
     : [{ id: 0, name: '场景模式' }];

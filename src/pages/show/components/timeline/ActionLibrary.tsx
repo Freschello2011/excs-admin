@@ -10,10 +10,13 @@ import { deviceModelApi } from '@/api/deviceModel';
 import { commandApi } from '@/api/command';
 import { contentApi } from '@/api/content';
 import { queryKeys } from '@/api/queryKeys';
-import type { ProtocolCommand } from '@/types/deviceProtocolBaseline';
-import type { DeviceModelDetail } from '@/types/deviceModel';
-import type { SceneListItem } from '@/types/command';
-import type { ContentListItem } from '@/types/content';
+import type {
+  ContentListItem,
+  DeviceModelDetail,
+  DeviceModelListItem,
+  ProtocolCommand,
+  SceneListItem,
+} from '@/api/gen/client';
 
 /* ==================== DnD data types ==================== */
 
@@ -85,7 +88,7 @@ function DeviceCommandsTab({ search }: { search: string }) {
   const { data: modelList, isLoading: listLoading } = useQuery({
     queryKey: queryKeys.deviceModels({ status: 'active', page: 1, page_size: 200 }),
     queryFn: () => deviceModelApi.list({ status: 'active', page: 1, page_size: 200 }),
-    select: (res) => res.data.data?.list ?? [],
+    select: (res): DeviceModelListItem[] => res.data.data?.list ?? [],
   });
 
   // 2. 并行拉每个型号的详情以取 commands
@@ -224,7 +227,7 @@ function MediaTab({ hallId, search }: { hallId: number; search: string }) {
           id={`media-${item.id}`}
           data={{ type: 'media', content: item }}
           label={item.name}
-          sub={`${item.type} · ${(item.duration / 1000).toFixed(1)}s`}
+          sub={`${item.type} · ${(item.duration_ms / 1000).toFixed(1)}s`}
         />
       ))}
     </div>

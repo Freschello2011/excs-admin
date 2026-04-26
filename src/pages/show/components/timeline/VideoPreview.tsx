@@ -1,6 +1,6 @@
 import { useRef, useEffect, useCallback } from 'react';
 import { VideoCameraOutlined } from '@ant-design/icons';
-import type { SpriteSheet } from '@/types/show';
+import type { SpriteSheet } from '@/api/gen/client';
 
 /* ==================== Image cache ==================== */
 

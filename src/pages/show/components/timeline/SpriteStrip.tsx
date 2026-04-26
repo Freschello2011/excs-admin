@@ -1,5 +1,5 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
-import type { SpriteSheet } from '@/types/show';
+import type { SpriteSheet } from '@/api/gen/client';
 
 const HEIGHT = 32;
 const MASK_COLOR = 'rgba(128,128,128,0.5)';

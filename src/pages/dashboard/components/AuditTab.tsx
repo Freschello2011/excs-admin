@@ -4,8 +4,8 @@ import styles from '../DashboardPage.module.scss';
 import { fmtNum, fmtShortDateTime } from './formatters';
 import { useAuditFeed } from '../hooks/useAuditFeed';
 import StatusTag from '@/components/common/StatusTag';
-import type { AppOpItemDTO, AuthzAuditItemDTO } from '@/types/platform';
-import type { RecentContentItem } from '@/types/dashboard';
+import type { AppOpItemDTO, AuthzAuditItemDTO } from '@/api/gen/client';
+import type { RecentContentItem } from '@/api/gen/client';
 
 type AuditFilter = 'all' | 'app' | 'authz' | 'content';
 

@@ -46,8 +46,8 @@ import { authzApi } from '@/api/authz';
 import { queryKeys } from '@/api/queryKeys';
 import AccountTypeTag from '@/components/authz/common/AccountTypeTag';
 import ScopeTag from '@/components/authz/common/ScopeTag';
-import type { CreateGrantBody, RoleTemplate, ScopeType } from '@/types/authz';
-import { resolveAccountType, type UserListItem } from '@/types/auth';
+import type { CreateGrantBody, RoleTemplate, ScopeType } from '@/api/gen/client';
+import { resolveAccountType, type UserListItem } from '@/api/gen/client';
 import { makeDefaultExpiry } from '@/lib/authz/expiry';
 
 const { Text, Paragraph } = Typography;
@@ -112,13 +112,12 @@ export default function GrantWizardPage() {
         page_size: 50,
         ...(userKeyword ? { keyword: userKeyword } : {}),
       }),
-    select: (res) => res.data.data?.list ?? [],
+    select: (res) => res.list ?? [],
   });
 
   const { data: preFilledUser } = useQuery({
     queryKey: queryKeys.userDetail(initialUserId ?? 0),
     queryFn: () => userApi.getUser(initialUserId!),
-    select: (res) => res.data.data,
     enabled: !!initialUserId && !state.user,
   });
 

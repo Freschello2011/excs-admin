@@ -1,5 +1,5 @@
 import { useRef, useCallback } from 'react';
-import type { PanelSection } from '@/types/panel';
+import type { PanelSection } from '@/api/gen/client';
 import { useHallStore } from '@/stores/hallStore';
 import styles from './PreviewPanel.module.scss';
 import PreviewTopBar from './PreviewTopBar';

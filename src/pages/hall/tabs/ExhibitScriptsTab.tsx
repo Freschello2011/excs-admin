@@ -5,7 +5,7 @@ import { useMessage } from '@/hooks/useMessage';
 import { PlusOutlined, SaveOutlined, DeleteOutlined, ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
-import type { ExhibitScript } from '@/types/hall';
+import type { ExhibitScript } from '@/api/gen/client';
 
 interface Props {
   hallId: number;

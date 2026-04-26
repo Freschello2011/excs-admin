@@ -13,6 +13,7 @@ export const queryKeys = {
   devices: (params: Record<string, unknown>) => ['devices', params] as const,
   effectiveCommands: (deviceId: number) => ['devices', deviceId, 'effective-commands'] as const,
   appInstances: (hallId: number) => ['hall', hallId, 'app-instances'] as const,
+  hallMasterStatus: (hallId: number) => ['hall', hallId, 'master-status'] as const,
   pairingCodes: (hallId: number) => ['hall', hallId, 'pairing-codes'] as const,
   controlAppSessions: (hallId: number) => ['hall', hallId, 'control-app-sessions'] as const,
   announcedDevices: ['announced-devices'] as const,
@@ -79,6 +80,10 @@ export const queryKeys = {
 
   // panel
   panel: (hallId: number) => ['panel', hallId] as const,
+  panelVersions: (hallId: number, params?: Record<string, unknown>) =>
+    ['panel', hallId, 'versions', ...(params ? [params] : [])] as const,
+  panelVersionDetail: (hallId: number, versionId: number) =>
+    ['panel', hallId, 'version', versionId] as const,
 
   // sys config
   sysConfigGroups: ['sys-config', 'groups'] as const,

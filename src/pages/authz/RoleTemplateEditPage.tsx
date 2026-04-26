@@ -28,7 +28,7 @@ import PageHeader from '@/components/common/PageHeader';
 import { useMessage } from '@/hooks/useMessage';
 import { authzApi } from '@/api/authz';
 import { useAuthzMetaStore } from '@/stores/authzMetaStore';
-import type { ActionDef, RiskLevel } from '@/types/authz';
+import type { ActionDef, RiskLevel } from '@/api/gen/client';
 
 const { Text } = Typography;
 
@@ -424,7 +424,7 @@ export default function RoleTemplateEditPage() {
                       children: (
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
                           {g.items.map((a) => {
-                            const meta = RISK_META[a.risk] ?? RISK_META.info;
+                            const meta = RISK_META[a.risk as RiskLevel] ?? RISK_META.info;
                             const checked = selectedSet.has(a.code);
                             return (
                               <div

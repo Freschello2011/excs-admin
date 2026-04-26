@@ -47,7 +47,7 @@ import ExpiryTag from '@/components/authz/common/ExpiryTag';
 import VendorUploadsTab from '@/components/authz/VendorUploadsTab';
 import { vendorApi } from '@/api/vendor';
 import { hallApi } from '@/api/hall';
-import type { VendorMember, VendorStatus } from '@/types/authz';
+import type { VendorMember, VendorStatus } from '@/api/gen/client';
 
 const { Text, Paragraph } = Typography;
 
@@ -193,7 +193,7 @@ export default function VendorDetailPage() {
   }
 
   const { vendor, members } = data;
-  const statusMeta = STATUS_META[vendor.status] ?? { label: vendor.status, color: 'default' };
+  const statusMeta = STATUS_META[vendor.status as VendorStatus] ?? { label: vendor.status, color: 'default' };
 
   const primaryMember = members.find((m) => m.is_primary);
 

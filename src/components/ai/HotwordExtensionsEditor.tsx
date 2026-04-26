@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Input, Tag } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
-import type { HotwordExtensions } from '@/types/ai';
+import type { HotwordExtensions } from '@/api/gen/client';
 
 interface Props {
   value: HotwordExtensions;

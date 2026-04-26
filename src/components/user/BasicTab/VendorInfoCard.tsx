@@ -13,7 +13,7 @@ import RiskyActionButton from '@/components/authz/RiskyActionButton';
 import ExpiryTag from '@/components/authz/common/ExpiryTag';
 import { vendorApi } from '@/api/vendor';
 import { useMessage } from '@/hooks/useMessage';
-import type { UserDetail } from '@/types/auth';
+import type { UserDetail } from '@/api/gen/client';
 
 interface Props {
   user: UserDetail;

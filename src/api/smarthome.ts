@@ -1,135 +1,192 @@
+/**
+ * Smarthome 兼容壳 —— Phase 3-F OpenAPI 单源迁移。
+ *
+ * 老调用方（GatewaysPage / RulesPage / TriggerLogsPage / DeviceHealthPage / AlertsPage）
+ * 用 react-query `select: (res) => res.data.data` 模式拆 envelope，期望
+ * `Promise<AxiosResponse<ApiResponse<X>>>`。本文件代理到 `smarthomeClient`（已 unwrap），
+ * 再用 `wrapAxios` 把单层数据塞回 axios 兼容 envelope，迁移期零调用方改动。
+ *
+ * 类型权威：`@/api/gen/client`（HueBridgeDTO / EventRuleDTO / TriggerLogDTO 等）。
+ * `types/smarthome.ts` 已删除（与 sysConfig / dashboard / log 等同模式）。
+ */
 import type { AxiosResponse } from 'axios';
-import request from './request';
 import type { ApiResponse, PaginatedData } from '@/types/api';
-import type {
-  HueBridgeDTO,
-  CreateHueBridgeBody,
-  UpdateHueBridgeBody,
-  XiaomiGatewayDTO,
-  CreateXiaomiGatewayBody,
-  UpdateXiaomiGatewayBody,
-  EventRuleDTO,
-  CreateRuleBody,
-  UpdateRuleBody,
-  DryRunResultDTO,
-  TriggerLogDTO,
-  TriggerLogListParams,
-  DeviceHealthDTO,
-  GatewayHealthDTO,
-  AlertDTO,
-} from '@/types/smarthome';
+import {
+  smarthomeClient,
+  type HueBridgeDTO,
+  type CreateHueBridgeRequest,
+  type UpdateHueBridgeRequest,
+  type XiaomiGatewayDTO,
+  type CreateXiaomiGatewayRequest,
+  type UpdateXiaomiGatewayRequest,
+  type EventRuleDTO,
+  type CreateEventRuleRequest,
+  type UpdateEventRuleRequest,
+  type DryRunResultDTO,
+  type TriggerLogDTO,
+  type TriggerLogListParams,
+  type DeviceHealthDTO,
+  type GatewayHealthDTO,
+  type AlertDTO,
+} from '@/api/gen/client';
+
+/** 把 typed 单层数据塞回 axios 风格 envelope，迁移期 react-query select 老用法零改动。 */
+function wrapAxios<T>(data: T): AxiosResponse<ApiResponse<T>> {
+  return {
+    data: { code: 0, message: 'ok', data },
+    status: 200,
+    statusText: 'OK',
+    headers: {},
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    config: {} as any,
+  };
+}
 
 export const smarthomeApi = {
-
   /* ==================== Hue Bridge ==================== */
 
-  listHueBridges(hallId: number): Promise<AxiosResponse<ApiResponse<HueBridgeDTO[]>>> {
-    return request.get('/api/v1/smarthome/hue-bridges', { params: { hall_id: hallId } });
+  async listHueBridges(hallId: number): Promise<AxiosResponse<ApiResponse<HueBridgeDTO[]>>> {
+    return wrapAxios(await smarthomeClient.listHueBridges(hallId));
   },
 
-  getHueBridge(id: number): Promise<AxiosResponse<ApiResponse<HueBridgeDTO>>> {
-    return request.get(`/api/v1/smarthome/hue-bridges/${id}`);
+  async getHueBridge(id: number): Promise<AxiosResponse<ApiResponse<HueBridgeDTO>>> {
+    return wrapAxios(await smarthomeClient.getHueBridge(id));
   },
 
-  createHueBridge(data: CreateHueBridgeBody): Promise<AxiosResponse<ApiResponse<HueBridgeDTO>>> {
-    return request.post('/api/v1/smarthome/hue-bridges', data);
+  async createHueBridge(
+    data: CreateHueBridgeRequest,
+  ): Promise<AxiosResponse<ApiResponse<HueBridgeDTO>>> {
+    return wrapAxios(await smarthomeClient.createHueBridge(data));
   },
 
-  updateHueBridge(id: number, data: UpdateHueBridgeBody): Promise<AxiosResponse<ApiResponse<HueBridgeDTO>>> {
-    return request.put(`/api/v1/smarthome/hue-bridges/${id}`, data);
+  async updateHueBridge(
+    id: number,
+    data: UpdateHueBridgeRequest,
+  ): Promise<AxiosResponse<ApiResponse<HueBridgeDTO>>> {
+    return wrapAxios(await smarthomeClient.updateHueBridge(id, data));
   },
 
-  deleteHueBridge(id: number): Promise<AxiosResponse<ApiResponse<void>>> {
-    return request.delete(`/api/v1/smarthome/hue-bridges/${id}`);
+  async deleteHueBridge(id: number): Promise<AxiosResponse<ApiResponse<void>>> {
+    await smarthomeClient.deleteHueBridge(id);
+    return wrapAxios<void>(undefined as never);
   },
 
   /* ==================== Xiaomi Gateway ==================== */
 
-  listXiaomiGateways(hallId: number): Promise<AxiosResponse<ApiResponse<XiaomiGatewayDTO[]>>> {
-    return request.get('/api/v1/smarthome/xiaomi-gateways', { params: { hall_id: hallId } });
+  async listXiaomiGateways(
+    hallId: number,
+  ): Promise<AxiosResponse<ApiResponse<XiaomiGatewayDTO[]>>> {
+    return wrapAxios(await smarthomeClient.listXiaomiGateways(hallId));
   },
 
-  getXiaomiGateway(id: number): Promise<AxiosResponse<ApiResponse<XiaomiGatewayDTO>>> {
-    return request.get(`/api/v1/smarthome/xiaomi-gateways/${id}`);
+  async getXiaomiGateway(id: number): Promise<AxiosResponse<ApiResponse<XiaomiGatewayDTO>>> {
+    return wrapAxios(await smarthomeClient.getXiaomiGateway(id));
   },
 
-  createXiaomiGateway(data: CreateXiaomiGatewayBody): Promise<AxiosResponse<ApiResponse<XiaomiGatewayDTO>>> {
-    return request.post('/api/v1/smarthome/xiaomi-gateways', data);
+  async createXiaomiGateway(
+    data: CreateXiaomiGatewayRequest,
+  ): Promise<AxiosResponse<ApiResponse<XiaomiGatewayDTO>>> {
+    return wrapAxios(await smarthomeClient.createXiaomiGateway(data));
   },
 
-  updateXiaomiGateway(id: number, data: UpdateXiaomiGatewayBody): Promise<AxiosResponse<ApiResponse<XiaomiGatewayDTO>>> {
-    return request.put(`/api/v1/smarthome/xiaomi-gateways/${id}`, data);
+  async updateXiaomiGateway(
+    id: number,
+    data: UpdateXiaomiGatewayRequest,
+  ): Promise<AxiosResponse<ApiResponse<XiaomiGatewayDTO>>> {
+    return wrapAxios(await smarthomeClient.updateXiaomiGateway(id, data));
   },
 
-  deleteXiaomiGateway(id: number): Promise<AxiosResponse<ApiResponse<void>>> {
-    return request.delete(`/api/v1/smarthome/xiaomi-gateways/${id}`);
+  async deleteXiaomiGateway(id: number): Promise<AxiosResponse<ApiResponse<void>>> {
+    await smarthomeClient.deleteXiaomiGateway(id);
+    return wrapAxios<void>(undefined as never);
   },
 
   /* ==================== EventRule ==================== */
 
-  listRules(hallId: number): Promise<AxiosResponse<ApiResponse<EventRuleDTO[]>>> {
-    return request.get('/api/v1/smarthome/rules', { params: { hall_id: hallId } });
+  async listRules(hallId: number): Promise<AxiosResponse<ApiResponse<EventRuleDTO[]>>> {
+    return wrapAxios(await smarthomeClient.listEventRules(hallId));
   },
 
-  getRule(id: string): Promise<AxiosResponse<ApiResponse<EventRuleDTO>>> {
-    return request.get(`/api/v1/smarthome/rules/${id}`);
+  async getRule(id: string): Promise<AxiosResponse<ApiResponse<EventRuleDTO>>> {
+    return wrapAxios(await smarthomeClient.getEventRule(id));
   },
 
-  createRule(data: CreateRuleBody): Promise<AxiosResponse<ApiResponse<EventRuleDTO>>> {
-    return request.post('/api/v1/smarthome/rules', data);
+  async createRule(
+    data: CreateEventRuleRequest,
+  ): Promise<AxiosResponse<ApiResponse<EventRuleDTO>>> {
+    return wrapAxios(await smarthomeClient.createEventRule(data));
   },
 
-  updateRule(id: string, data: UpdateRuleBody): Promise<AxiosResponse<ApiResponse<EventRuleDTO>>> {
-    return request.put(`/api/v1/smarthome/rules/${id}`, data);
+  async updateRule(
+    id: string,
+    data: UpdateEventRuleRequest,
+  ): Promise<AxiosResponse<ApiResponse<EventRuleDTO>>> {
+    return wrapAxios(await smarthomeClient.updateEventRule(id, data));
   },
 
-  deleteRule(id: string): Promise<AxiosResponse<ApiResponse<void>>> {
-    return request.delete(`/api/v1/smarthome/rules/${id}`);
+  async deleteRule(id: string): Promise<AxiosResponse<ApiResponse<void>>> {
+    await smarthomeClient.deleteEventRule(id);
+    return wrapAxios<void>(undefined as never);
   },
 
-  enableRule(id: string): Promise<AxiosResponse<ApiResponse<void>>> {
-    return request.post(`/api/v1/smarthome/rules/${id}/enable`);
+  async enableRule(id: string): Promise<AxiosResponse<ApiResponse<void>>> {
+    await smarthomeClient.enableEventRule(id);
+    return wrapAxios<void>(undefined as never);
   },
 
-  disableRule(id: string): Promise<AxiosResponse<ApiResponse<void>>> {
-    return request.post(`/api/v1/smarthome/rules/${id}/disable`);
+  async disableRule(id: string): Promise<AxiosResponse<ApiResponse<void>>> {
+    await smarthomeClient.disableEventRule(id);
+    return wrapAxios<void>(undefined as never);
   },
 
-  setDebugMode(id: string, debug: boolean): Promise<AxiosResponse<ApiResponse<void>>> {
-    return request.put(`/api/v1/smarthome/rules/${id}/debug`, { debug });
+  async setDebugMode(id: string, debug: boolean): Promise<AxiosResponse<ApiResponse<void>>> {
+    await smarthomeClient.setRuleDebugMode(id, debug);
+    return wrapAxios<void>(undefined as never);
   },
 
-  dryRunRule(id: string): Promise<AxiosResponse<ApiResponse<DryRunResultDTO>>> {
-    return request.post(`/api/v1/smarthome/rules/${id}/dry-run`);
+  async dryRunRule(id: string): Promise<AxiosResponse<ApiResponse<DryRunResultDTO>>> {
+    return wrapAxios(await smarthomeClient.dryRunEventRule(id));
   },
 
   /* ==================== TriggerLog ==================== */
 
-  listTriggerLogs(params: TriggerLogListParams): Promise<AxiosResponse<ApiResponse<PaginatedData<TriggerLogDTO>>>> {
-    return request.get('/api/v1/smarthome/trigger-logs', { params });
+  async listTriggerLogs(
+    params: TriggerLogListParams,
+  ): Promise<AxiosResponse<ApiResponse<PaginatedData<TriggerLogDTO>>>> {
+    const page = await smarthomeClient.listTriggerLogs(params);
+    return wrapAxios<PaginatedData<TriggerLogDTO>>({
+      list: page.list ?? [],
+      total: page.total,
+      page: page.page,
+      page_size: page.page_size,
+    });
   },
 
   /* ==================== DeviceHealth ==================== */
 
-  getDeviceHealth(hallId: number): Promise<AxiosResponse<ApiResponse<DeviceHealthDTO[]>>> {
-    return request.get('/api/v1/smarthome/health', { params: { hall_id: hallId } });
+  async getDeviceHealth(hallId: number): Promise<AxiosResponse<ApiResponse<DeviceHealthDTO[]>>> {
+    return wrapAxios(await smarthomeClient.listDeviceHealth(hallId));
   },
 
-  getGatewayHealth(hallId: number): Promise<AxiosResponse<ApiResponse<GatewayHealthDTO[]>>> {
-    return request.get('/api/v1/smarthome/health/gateways', { params: { hall_id: hallId } });
+  async getGatewayHealth(hallId: number): Promise<AxiosResponse<ApiResponse<GatewayHealthDTO[]>>> {
+    return wrapAxios(await smarthomeClient.listGatewayHealth(hallId));
   },
 
-  getDeviceHealthHistory(deviceId: number, since?: string): Promise<AxiosResponse<ApiResponse<DeviceHealthDTO[]>>> {
-    return request.get(`/api/v1/smarthome/health/${deviceId}/history`, { params: since ? { since } : {} });
+  async getDeviceHealthHistory(
+    deviceId: number,
+    since?: string,
+  ): Promise<AxiosResponse<ApiResponse<DeviceHealthDTO[]>>> {
+    return wrapAxios(await smarthomeClient.listDeviceHealthHistory(deviceId, since));
   },
 
   /* ==================== Alerts ==================== */
 
-  listAlerts(hallId: number): Promise<AxiosResponse<ApiResponse<AlertDTO[]>>> {
-    return request.get('/api/v1/smarthome/alerts', { params: { hall_id: hallId } });
+  async listAlerts(hallId: number): Promise<AxiosResponse<ApiResponse<AlertDTO[]>>> {
+    return wrapAxios(await smarthomeClient.listSmarthomeAlerts(hallId));
   },
 
-  ackAlert(alertKey: string): Promise<AxiosResponse<ApiResponse<void>>> {
-    return request.post('/api/v1/smarthome/alerts/ack', { alert_key: alertKey });
+  async ackAlert(alertKey: string): Promise<AxiosResponse<ApiResponse<void>>> {
+    await smarthomeClient.ackSmarthomeAlert(alertKey);
+    return wrapAxios<void>(undefined as never);
   },
 };

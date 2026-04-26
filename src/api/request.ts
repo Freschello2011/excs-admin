@@ -178,6 +178,15 @@ request.interceptors.response.use(
         return Promise.reject(error);
       }
 
+      // Phase 11.6：reason_required / 其它 authz 非标准错误体（{error, hint, action, ...}）
+      if (resData && typeof resData === 'object' && (resData.error === 'reason_required' || resData.hint)) {
+        if (!silent) {
+          const hint = (resData.hint as string | undefined) || '该操作需补充原因';
+          emitError(hint);
+        }
+        return Promise.reject(error);
+      }
+
       // Fallback to generic HTTP status messages
       if (status === 401) {
         handleLogout();

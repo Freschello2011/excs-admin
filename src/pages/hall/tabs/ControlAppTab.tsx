@@ -6,7 +6,7 @@ import type { TableColumnsType } from 'antd';
 import StatusTag from '@/components/common/StatusTag';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
-import type { ControlAppSessionItem, HallListItem } from '@/types/hall';
+import type { ControlAppSessionItem, HallListItem } from '@/api/gen/client';
 
 interface ControlAppTabProps {
   hallId: number;

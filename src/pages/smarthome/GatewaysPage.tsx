@@ -12,13 +12,13 @@ import { smarthomeApi } from '@/api/smarthome';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
 import { useHallStore } from '@/stores/hallStore';
-import type { HallListItem } from '@/types/hall';
+import type { HallListItem } from '@/api/gen/client';
 import type {
   HueBridgeDTO,
   XiaomiGatewayDTO,
   GatewayStatus,
   SSEStatus,
-} from '@/types/smarthome';
+} from '@/api/gen/client';
 
 /* ==================== 常量映射 ==================== */
 

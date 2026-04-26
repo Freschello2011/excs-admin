@@ -1,60 +1,72 @@
+/**
+ * Phase 3-D：releaseApi 重写为 AxiosResponse 兼容壳，代理到 releaseClient（src/api/gen/client.ts）。
+ *
+ * 设计：保留 AxiosResponse<ApiResponse<T>> 返回形状，让 react-query 老调用方
+ * （`select: (res) => res.data.data`）零改动。新代码请直接用 releaseClient（unwrap 后返回 .data）。
+ */
 import type { AxiosResponse } from 'axios';
-import request from './request';
-import type { ApiResponse, PaginatedData } from '@/types/api';
-import type {
-  AppRelease,
-  HallAppVersion,
-  CreateReleaseBody,
-  SetHallVersionBody,
-  ReleaseListParams,
-} from '@/types/release';
+import {
+  releaseClient,
+  type AppRelease,
+  type HallAppVersionDTO,
+  type RequestReleaseUploadRequest,
+  type RequestReleaseUploadResponse,
+  type CreateReleaseBody,
+  type SetHallVersionBody,
+  type ReleaseListParams,
+  type PageData,
+} from './gen/client';
 
-export interface RequestUploadBody {
-  platform: string;
-  arch: string;
-  version: string;
-  filename: string;
-  content_type?: string;
+/**
+ * release 上传凭证的本地别名（与 content context 的 RequestUploadResult 撞名，故不进 client.ts 全局导出）。
+ * 老调用方仍 import 这两个名字；类型等价于 yaml 的 RequestReleaseUploadRequest/Response。
+ */
+export type RequestUploadBody = RequestReleaseUploadRequest;
+export type RequestUploadResult = RequestReleaseUploadResponse;
+
+interface ApiResponse<T> {
+  code: number;
+  message: string;
+  data: T;
 }
 
-export interface RequestUploadResult {
-  presigned_url: string;
-  oss_key: string;
+function ok<T>(data: T, status = 200): AxiosResponse<ApiResponse<T>> {
+  return {
+    data: { code: 0, message: 'ok', data },
+    status,
+    statusText: 'OK',
+    headers: {},
+    config: {} as AxiosResponse['config'],
+  };
 }
 
 export const releaseApi = {
-  /** 获取上传凭证 */
   requestUpload(body: RequestUploadBody): Promise<AxiosResponse<ApiResponse<RequestUploadResult>>> {
-    return request.post('/api/v1/releases/request-upload', body);
+    return releaseClient.requestReleaseUpload(body).then((d) => ok(d));
   },
-
-  /** 列出版本（按平台筛选） */
-  listReleases(params: ReleaseListParams): Promise<AxiosResponse<ApiResponse<PaginatedData<AppRelease>>>> {
-    return request.get('/api/v1/releases', { params });
+  listReleases(
+    params: ReleaseListParams,
+  ): Promise<AxiosResponse<ApiResponse<PageData<AppRelease>>>> {
+    return releaseClient.listReleases(params).then((d) => ok(d));
   },
-
-  /** 创建新版本 */
   createRelease(body: CreateReleaseBody): Promise<AxiosResponse<ApiResponse<AppRelease>>> {
-    return request.post('/api/v1/releases', body);
+    return releaseClient.createRelease(body).then((d) => ok(d, 201));
   },
-
-  /** 删除版本 */
   deleteRelease(id: number): Promise<AxiosResponse<ApiResponse<null>>> {
-    return request.delete(`/api/v1/releases/${id}`);
+    return releaseClient.deleteRelease(id).then(() => ok(null));
   },
-
-  /** 获取展厅目标版本 */
-  getHallVersion(hallId: number): Promise<AxiosResponse<ApiResponse<HallAppVersion | null>>> {
-    return request.get(`/api/v1/halls/${hallId}/app-version`);
+  getHallVersion(
+    hallId: number,
+  ): Promise<AxiosResponse<ApiResponse<HallAppVersionDTO | null>>> {
+    return releaseClient.getHallAppVersion(hallId).then((d) => ok(d));
   },
-
-  /** 设置展厅目标版本 */
-  setHallVersion(hallId: number, body: SetHallVersionBody): Promise<AxiosResponse<ApiResponse<null>>> {
-    return request.put(`/api/v1/halls/${hallId}/app-version`, body);
+  setHallVersion(
+    hallId: number,
+    body: SetHallVersionBody,
+  ): Promise<AxiosResponse<ApiResponse<null>>> {
+    return releaseClient.setHallAppVersion(hallId, body).then(() => ok(null));
   },
-
-  /** 推送更新通知 */
   notifyUpdate(hallId: number, version: string): Promise<AxiosResponse<ApiResponse<null>>> {
-    return request.post(`/api/v1/halls/${hallId}/notify-update`, { version });
+    return releaseClient.notifyAppUpdate(hallId, { version }).then(() => ok(null));
   },
 };

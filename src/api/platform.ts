@@ -1,79 +1,64 @@
+// Phase 3-G：platform 9 端点全部走 OpenAPI typed client。
+//
+// `platformApi.*` 保留 AxiosResponse<ApiResponse<T>> 形态——react-query 调用方零改动。
+// 新调用方应直接用 `import { platformClient } from '@/api/gen/client'`。
+
 import type { AxiosResponse } from 'axios';
-import request from './request';
 import type { ApiResponse } from '@/types/api';
-import type {
-  AuditAppOpsResp,
-  AuditAuthzResp,
-  AuditSummaryDTO,
-  AiInteractionDTO,
-  BusinessPeriod,
-  BusinessTodosResp,
-  CostTrendDTO,
-  PlatformDashboardResp,
-  RunningStatsDTO,
-  StorageCapacityDTO,
-} from '@/types/platform';
+import {
+  platformClient,
+  type AiInteractionDTO,
+  type AuditAppOpsResp,
+  type AuditAuthzResp,
+  type AuditSummaryDTO,
+  type BusinessPeriod,
+  type BusinessTodosResp,
+  type CostTrendDTO,
+  type PlatformDashboardResp,
+  type RunningStatsDTO,
+  type StorageCapacityDTO,
+} from './gen/client';
 
-/**
- * 平台监控 / 业务看板 / 操作审计 三 Tab 的 9 个 HTTP 接口。
- *
- * 路由前缀：/api/v1/platform/*
- * 权限门禁（router.go）：
- *   - /platform/dashboard → platform.monitor.view
- *   - /platform/business/* → dashboard.view
- *   - /platform/audit/*    → audit.view
- */
+function envelope<T>(data: T): AxiosResponse<ApiResponse<T>> {
+  return {
+    data: { code: 0, message: 'ok', data },
+    status: 200,
+    statusText: 'OK',
+    headers: {} as never,
+    config: {} as never,
+  } as AxiosResponse<ApiResponse<T>>;
+}
+
 export const platformApi = {
-  /** Tab A · 聚合接口（一次返回资源 + 依赖 + 备份 + 证书） */
   getDashboard(): Promise<AxiosResponse<ApiResponse<PlatformDashboardResp>>> {
-    return request.get('/api/v1/platform/dashboard');
+    return platformClient.getDashboard().then(envelope);
   },
-
-  /** Tab B · 今日待办（无 period 参数） */
   getBusinessTodos(): Promise<AxiosResponse<ApiResponse<BusinessTodosResp>>> {
-    return request.get('/api/v1/platform/business/todos');
+    return platformClient.getBusinessTodos().then(envelope);
   },
-
-  /** Tab B · 运行状态 4 卡 */
   getBusinessRunning(
     period: BusinessPeriod,
   ): Promise<AxiosResponse<ApiResponse<RunningStatsDTO>>> {
-    return request.get('/api/v1/platform/business/running', { params: { period } });
+    return platformClient.getBusinessRunning(period).then(envelope);
   },
-
-  /** Tab B · 存储容量 4 卡（无 period） */
   getBusinessStorage(): Promise<AxiosResponse<ApiResponse<StorageCapacityDTO>>> {
-    return request.get('/api/v1/platform/business/storage');
+    return platformClient.getBusinessStorage().then(envelope);
   },
-
-  /** Tab B · 费用 3 卡 */
-  getBusinessCost(
-    period: BusinessPeriod,
-  ): Promise<AxiosResponse<ApiResponse<CostTrendDTO>>> {
-    return request.get('/api/v1/platform/business/cost', { params: { period } });
+  getBusinessCost(period: BusinessPeriod): Promise<AxiosResponse<ApiResponse<CostTrendDTO>>> {
+    return platformClient.getBusinessCost(period).then(envelope);
   },
-
-  /** Tab B · AI 互动 4 卡 */
   getBusinessAiInteraction(
     period: BusinessPeriod,
   ): Promise<AxiosResponse<ApiResponse<AiInteractionDTO>>> {
-    return request.get('/api/v1/platform/business/ai-interaction', { params: { period } });
+    return platformClient.getBusinessAiInteraction(period).then(envelope);
   },
-
-  /** Tab C · 审计摘要 4 卡 */
   getAuditSummary(date?: string): Promise<AxiosResponse<ApiResponse<AuditSummaryDTO>>> {
-    return request.get('/api/v1/platform/audit/summary', {
-      params: date ? { date } : undefined,
-    });
+    return platformClient.getAuditSummary(date).then(envelope);
   },
-
-  /** Tab C · 授权审计最近 N 条 */
   getAuditAuthz(limit = 10): Promise<AxiosResponse<ApiResponse<AuditAuthzResp>>> {
-    return request.get('/api/v1/platform/audit/authz', { params: { limit } });
+    return platformClient.getAuditAuthz(limit).then(envelope);
   },
-
-  /** Tab C · 应用操作最近 N 条 */
   getAuditAppOps(limit = 10): Promise<AxiosResponse<ApiResponse<AuditAppOpsResp>>> {
-    return request.get('/api/v1/platform/audit/app-ops', { params: { limit } });
+    return platformClient.getAuditAppOps(limit).then(envelope);
   },
 };

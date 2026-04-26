@@ -1,5 +1,5 @@
 import { Slider, InputNumber, Space } from 'antd';
-import type { LayoutConfig, WhiteboardRect } from '@/types/ai';
+import type { LayoutConfig, WhiteboardRect } from '@/api/gen/client';
 
 interface Props {
   value: LayoutConfig;

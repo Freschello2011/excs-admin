@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { platformApi } from '@/api/platform';
 import { queryKeys } from '@/api/queryKeys';
-import type { PlatformDashboardResp } from '@/types/platform';
+import type { PlatformDashboardResp } from '@/api/gen/client';
 
 /**
  * 平台监控 Tab —— 单聚合接口 60s 轮询。

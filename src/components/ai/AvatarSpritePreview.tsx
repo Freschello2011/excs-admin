@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button, Space, Spin } from 'antd';
-import type { SpriteSheet, VideoType } from '@/types/ai';
+import type { AiSpriteSheet, VideoType } from '@/api/gen/client';
 
 interface SpriteGroupProps {
-  spriteSheets: SpriteSheet[];
+  spriteSheets: AiSpriteSheet[];
   /** Base URL for sprite images, e.g. /api/v1/ai/avatar-templates/1/sprites/idle/ */
   baseUrl: string;
   active: boolean;
@@ -82,9 +82,9 @@ function SpriteLayer({ spriteSheets, baseUrl, active }: SpriteGroupProps) {
 }
 
 interface AvatarSpritePreviewProps {
-  idleSpriteSheets?: SpriteSheet[];
-  thinkingSpriteSheets?: SpriteSheet[];
-  talkingSpriteSheets?: SpriteSheet[];
+  idleSpriteSheets?: AiSpriteSheet[] | null;
+  thinkingSpriteSheets?: AiSpriteSheet[] | null;
+  talkingSpriteSheets?: AiSpriteSheet[] | null;
   /** Template ID, used to build sprite proxy URLs */
   templateId: number;
   /** Controlled state from outside (e.g. chat simulator) */

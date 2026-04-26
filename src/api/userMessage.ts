@@ -1,28 +1,40 @@
-/**
- * Phase 9 站内消息 API。
- *
- * 注意不要与 `@/api/notification`（展厅运维通知配置/日志）混用；那是按 hall 配接收人
- * 发短信；本模块是"用户自身收件箱"。后端路径：/user-messages/*
- */
+// Phase 3-G：站内消息 4 端点切到 OpenAPI typed client。
+//
+// `userMessageApi.*` 保留 AxiosResponse<ApiResponse<T>> 形态。
+// 新调用方应直接用 `import { userMessageClient } from '@/api/gen/client'`。
+
 import type { AxiosResponse } from 'axios';
-import request from './request';
 import type { ApiResponse } from '@/types/api';
-import type { UserMessageListParams, UserMessageListResult } from '@/types/userMessage';
+import {
+  userMessageClient,
+  type UserMessageListParams,
+  type UserMessageListResult,
+} from './gen/client';
+
+function envelope<T>(data: T): AxiosResponse<ApiResponse<T>> {
+  return {
+    data: { code: 0, message: 'ok', data },
+    status: 200,
+    statusText: 'OK',
+    headers: {} as never,
+    config: {} as never,
+  } as AxiosResponse<ApiResponse<T>>;
+}
 
 export const userMessageApi = {
   list(params?: UserMessageListParams): Promise<AxiosResponse<ApiResponse<UserMessageListResult>>> {
-    return request.get('/api/v1/user-messages', { params });
+    return userMessageClient.list(params ?? {}).then(envelope);
   },
 
   unreadCount(): Promise<AxiosResponse<ApiResponse<{ unread: number }>>> {
-    return request.get('/api/v1/user-messages/unread-count');
+    return userMessageClient.unreadCount().then((r) => envelope({ unread: r.unread }));
   },
 
   markRead(id: number): Promise<AxiosResponse<ApiResponse<{ id: number }>>> {
-    return request.post(`/api/v1/user-messages/${id}/read`);
+    return userMessageClient.markRead(id).then((r) => envelope({ id: r.id }));
   },
 
   markAllRead(): Promise<AxiosResponse<ApiResponse<{ ok: boolean }>>> {
-    return request.post('/api/v1/user-messages/mark-all-read');
+    return userMessageClient.markAllRead().then((r) => envelope({ ok: r.ok }));
   },
 };

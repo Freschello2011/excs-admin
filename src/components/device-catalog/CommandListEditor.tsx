@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import ParamsSchemaEditor, { rowsToSchema, schemaToRows } from './ParamsSchemaEditor';
 import { deviceProtocolBaselineApi } from '@/api/deviceProtocolBaseline';
 import { queryKeys } from '@/api/queryKeys';
-import type { ProtocolCommand, ParamsSchema } from '@/types/deviceProtocolBaseline';
+import type { ProtocolCommand, ParamsSchema } from '@/api/gen/client';
 import type { ParamsSchemaObject, ParamsSchemaRow } from '@/types/deviceCatalog';
 
 /** 编辑器内部模型：params_schema 已展开为表格行 */

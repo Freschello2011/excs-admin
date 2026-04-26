@@ -45,16 +45,6 @@ export const servicePeriodSchema = z.object({
 
 export type ServicePeriodFormValues = z.infer<typeof servicePeriodSchema>;
 
-/* ==================== Hall Config ==================== */
-
-export const hallConfigSchema = z.object({
-  ai_knowledge_text: z.string().max(10000, '知识文本不超过 10000 字').optional(),
-  hall_master_exhibit_id: z.number().nullable().optional(),
-  hall_master_fallback_id: z.number().nullable().optional(),
-});
-
-export type HallConfigFormValues = z.infer<typeof hallConfigSchema>;
-
 /* ==================== App Instance Bind ==================== */
 
 export const appInstanceBindSchema = z.object({

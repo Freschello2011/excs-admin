@@ -1,5 +1,5 @@
 import { Steps } from 'antd';
-import type { PipelineStage } from '@/types/content';
+import type { PipelineStage } from '@/api/gen/client';
 
 interface InlinePipelineProps {
   stages: PipelineStage[];
@@ -97,8 +97,8 @@ export default function InlinePipeline({
       if (stage.status === 'completed' && stage.duration_seconds !== undefined) {
         return <span style={{ fontSize: 11 }}>{formatElapsed(stage.duration_seconds)}</span>;
       }
-      if (stage.status === 'failed' && stage.error) {
-        return <span style={{ fontSize: 11, color: 'var(--ant-color-error)' }}>{stage.error}</span>;
+      if (stage.status === 'failed' && stage.message) {
+        return <span style={{ fontSize: 11, color: 'var(--ant-color-error)' }}>{stage.message}</span>;
       }
       if (stage.status === 'skipped') {
         return <span style={{ fontSize: 11, color: 'var(--ant-color-text-quaternary)' }}>跳过</span>;
