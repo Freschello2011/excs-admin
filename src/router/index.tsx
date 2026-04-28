@@ -24,9 +24,9 @@ const ShowTimelinePage = lazy(() => import('@/pages/show/ShowTimelinePage'));
 const DeviceListPage = lazy(() => import('@/pages/device/DeviceListPage'));
 const AiAvatarListPage = lazy(() => import('@/pages/ai/AiAvatarListPage'));
 const AiAvatarLibraryPage = lazy(() => import('@/pages/ai/AiAvatarLibraryPage'));
-const ProtocolBaselinePage = lazy(() => import('@/pages/platform/ProtocolBaselinePage'));
-const CategoryPage = lazy(() => import('@/pages/platform/CategoryPage'));
-const DeviceModelsPage = lazy(() => import('@/pages/platform/DeviceModelsPage'));
+// device-mgmt-v2 P6：4 tab 合并页（预置型号 / 协议库 / 插件 / 触发器模板占位）
+const DeviceCatalogPage = lazy(() => import('@/pages/platform/DeviceCatalogPage'));
+const TriggerListPage = lazy(() => import('@/pages/hall/TriggerListPage'));
 const UserListPage = lazy(() => import('@/pages/user/UserListPage'));
 const UserDetailPage = lazy(() => import('@/pages/user/UserDetailPage'));
 const NotificationListPage = lazy(() => import('@/pages/notification/NotificationListPage'));
@@ -242,6 +242,15 @@ export const router = createBrowserRouter([
         path: 'devices',
         element: <HallRoute><DeviceListPage /></HallRoute>,
       },
+      /* device-mgmt-v2 P6：触发器管理 */
+      {
+        path: 'halls/:hallId/triggers',
+        element: <HallRoute><TriggerListPage /></HallRoute>,
+      },
+      {
+        path: 'triggers',
+        element: <HallRoute><HallScopedRedirect target="triggers" /></HallRoute>,
+      },
       /* 内容总库（新路径合并未绑定内容） */
       {
         path: 'contents',
@@ -305,18 +314,10 @@ export const router = createBrowserRouter([
       },
 
       /* ─── 平台管理 region（admin-only，与展厅无关）─── */
-      /* 平台数据配置 */
+      /* device-mgmt-v2 P6：设备目录（4 tab 合并入口） */
       {
-        path: 'platform/device-protocols',
-        element: <RequireAdmin><SuspenseWrap><ProtocolBaselinePage /></SuspenseWrap></RequireAdmin>,
-      },
-      {
-        path: 'platform/device-models',
-        element: <RequireAdmin><SuspenseWrap><DeviceModelsPage /></SuspenseWrap></RequireAdmin>,
-      },
-      {
-        path: 'platform/device-categories',
-        element: <RequireAdmin><SuspenseWrap><CategoryPage /></SuspenseWrap></RequireAdmin>,
+        path: 'platform/device-catalog',
+        element: <RequireAdmin><SuspenseWrap><DeviceCatalogPage /></SuspenseWrap></RequireAdmin>,
       },
       {
         path: 'platform/ai-avatar-library',

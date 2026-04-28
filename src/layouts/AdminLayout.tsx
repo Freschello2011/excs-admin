@@ -84,6 +84,12 @@ function buildMenuRegions(selectedHallId?: number): MenuRegion[] {
               requireActions: ['exhibit.view', 'exhibit.edit'],
             },
             { path: '/devices', icon: 'devices_other', label: '设备管理', requireActions: ['device.view', 'device.edit', 'device.control'] },
+            {
+              path: hallId ? `/halls/${hallId}/triggers` : '/triggers',
+              icon: 'sensors',
+              label: '触发器',
+              requireActions: ['device.edit', 'device.control'],
+            },
             { path: '/scenes', icon: 'scene', label: '场景管理', requireActions: ['scene.view', 'scene.edit', 'scene.switch'] },
             {
               path: hallId ? `/halls/${hallId}/control-app` : '/control-app',
@@ -121,9 +127,8 @@ function buildMenuRegions(selectedHallId?: number): MenuRegion[] {
           label: '数据字典',
           collapsible: true,
           items: [
-            { path: '/platform/device-models', icon: 'memory', label: '设备品牌型号', requireActions: ['catalog.view', 'catalog.edit'] },
-            { path: '/platform/device-protocols', icon: 'api', label: '设备协议基线库', requireActions: ['catalog.view', 'catalog.edit'] },
-            { path: '/platform/device-categories', icon: 'apps', label: '设备分类', requireActions: ['catalog.view', 'catalog.edit'] },
+            // device-mgmt-v2 P6：4 tab 合并页（预置 / 协议 / 插件 / 触发器模板占位）
+            { path: '/platform/device-catalog', icon: 'inventory_2', label: '设备目录', requireActions: ['catalog.view', 'catalog.edit'] },
           ],
         },
         {
@@ -189,9 +194,7 @@ const titleMap: Record<string, string> = {
   '/smarthome/trigger-logs': '触发日志',
   '/smarthome/alerts': '告警列表',
   '/analytics': '运营分析',
-  '/platform/device-models': '设备品牌型号',
-  '/platform/device-protocols': '设备协议基线库',
-  '/platform/device-categories': '设备分类',
+  '/platform/device-catalog': '设备目录',
   '/platform/ai-avatar-library': 'AI 形象库',
   '/platform/authz/users': '用户',
   '/platform/sys-config': '系统参数',
@@ -215,6 +218,7 @@ function resolveTitleFromPath(pathname: string): string {
   if (/^\/halls\/\d+\/exhibits/.test(pathname)) return '展项管理';
   if (/^\/halls\/\d+\/exhibit-management/.test(pathname)) return '展项管理';
   if (/^\/halls\/\d+\/control-app/.test(pathname)) return '中控 App';
+  if (/^\/halls\/\d+\/triggers/.test(pathname)) return '触发器';
   if (/^\/halls\/\d+$/.test(pathname)) return '展厅详情';
   // Static titleMap
   for (const [path, title] of Object.entries(titleMap)) {

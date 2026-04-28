@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Descriptions, Card, Button, Modal, Form, DatePicker, InputNumber } from 'antd';
+import { Card, Button, Modal, Form, DatePicker, InputNumber, Input } from 'antd';
 import { useMessage } from '@/hooks/useMessage';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
@@ -7,6 +7,7 @@ import StatusTag from '@/components/common/StatusTag';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
 import type { HallDetail } from '@/api/gen/client';
+import styles from './HallInfoTab.module.scss';
 
 interface HallInfoTabProps {
   hall: HallDetail;
@@ -20,13 +21,27 @@ export default function HallInfoTab({ hall, isAdmin }: HallInfoTabProps) {
   const [form] = Form.useForm();
 
   const updateServicePeriod = useMutation({
-    mutationFn: (data: { service_start: string; service_end: string; grace_days: number }) =>
-      hallApi.updateServicePeriod(hall.id, data),
+    mutationFn: (data: {
+      service_start: string;
+      service_end: string;
+      grace_days: number;
+      reason: string;
+    }) =>
+      hallApi.updateServicePeriod(
+        hall.id,
+        {
+          service_start: data.service_start,
+          service_end: data.service_end,
+          grace_days: data.grace_days,
+        },
+        data.reason,
+      ),
     onSuccess: () => {
       message.success('服务期更新成功');
       queryClient.invalidateQueries({ queryKey: queryKeys.hallDetail(hall.id) });
       setServiceModalOpen(false);
     },
+    onError: (err: Error) => message.error(err.message || '服务期更新失败'),
   });
 
   const openServiceModal = () => {
@@ -46,39 +61,10 @@ export default function HallInfoTab({ hall, isAdmin }: HallInfoTabProps) {
         service_start: start.format('YYYY-MM-DD'),
         service_end: end.format('YYYY-MM-DD'),
         grace_days: values.grace_days,
+        reason: values.reason,
       });
     });
   };
-
-  const infoItems = [
-    { key: 'id', label: 'ID', children: hall.id },
-    { key: 'mdm_id', label: 'MDM 编号', children: hall.mdm_showroom_id },
-    { key: 'name', label: '展厅名称', children: hall.name },
-    {
-      key: 'status',
-      label: '服务状态',
-      children: <StatusTag status={hall.status === 'active' ? 'normal' : hall.status} />,
-    },
-    {
-      key: 'service_period',
-      label: '服务期',
-      children: hall.service_period
-        ? `${hall.service_period.service_start} ~ ${hall.service_period.service_end}（宽限 ${hall.service_period.grace_days} 天）`
-        : '未设置',
-    },
-    { key: 'exhibit_count', label: '展项数', children: hall.exhibit_count },
-    { key: 'device_count', label: '设备数', children: hall.device_count },
-    {
-      key: 'mqtt',
-      label: 'MQTT 配置',
-      children: hall.mqtt_config
-        ? `${hall.mqtt_config.broker_url} (${hall.mqtt_config.topic_prefix})`
-        : '未配置',
-      span: 2,
-    },
-    { key: 'created_at', label: '创建时间', children: dayjs(hall.created_at).format('YYYY-MM-DD HH:mm') },
-    { key: 'updated_at', label: '更新时间', children: dayjs(hall.updated_at).format('YYYY-MM-DD HH:mm') },
-  ];
 
   return (
     <>
@@ -91,8 +77,63 @@ export default function HallInfoTab({ hall, isAdmin }: HallInfoTabProps) {
             </Button>
           ) : undefined
         }
+        styles={{ body: { padding: 4 } }}
       >
-        <Descriptions bordered column={2} items={infoItems} />
+        <div className={styles.infoGrid}>
+          <div className={styles.infoItem}>
+            <div className={styles.infoLabel}>ID</div>
+            <div className={`${styles.infoValue} ${styles.infoValueMono}`}>{hall.id}</div>
+          </div>
+          <div className={styles.infoItem}>
+            <div className={styles.infoLabel}>MDM 编号</div>
+            <div className={`${styles.infoValue} ${styles.infoValueMono}`}>{hall.mdm_showroom_id}</div>
+          </div>
+          <div className={styles.infoItem}>
+            <div className={styles.infoLabel}>展厅名称</div>
+            <div className={styles.infoValue}>{hall.name}</div>
+          </div>
+          <div className={styles.infoItem}>
+            <div className={styles.infoLabel}>服务状态</div>
+            <div className={styles.infoValue}>
+              <StatusTag status={hall.status === 'active' ? 'normal' : hall.status} />
+            </div>
+          </div>
+          <div className={styles.infoItem}>
+            <div className={styles.infoLabel}>服务期</div>
+            <div className={styles.infoValue}>
+              {hall.service_period
+                ? `${hall.service_period.service_start} ~ ${hall.service_period.service_end}（宽限 ${hall.service_period.grace_days} 天）`
+                : '未设置'}
+            </div>
+          </div>
+          <div className={styles.infoItem}>
+            <div className={styles.infoLabel}>展项数</div>
+            <div className={styles.infoValue}>{hall.exhibit_count}</div>
+          </div>
+          <div className={styles.infoItem}>
+            <div className={styles.infoLabel}>设备数</div>
+            <div className={styles.infoValue}>{hall.device_count}</div>
+          </div>
+          <div className={`${styles.infoItem} ${styles.infoItemFull}`}>
+            <div className={styles.infoLabel}>MQTT 配置</div>
+            <div className={`${styles.infoValue} ${styles.infoValueMono}`}>
+              {hall.mqtt_config
+                ? <>
+                    {hall.mqtt_config.broker_url}
+                    <span className={styles.infoMqttSuffix}>({hall.mqtt_config.topic_prefix})</span>
+                  </>
+                : '未配置'}
+            </div>
+          </div>
+          <div className={styles.infoItem}>
+            <div className={styles.infoLabel}>创建时间</div>
+            <div className={styles.infoValue}>{dayjs(hall.created_at).format('YYYY-MM-DD HH:mm')}</div>
+          </div>
+          <div className={styles.infoItem}>
+            <div className={styles.infoLabel}>更新时间</div>
+            <div className={styles.infoValue}>{dayjs(hall.updated_at).format('YYYY-MM-DD HH:mm')}</div>
+          </div>
+        </div>
       </Card>
 
       <Modal
@@ -102,7 +143,7 @@ export default function HallInfoTab({ hall, isAdmin }: HallInfoTabProps) {
         onCancel={() => setServiceModalOpen(false)}
         confirmLoading={updateServicePeriod.isPending}
       >
-        <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
+        <Form form={form} layout="vertical" className={styles.modalForm}>
           <Form.Item
             name="range"
             label="服务期"
@@ -116,6 +157,17 @@ export default function HallInfoTab({ hall, isAdmin }: HallInfoTabProps) {
             rules={[{ required: true, message: '请输入宽限天数' }]}
           >
             <InputNumber min={0} max={30} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item
+            name="reason"
+            label="操作原因"
+            rules={[
+              { required: true, message: '请填写操作原因（审计用）' },
+              { min: 5, message: '操作原因至少 5 字' },
+            ]}
+            help="hall.update_service_period 是高风险操作，原因将记入审计日志（≥ 5 字）"
+          >
+            <Input.TextArea rows={2} maxLength={500} showCount placeholder="例如：客户续约延长服务期至 2027-12-31" />
           </Form.Item>
         </Form>
       </Modal>

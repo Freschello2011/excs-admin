@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Button, Switch, Tooltip, Space, Popconfirm, Image, Input, Typography, Card } from 'antd';
+import { Button, Switch, Tooltip, Space, Image, Input, Typography, Card } from 'antd';
 import { useMessage } from '@/hooks/useMessage';
 import {
   UploadOutlined, DeleteOutlined, FileImageOutlined, SoundOutlined,
@@ -8,6 +8,7 @@ import {
 } from '@ant-design/icons';
 import StatusTag from '@/components/common/StatusTag';
 import InlinePipeline from '@/components/content/InlinePipeline';
+import RiskyActionButton from '@/components/authz/RiskyActionButton';
 import { contentApi } from '@/api/content';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
@@ -91,12 +92,13 @@ export default function ExhibitContentTab({ hallId, exhibitId, exhibit, canManag
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (contentId: number) => contentApi.deleteContent(contentId),
+    mutationFn: ({ contentId, reason }: { contentId: number; reason?: string }) =>
+      contentApi.deleteContent(contentId, reason),
     onSuccess: () => {
       message.success('文件已删除');
       queryClient.invalidateQueries({ queryKey: queryKeys.exhibitContent(exhibitId) });
     },
-    onError: () => message.error('删除失败'),
+    onError: (err: Error) => message.error(err.message || '删除失败'),
   });
 
   const renameMutation = useMutation({
@@ -287,15 +289,18 @@ export default function ExhibitContentTab({ hallId, exhibitId, exhibit, canManag
           </Tooltip>
 
           {canManage && (
-            <Popconfirm
-              title="确认删除此文件？"
-              description="删除后 OSS 文件和关联标签将一并清除"
-              onConfirm={() => deleteMutation.mutate(item.content_id)}
-              okText="删除"
-              okButtonProps={{ danger: true }}
-            >
-              <Button type="text" danger size="small" icon={<DeleteOutlined />} />
-            </Popconfirm>
+            <RiskyActionButton
+              action="content.delete"
+              type="text"
+              danger
+              size="small"
+              icon={<DeleteOutlined />}
+              confirmTitle="删除此文件"
+              confirmContent="删除后 OSS 文件和关联标签将一并清除。请填写操作原因（≥ 5 字，审计用）。"
+              onConfirm={async (reason) => {
+                await deleteMutation.mutateAsync({ contentId: item.content_id, reason });
+              }}
+            />
           )}
         </div>
 

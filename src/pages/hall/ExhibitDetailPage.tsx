@@ -22,6 +22,8 @@ import ExhibitTagsTab from './tabs/ExhibitTagsTab';
 import ExhibitDistributionTab from './tabs/ExhibitDistributionTab';
 import ExhibitScriptsTab from './tabs/ExhibitScriptsTab';
 import ExhibitSlideshowTab from './tabs/ExhibitSlideshowTab';
+import ExhibitDevicesTab from './tabs/ExhibitDevicesTab';
+import ExhibitDebugTab from './tabs/ExhibitDebugTab';
 import styles from './ExhibitDetailPage.module.scss';
 
 const DISPLAY_MODE_LABEL: Record<string, string> = {
@@ -76,6 +78,8 @@ export default function ExhibitDetailPage() {
 
   const [outerTab, setOuterTab] = useState<'info' | 'devContent'>('info');
   const [innerTab, setInnerTab] = useState('content');
+  // [展项设备] tab → [调试] 跳转时预填 deviceId（P9-A 占位，P9-C 转设备调试台后会替换）
+  const [debugDeviceId, setDebugDeviceId] = useState<number | undefined>(undefined);
 
   const { data: _hall, isLoading: hallLoading } = useQuery({
     queryKey: queryKeys.hallDetail(hallId),
@@ -280,6 +284,21 @@ export default function ExhibitDetailPage() {
       children: <ExhibitContentTab hallId={hallId} exhibitId={exhibitId} exhibit={exhibit} canManage={canManage} />,
     },
     {
+      key: 'devices',
+      label: '展项设备',
+      children: (
+        <ExhibitDevicesTab
+          hallId={hallId}
+          exhibitId={exhibitId}
+          canManage={canManage}
+          onOpenDebug={(deviceId) => {
+            setDebugDeviceId(deviceId);
+            setInnerTab('debug');
+          }}
+        />
+      ),
+    },
+    {
       key: 'tags',
       label: '标签管理',
       children: <ExhibitTagsTab hallId={hallId} exhibitId={exhibitId} canManage={canManage} />,
@@ -298,6 +317,11 @@ export default function ExhibitDetailPage() {
       key: 'slideshow',
       label: '图文汇报',
       children: <ExhibitSlideshowTab hallId={hallId} exhibitId={exhibitId} canManage={canManage} />,
+    },
+    {
+      key: 'debug',
+      label: '调试',
+      children: <ExhibitDebugTab hallId={hallId} exhibitId={exhibitId} defaultDeviceId={debugDeviceId} />,
     },
   ];
 

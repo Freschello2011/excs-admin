@@ -669,3 +669,47 @@
     background: rgba(26, 33, 57, 0.6) !important;
   }
 }
+
+/* ===================================================================
+ * 标签搜索 Popover 内容（替代原 <div style={{marginBottom:12}}>...）
+ * 红线：仅样式 token 化 / 字段虚线分隔；不改字段、控件、值绑定。
+ * =================================================================== */
+
+.popoverField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 12px;
+
+  & + .popoverField {
+    border-top: 1px dashed var(--color-outline-variant);
+    padding-top: 12px;
+  }
+
+  &:last-child {
+    padding-bottom: 0;
+  }
+}
+
+.popoverFieldLabel {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-on-surface);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* 仅 Slider 字段使用 —— 紫色 mono 当前值徽章（其他控件本身已显示值，无需重复） */
+.popoverSliderValue {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-on-primary-container);
+  background: var(--color-primary-container);
+  padding: 1px 8px;
+  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}
+

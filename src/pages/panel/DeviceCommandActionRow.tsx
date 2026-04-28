@@ -30,7 +30,7 @@ export default function DeviceCommandActionRow({ action, devices, onChange, onRe
     () =>
       devices.map((d) => ({
         value: d.id,
-        label: `${d.name}（${d.subcategory_name ?? d.model_name ?? ''}）`,
+        label: d.name,
       })),
     [devices],
   );

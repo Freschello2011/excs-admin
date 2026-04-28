@@ -23,6 +23,7 @@ import PageHeader from '@/components/common/PageHeader';
 import PillTabs, { type PillTab } from '@/components/common/PillTabs';
 import ContentStatusTag from '@/components/content/ContentStatusTag';
 import ContentDetailDrawer from '@/components/content/ContentDetailDrawer';
+import RiskyActionButton from '@/components/authz/RiskyActionButton';
 import { useMessage } from '@/hooks/useMessage';
 import { contentApi } from '@/api/content';
 import type { ContentDetail } from '@/api/gen/client';
@@ -111,7 +112,8 @@ export default function MyContentsPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (contentId: number) => contentApi.deleteContent(contentId),
+    mutationFn: ({ contentId, reason }: { contentId: number; reason?: string }) =>
+      contentApi.deleteContent(contentId, reason),
     onSuccess: () => {
       message.success('已删除');
       queryClient.invalidateQueries({ queryKey: ['vendor', 'my-contents'] });
@@ -249,9 +251,20 @@ export default function MyContentsPage() {
                     ),
                     // 删除按钮：仅 pending_accept / rejected / withdrawn 可硬删（后端 STATUS_LOCKED 兜底）
                     (['pending_accept', 'rejected', 'withdrawn'] as readonly string[]).includes(status) ? (
-                      <Popconfirm key="del" title="删除此条？" okText="删除" okButtonProps={{ danger: true }} onConfirm={() => deleteMutation.mutate(item.id)}>
-                        <Button type="link" size="small" danger>删除</Button>
-                      </Popconfirm>
+                      <RiskyActionButton
+                        key="del"
+                        action="content.delete"
+                        type="link"
+                        size="small"
+                        danger
+                        confirmTitle="删除内容"
+                        confirmContent="OSS 原文件与缩略图将一并清理。请填写操作原因（≥ 5 字，审计用）。"
+                        onConfirm={async (reason) => {
+                          await deleteMutation.mutateAsync({ contentId: item.id, reason });
+                        }}
+                      >
+                        删除
+                      </RiskyActionButton>
                     ) : (
                       <span key="del-noop" />
                     ),

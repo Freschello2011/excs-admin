@@ -13,6 +13,7 @@ import Can from '@/components/authz/Can';
 import HallAuthzPanel from '@/components/authz/HallAuthzPanel';
 import HallInfoTab from './tabs/HallInfoTab';
 import HallConfigTab from './tabs/HallConfigTab';
+import styles from './HallDetailPage.module.scss';
 
 export default function HallDetailPage() {
   const { hallId: hallIdStr } = useParams<{ hallId: string }>();
@@ -37,11 +38,11 @@ export default function HallDetailPage() {
   }, [hall, hallId, setSelectedHall]);
 
   if (isLoading) {
-    return <Spin style={{ display: 'flex', justifyContent: 'center', marginTop: 120 }} />;
+    return <Spin className={styles.spinCenter} />;
   }
 
   if (!hall) {
-    return <div style={{ textAlign: 'center', marginTop: 120, color: 'var(--color-outline)' }}>展厅不存在</div>;
+    return <div className={styles.notFound}>展厅不存在</div>;
   }
 
   const statusKey = hall.status === 'active' ? 'normal' : hall.status;
@@ -59,18 +60,18 @@ export default function HallDetailPage() {
       />
 
       {/* 基本信息 */}
-      <div style={{ marginTop: 16 }}>
+      <div className={styles.section}>
         <HallInfoTab hall={hall} isAdmin={isAdmin()} />
       </div>
 
       {/* 配置参数 */}
-      <div style={{ marginTop: 24 }}>
+      <div className={styles.sectionLg}>
         <HallConfigTab hallId={hallId} hall={hall} canConfig={canConfig} />
       </div>
 
       {/* 权限分布（Phase 7.2 按资源视角） */}
       <Can action="user.view">
-        <div style={{ marginTop: 24 }}>
+        <div className={styles.sectionLg}>
           <HallAuthzPanel hallId={hallId} hallName={hall.name} />
         </div>
       </Can>

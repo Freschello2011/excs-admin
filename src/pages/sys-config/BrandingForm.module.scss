@@ -1,0 +1,74 @@
+/**
+ * BrandingForm — 把蓝色品牌强调条改紫主色 / 灰字 token 化 / Logo 缩略图玻璃化。
+ * 红线：仅样式 + 颜色 token；表单字段、上传逻辑、保存按钮不变。
+ */
+
+.loadingState {
+  text-align: center;
+  padding: 60px 0;
+  color: var(--color-on-surface-variant);
+}
+
+/* 顶部"品牌信息"小标题（紫色 4px 短竖条） */
+.subTitle {
+  margin-bottom: 20px;
+  font-weight: 600;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-on-surface);
+
+  &::before {
+    content: '';
+    display: inline-block;
+    width: 3px;
+    height: 16px;
+    border-radius: 2px;
+    background: var(--color-primary);
+  }
+}
+
+/* Form.Item help 灰字（替代 #999） */
+.fieldHelp {
+  color: var(--color-on-surface-variant);
+  font-size: 12px;
+}
+
+/* Logo 上传区 */
+.logoUpload {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.logoThumb {
+  width: 64px;
+  height: 64px;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--color-surface-container-low);
+  transition: border-color 0.18s, box-shadow 0.18s;
+}
+
+.logoThumb:hover {
+  border-color: rgba(var(--color-primary-rgb), 0.4);
+  box-shadow: 0 2px 8px rgba(80, 60, 170, 0.08);
+}
+
+.logoEmpty {
+  width: 64px;
+  height: 64px;
+  border: 1px dashed var(--color-outline-variant);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-outline);
+  font-size: 12px;
+  background: var(--color-surface-container-low);
+}

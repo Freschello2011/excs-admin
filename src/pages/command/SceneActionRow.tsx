@@ -28,7 +28,7 @@ export default function SceneActionRow({ action, devices, onChange, onRemove }: 
     () =>
       devices.map((d) => ({
         value: d.id,
-        label: `${d.name}（${d.subcategory_name ?? d.model_name ?? ''}）`,
+        label: d.name,
       })),
     [devices],
   );

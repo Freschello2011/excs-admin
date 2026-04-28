@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Button, Space, Form, Input, InputNumber, Select, Modal, Card,
-  Collapse, Popconfirm, Descriptions, Tag, Empty,
+  Button, Space, Form, Input, InputNumber, Select, Modal,
+  Collapse, Popconfirm, Tag, Empty,
 } from 'antd';
 import { useMessage } from '@/hooks/useMessage';
 import {
@@ -18,6 +18,7 @@ import { queryKeys } from '@/api/queryKeys';
 import { useCan } from '@/lib/authz/can';
 import type { ShowTrack, ShowAction, TrackType } from '@/api/gen/client';
 import type { DeviceListItem } from '@/api/gen/client';
+import styles from './ShowDetailPage.module.scss';
 
 const TRACK_TYPE_LABELS: Record<TrackType, string> = {
   video: '视频',
@@ -70,7 +71,7 @@ export default function ShowDetailPage() {
   });
   const deviceOptions = (devices ?? []).map((d: DeviceListItem) => ({
     value: d.id,
-    label: `${d.name}（${d.subcategory_name ?? d.model_name ?? ''}）`,
+    label: d.name,
   }));
 
   const canManage = useCan(
@@ -197,11 +198,11 @@ export default function ShowDetailPage() {
   };
 
   if (isLoading) {
-    return <div style={{ padding: 60, textAlign: 'center', color: 'var(--ant-color-text-quaternary)' }}>加载中...</div>;
+    return <div className={styles.stateMsg}>加载中...</div>;
   }
 
   if (!show) {
-    return <div style={{ padding: 60, textAlign: 'center', color: 'var(--ant-color-text-quaternary)' }}>演出不存在</div>;
+    return <div className={styles.stateMsg}>演出不存在</div>;
   }
 
   const tracks = show.tracks ?? [];
@@ -212,7 +213,7 @@ export default function ShowDetailPage() {
       <Space>
         <Tag color={TRACK_TYPE_COLORS[track.track_type as TrackType]}>{TRACK_TYPE_LABELS[track.track_type as TrackType]}</Tag>
         <span>{track.name}</span>
-        <span style={{ color: 'var(--ant-color-text-quaternary)' }}>（{track.actions?.length ?? 0} 个动作）</span>
+        <span className={styles.collapseMeta}>（{track.actions?.length ?? 0} 个动作）</span>
       </Space>
     ),
     extra: canManage ? (
@@ -234,29 +235,25 @@ export default function ShowDetailPage() {
             .slice()
             .sort((a: ShowAction, b: ShowAction) => a.start_time_ms - b.start_time_ms)
             .map((action: ShowAction) => (
-              <Card key={action.id} size="small" style={{ marginBottom: 8 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Space wrap>
-                    <Tag>{formatMs(action.start_time_ms)}</Tag>
-                    <span>时长 {formatMs(action.duration_ms)}</span>
-                    <span><strong>{action.device_name || `设备#${action.device_id}`}</strong></span>
-                    <Tag color="blue">{action.command}</Tag>
-                    {action.params && Object.keys(action.params).length > 0 && (
-                      <span style={{ color: 'var(--ant-color-text-secondary)', fontSize: 12 }}>
-                        {JSON.stringify(action.params)}
-                      </span>
-                    )}
-                  </Space>
-                  {canManage && (
-                    <Space size="small">
-                      <a onClick={() => openEditAction(track.id, action)}>编辑</a>
-                      <Popconfirm title="确认删除此动作？" onConfirm={() => deleteActionMutation.mutate(action.id)}>
-                        <a style={{ color: 'var(--ant-color-error)' }}>删除</a>
-                      </Popconfirm>
-                    </Space>
+              <div key={action.id} className={styles.actionCard}>
+                <div className={styles.actionMeta}>
+                  <span className={styles.timecode}>{formatMs(action.start_time_ms)}</span>
+                  <span className={styles.duration}>时长 {formatMs(action.duration_ms)}</span>
+                  <span className={styles.deviceName}>{action.device_name || `设备#${action.device_id}`}</span>
+                  <Tag color="blue">{action.command}</Tag>
+                  {action.params && Object.keys(action.params).length > 0 && (
+                    <span className={styles.paramsMono}>{JSON.stringify(action.params)}</span>
                   )}
                 </div>
-              </Card>
+                {canManage && (
+                  <div className={styles.actionOps}>
+                    <a onClick={() => openEditAction(track.id, action)}>编辑</a>
+                    <Popconfirm title="确认删除此动作？" onConfirm={() => deleteActionMutation.mutate(action.id)}>
+                      <a className={styles.danger}>删除</a>
+                    </Popconfirm>
+                  </div>
+                )}
+              </div>
             ))
         )}
       </div>
@@ -286,15 +283,27 @@ export default function ShowDetailPage() {
         }
       />
 
-      <Descriptions bordered size="small" column={4} style={{ marginBottom: 24 }}>
-        <Descriptions.Item label="状态"><StatusTag status={show.status} /></Descriptions.Item>
-        <Descriptions.Item label="版本">{show.version > 0 ? `v${show.version}` : '未发布'}</Descriptions.Item>
-        <Descriptions.Item label="时长">{formatMs(show.duration_ms)}</Descriptions.Item>
-        <Descriptions.Item label="轨道数">{tracks.length}</Descriptions.Item>
-      </Descriptions>
+      <div className={styles.kpiGrid}>
+        <div className={styles.kpi}>
+          <div className={styles.kpiLabel}>状态</div>
+          <div className={styles.kpiValue}><StatusTag status={show.status} /></div>
+        </div>
+        <div className={styles.kpi}>
+          <div className={styles.kpiLabel}>版本</div>
+          <div className={styles.kpiValue}>{show.version > 0 ? `v${show.version}` : '未发布'}</div>
+        </div>
+        <div className={styles.kpi}>
+          <div className={styles.kpiLabel}>时长</div>
+          <div className={styles.kpiValue}>{formatMs(show.duration_ms)}</div>
+        </div>
+        <div className={styles.kpi}>
+          <div className={styles.kpiLabel}>轨道数</div>
+          <div className={styles.kpiValue}>{tracks.length}</div>
+        </div>
+      </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <h3 style={{ margin: 0 }}>轨道列表</h3>
+      <div className={styles.sectionHead}>
+        <h3 className={styles.sectionTitle}>轨道列表</h3>
         {canManage && (
           <Button type="dashed" icon={<PlusCircleOutlined />} onClick={openAddTrack}>
             添加轨道
@@ -318,7 +327,7 @@ export default function ShowDetailPage() {
         width={400}
         destroyOnClose
       >
-        <Form form={editForm} layout="vertical" style={{ marginTop: 16 }}>
+        <Form form={editForm} layout="vertical" className={styles.modalForm}>
           <Form.Item name="name" label="演出名称" rules={[{ required: true }]}>
             <Input maxLength={100} />
           </Form.Item>
@@ -338,7 +347,7 @@ export default function ShowDetailPage() {
         width={400}
         destroyOnClose
       >
-        <Form form={trackForm} layout="vertical" style={{ marginTop: 16 }}>
+        <Form form={trackForm} layout="vertical" className={styles.modalForm}>
           <Form.Item name="name" label="轨道名称" rules={[{ required: true, message: '请输入名称' }]}>
             <Input maxLength={50} placeholder="例：主灯光轨道" />
           </Form.Item>
@@ -363,7 +372,7 @@ export default function ShowDetailPage() {
         width={520}
         destroyOnClose
       >
-        <Form form={actionForm} layout="vertical" style={{ marginTop: 16 }}>
+        <Form form={actionForm} layout="vertical" className={styles.modalForm}>
           <Form.Item name="device_id" label="设备" rules={[{ required: true, message: '请选择设备' }]}>
             <Select options={deviceOptions} placeholder="选择设备" showSearch optionFilterProp="label" />
           </Form.Item>

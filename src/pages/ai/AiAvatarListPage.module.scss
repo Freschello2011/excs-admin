@@ -1,0 +1,295 @@
+/**
+ * 数字人列表页 + 详情 Modal 自定义布局。
+ * 来源 mockup：07-ui/mockup/ui-align-ai-avatar-detail.html
+ * 红线：仅样式 / 替代 inline style；不增字段、不动操作、不动 footer={null}。
+ */
+
+/* ====== 列表页表格内的灰字态（替代 var(--ant-color-text-quaternary)） ====== */
+.tableCellMuted {
+  color: var(--color-on-surface-variant);
+}
+
+.tableCellDisabled {
+  color: var(--color-outline);
+  cursor: not-allowed;
+}
+
+.tableLinkDanger {
+  color: var(--color-error);
+}
+
+.emptyHallHint {
+  text-align: center;
+  color: var(--color-on-surface-variant);
+  padding: 60px 0;
+}
+
+/* ============================================================
+ * 详情 Modal —— 紫色渐变 Hero + 双列子卡（替代 Descriptions bordered）
+ * ============================================================ */
+
+/* Modal 容器（替代 styles.content —— AntD 6 ModalStylesType 不允许 content 键） */
+.detailModal :global(.ant-modal-content) {
+  padding: 0;
+  overflow: hidden;
+  border-radius: 16px;
+}
+
+.modalRoot {
+  background: var(--color-surface-container-lowest);
+}
+
+/* Modal 加载态 */
+.modalLoading {
+  text-align: center;
+  color: var(--color-on-surface-variant);
+  padding: 60px 24px;
+}
+
+/* ===== Hero 紫色渐变 ===== */
+.hero {
+  position: relative;
+  background:
+    radial-gradient(circle at 18% 30%, rgba(106, 78, 232, 0.45) 0%, rgba(106, 78, 232, 0) 50%),
+    radial-gradient(circle at 80% 70%, rgba(74, 50, 199, 0.40) 0%, rgba(74, 50, 199, 0) 55%),
+    linear-gradient(135deg, #6A4EE8 0%, #4A32C7 100%);
+  color: #fff;
+  padding: 28px 32px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(circle at 90% -10%, rgba(255, 255, 255, 0.18) 0%, transparent 40%),
+      radial-gradient(circle at -10% 110%, rgba(255, 255, 255, 0.10) 0%, transparent 40%);
+  }
+}
+
+/* 数字人头像占位（抽象对话气泡 SVG）—— 不臆造具体形象 */
+.avatarThumb {
+  position: relative;
+  z-index: 1;
+  width: 96px;
+  height: 96px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  flex-shrink: 0;
+
+  svg { width: 56px; height: 56px; opacity: 0.95; }
+}
+
+.heroMeta {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-width: 0;
+}
+
+.heroEyebrow {
+  font-size: 12px;
+  opacity: 0.78;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.heroTitle {
+  font-size: 22px;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+  letter-spacing: -0.01em;
+  color: #fff;
+}
+
+.heroTags {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Hero 上的关闭按钮（替代 AntD 默认 close icon —— closable=false） */
+.heroClose {
+  position: absolute;
+  right: 16px;
+  top: 16px;
+  z-index: 2;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #fff;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.18s;
+  font-family: inherit;
+  appearance: none;
+
+  &:hover { background: rgba(255, 255, 255, 0.22); }
+}
+
+/* ===== Body 双列 ===== */
+.modalBody {
+  padding: 24px;
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 16px;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(239, 235, 254, 0.5) 0%, transparent 35%),
+    transparent;
+}
+
+.modalCol {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+/* ===== 子卡 ===== */
+.subCard {
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 12px;
+  box-shadow:
+    0 1px 2px rgba(24, 28, 60, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  overflow: hidden;
+}
+
+.subHead {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-outline-variant);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.subTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-on-surface);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  letter-spacing: 0.02em;
+}
+
+.subTitleIcon {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--color-primary-container);
+  color: var(--color-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.subBody {
+  padding: 14px 16px;
+}
+
+/* 信息行（label + value） */
+.pairList {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.pair {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px dashed var(--color-outline-variant);
+
+  &:last-child { border-bottom: none; }
+}
+
+.pairKey {
+  font-size: 12px;
+  color: var(--color-outline);
+  min-width: 78px;
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+}
+
+.pairVal {
+  font-size: 14px;
+  color: var(--color-on-surface);
+  font-weight: 500;
+  flex: 1;
+  min-width: 0;
+}
+
+.pairValMono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  word-break: break-all;
+}
+
+/* 长文本可滚动卡（开场白 / 知识文本） */
+.longtext {
+  background: var(--color-surface-container-low);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: 8px;
+  padding: 12px 14px;
+  max-height: 180px;
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--color-on-surface);
+  white-space: pre-wrap;
+  font-family: var(--font-family-body, inherit);
+
+  &::-webkit-scrollbar { width: 6px; }
+  &::-webkit-scrollbar-thumb {
+    background: var(--color-outline-variant);
+    border-radius: 3px;
+  }
+}
+
+.longtextTall {
+  max-height: 260px;
+}
+
+.longtextEmpty {
+  color: var(--color-outline);
+  font-style: italic;
+}
+
+[data-theme='dark'] {
+  .modalRoot { background: var(--color-surface-container-lowest); }
+  .subCard {
+    background: rgba(26, 33, 57, 0.6);
+    border-color: rgba(53, 62, 92, 0.6);
+  }
+  .modalBody {
+    background:
+      radial-gradient(circle at 0% 0%, rgba(106, 78, 232, 0.18) 0%, transparent 35%),
+      transparent;
+  }
+  .longtext {
+    background: rgba(19, 26, 46, 0.5);
+    border-color: rgba(53, 62, 92, 0.6);
+  }
+}

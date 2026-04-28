@@ -1,9 +1,10 @@
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { Card, Select, Space, Statistic, Button, Popconfirm, Spin, Row, Col } from 'antd';
+import { Card, Select, Space, Statistic, Spin, Row, Col } from 'antd';
 import { useMessage } from '@/hooks/useMessage';
 import { DeleteOutlined, CloudOutlined, LockOutlined, FileImageOutlined } from '@ant-design/icons';
 import PageHeader from '@/components/common/PageHeader';
 import NASBucketCard from '@/components/nas/NASBucketCard';
+import RiskyActionButton from '@/components/authz/RiskyActionButton';
 import { contentApi } from '@/api/content';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
@@ -76,11 +77,13 @@ export default function OSSStatsPage({ embedded }: { embedded?: boolean } = {}) 
   });
 
   const cleanupMutation = useMutation({
-    mutationFn: () => contentApi.triggerCleanup(selectedHallId!),
+    mutationFn: ({ reason }: { reason?: string }) =>
+      contentApi.triggerCleanup(selectedHallId!, reason),
     onSuccess: (res) => {
       const d = res.data.data;
       message.success(`清理完成：删除 ${d.deleted_objects} 个文件，释放 ${formatSize(d.freed_bytes)}`);
     },
+    onError: (err: Error) => message.error(err.message || '清理失败'),
   });
 
   return (
@@ -109,19 +112,19 @@ export default function OSSStatsPage({ embedded }: { embedded?: boolean } = {}) 
           options={hallOptions}
         />
         {isAdmin() && selectedHallId && (
-          <Popconfirm
-            title="确定触发过期内容清理？"
-            description="将清理加密桶中所有 App 实例已确认就绪且超过保留天数的文件（与 NAS 归档无关，NAS 归档永不随此删除）"
-            onConfirm={() => cleanupMutation.mutate()}
+          <RiskyActionButton
+            action="content.cleanup"
+            danger
+            icon={<DeleteOutlined />}
+            loading={cleanupMutation.isPending}
+            confirmTitle="触发过期内容清理"
+            confirmContent="将清理加密桶中所有 App 实例已确认就绪且超过保留天数的文件（与 NAS 归档无关，NAS 归档永不随此删除）。请填写操作原因（≥ 5 字，审计用）。"
+            onConfirm={async (reason) => {
+              await cleanupMutation.mutateAsync({ reason });
+            }}
           >
-            <Button
-              danger
-              icon={<DeleteOutlined />}
-              loading={cleanupMutation.isPending}
-            >
-              触发清理
-            </Button>
-          </Popconfirm>
+            触发清理
+          </RiskyActionButton>
         )}
       </Space>
 

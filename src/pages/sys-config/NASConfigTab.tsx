@@ -7,7 +7,6 @@ import {
   Input,
   InputNumber,
   Modal,
-  Popconfirm,
   Space,
   Spin,
   Switch,
@@ -22,6 +21,7 @@ import {
   UndoOutlined,
   WarningOutlined,
 } from '@ant-design/icons';
+import RiskyActionButton from '@/components/authz/RiskyActionButton';
 import { sysConfigApi } from '@/api/sysConfig';
 import { nasArchiveApi } from '@/api/nasArchive';
 import { queryKeys } from '@/api/queryKeys';
@@ -75,13 +75,13 @@ export default function NASConfigTab() {
   });
 
   const regenerateMutation = useMutation({
-    mutationFn: () => nasArchiveApi.regenerateToken(),
+    mutationFn: ({ reason }: { reason?: string }) => nasArchiveApi.regenerateToken(reason),
     onSuccess: (res) => {
       const token = res.data.data.agent_token;
       setPlainTokenModal({ open: true, token });
       queryClient.invalidateQueries({ queryKey: queryKeys.sysConfigGroup('nas') });
     },
-    onError: () => message.error('生成 Token 失败'),
+    onError: (err: Error) => message.error(err.message || '生成 Token 失败'),
   });
 
   const handleSave = () => {
@@ -166,17 +166,19 @@ export default function NASConfigTab() {
               ) : (
                 <Tag color="orange" icon={<WarningOutlined />}>尚未生成</Tag>
               )}
-              <Popconfirm
-                title="重新生成将使旧 Token 立即失效"
-                description="所有群晖 Agent 必须更新配置后才能继续同步"
-                onConfirm={() => regenerateMutation.mutate()}
-                okText="继续"
-                cancelText="取消"
+              <RiskyActionButton
+                action="config.regenerate_nas_token"
+                icon={<KeyOutlined />}
+                type={hasToken ? 'default' : 'primary'}
+                loading={regenerateMutation.isPending}
+                confirmTitle="重新生成 NAS Agent Token"
+                confirmContent="重新生成将使旧 Token 立即失效，所有群晖 Agent 必须更新配置后才能继续同步。请填写操作原因（≥ 5 字，审计用）。"
+                onConfirm={async (reason) => {
+                  await regenerateMutation.mutateAsync({ reason });
+                }}
               >
-                <Button icon={<KeyOutlined />} type={hasToken ? 'default' : 'primary'} loading={regenerateMutation.isPending}>
-                  {hasToken ? '重新生成 Token' : '生成 Token'}
-                </Button>
-              </Popconfirm>
+                {hasToken ? '重新生成 Token' : '生成 Token'}
+              </RiskyActionButton>
             </Space>
           </Form.Item>
 

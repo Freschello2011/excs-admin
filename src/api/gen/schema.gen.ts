@@ -1152,11 +1152,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 设备列表（按 hall_id 过滤；可叠加 exhibit / model / brand / subcategory） */
+        /** 设备列表（按 hall_id 过滤；可叠加 exhibit_id） */
         get: operations["listDevices"];
         put?: never;
-        /** 创建设备（hall_id 在 body） */
-        post: operations["createDevice"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3171,193 +3170,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/device-categories": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 列出设备大类 */
-        get: operations["listDeviceCategories"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/device-subcategories": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 列出设备小类（可按 category_id 筛） */
-        get: operations["listDeviceSubcategories"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/device-brands": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 列出品牌（可按 subcategory_id 过滤"该小类下有型号的品牌"） */
-        get: operations["listDeviceBrands"];
-        put?: never;
-        /** 创建品牌 */
-        post: operations["createDeviceBrand"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/device-brands/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        get?: never;
-        /** 更新品牌（code 不可变） */
-        put: operations["updateDeviceBrand"];
-        post?: never;
-        /** 删除品牌（必须先清空品牌下的型号） */
-        delete: operations["deleteDeviceBrand"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/device-models": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 列出型号（分页 + 筛选） */
-        get: operations["listDeviceModels"];
-        put?: never;
-        /** 创建型号（brand_id 优先；否则按 brand_code+brand_name 自动建品牌） */
-        post: operations["createDeviceModel"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/device-models/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        /** 型号详情（带 5 分钟 Redis 缓存） */
-        get: operations["getDeviceModel"];
-        /** 更新型号（model_code 不可变）；命令变更会失效相关设备的 effective-commands 缓存 */
-        put: operations["updateDeviceModel"];
-        post?: never;
-        /** 删除型号（必须先确认无设备实例引用） */
-        delete: operations["deleteDeviceModel"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/device-models/{id}/clone": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 克隆型号（不持久化；返回预填详情，id/model_code/name 留空，description 自动填'克隆自：…'） */
-        post: operations["cloneDeviceModel"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/device-models/{id}/deprecate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 标记型号为弃用（status=deprecated，已落地的设备实例继续可用）；message 含设备实例数 */
-        post: operations["deprecateDeviceModel"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/protocol-baselines": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 列出所有协议基线 */
-        get: operations["listProtocolBaselines"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/protocol-baselines/{protocol}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description protocol code（如 lutron / dali / kx100） */
-                protocol: string;
-            };
-            cookie?: never;
-        };
-        /** 协议基线详情 */
-        get: operations["getProtocolBaseline"];
-        /** 更新协议基线（admin only，极少使用；失效所有引用此协议的型号缓存 + effective-commands 缓存） */
-        put: operations["updateProtocolBaseline"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/dashboard/stats": {
         parameters: {
             query?: never;
@@ -4378,6 +4190,316 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v2/diag/recordings/upload-url": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 生成录制切片上传的 presigned PUT URL（云端持 AK/SK，App 直传 OSS）
+         * @description 展厅 App 切片完成 gzip 后调本端点取 presigned PUT URL（1h 有效），随后直接 HTTP PUT
+         *     到阿里云 OSS。无需 App 端持 AK/SK。响应同时返回 presigned GET URL（1d 有效）供 admin
+         *     下载该切片；超期由 admin 手动刷新 recording 列表后重发本请求。
+         */
+        post: operations["createRecordingUploadUrl"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/preset-catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列预置目录（preset-catalog） */
+        get: operations["listPresetCatalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/preset-catalog/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        /** 取单个 preset 详情 */
+        get: operations["getPresetCatalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/protocol-profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列协议档案 */
+        get: operations["listProtocolProfiles"];
+        put?: never;
+        /**
+         * 创建 protocol_profile（device-mgmt-v2 P5 follow-up bug Y）
+         * @description 原 v2 仅有 PUT update，导致 prod migration seed 之外无法新增 protocol_profile。
+         *     本端点补齐 CRUD 闭环；protocol 名重复返 409。
+         */
+        post: operations["createProtocolProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/protocol-profiles/{protocol}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                protocol: string;
+            };
+            cookie?: never;
+        };
+        /** 协议档案详情 */
+        get: operations["getProtocolProfile"];
+        /** 更新 protocol_profile */
+        put: operations["updateProtocolProfile"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plugins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列已安装插件 */
+        get: operations["listPlugins"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plugins/{pluginId}/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pluginId: string;
+            };
+            cookie?: never;
+        };
+        /** 列指定插件的设备类型 */
+        get: operations["listPluginDevices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/triggers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 按 hall 列 trigger（appOrUser 双鉴权） */
+        get: operations["listTriggers"];
+        put?: never;
+        /** 创建 trigger */
+        post: operations["createTrigger"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/triggers/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        /** trigger 详情 */
+        get: operations["getTrigger"];
+        /** 更新 trigger（部分字段） */
+        put: operations["updateTrigger"];
+        post?: never;
+        /** 软删 trigger */
+        delete: operations["deleteTrigger"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/triggers/{id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** listener trigger 模拟匹配测试（不真的执行 action） */
+        post: operations["testTrigger"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/triggers/_check_conflict": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 端口/串口/总线占用预检（透传到展厅 App）
+         * @description 展厅 App 离线 / 超时 → 503，admin 端可选择"强制保存"。
+         */
+        post: operations["checkTriggerConflict"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/halls/{hallId}/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hallId: number;
+            };
+            cookie?: never;
+        };
+        /**
+         * 列本 hall 的 v2 device + 解析后的 ConnectorSpec
+         * @description 展厅 App 启动期 / RoleChanged 后调本端点把 device + spec 注册到 TriggerRuntime。
+         *     v1 设备（connector_kind=""）以 connector_spec=null 返回，客户端跳过即可。
+         *     鉴权：appOrUser device.view（HallFromPath）。
+         */
+        get: operations["listHallDevicesWithSpec"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/devices/{id}/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        /** 读最近一次 state 缓存 */
+        get: operations["getDeviceState"];
+        put?: never;
+        /**
+         * 展厅 App 心跳监测推送 device online/offline 状态
+         * @description 展厅 App HeartbeatOfflineWatcher 探测心跳缺失 / 恢复后调本端点；
+         *     云端 RecordExternalState 写缓存 + retained MQTT 广播。仅 master 节点应调用。
+         *     鉴权：appOrUser device.view。
+         */
+        post: operations["reportDeviceState"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/devices/{id}/query": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 立即跑一次设备 query 写 retained state
+         * @description 不影响周期 ticker。鉴权：appOrUser device.edit。
+         *     若连接失败但已落缓存，data 为 { state, error }；成功则 data 直接为 DeviceState。
+         */
+        post: operations["queryDeviceNow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * v2 创建设备（4 种 connector_kind 通用入口）
+         * @description 不变量校验（DDD-v2 §3.2）：
+         *       - connector_kind ∈ {preset, protocol, raw_transport, plugin}
+         *       - connector_ref 与 kind 一致
+         *       - inline_commands 仅 raw_transport 允许且必填非空
+         *       - inline_heartbeat_command_code 必须指向 inline_commands 中 kind=query 的命令
+         */
+        post: operations["createDeviceV2"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -5372,6 +5494,12 @@ export interface components {
         };
         /** @enum {string} */
         DeviceStatus: "online" | "offline";
+        /**
+         * @description 设备 DTO（device-mgmt-v2 P7-Cleanup 后简化版）。
+         *     v1 时代的型号 / 品牌 / 分类冗余字段（model_id、model_code、brand_name、subcategory_code、
+         *     device_type、protocol 等）已随型号库下线一并拆除；中控 App / 展厅 App 经验证不依赖
+         *     （中控 App grep 0 引用，展厅 App 仅声明 DeviceType 字段未读）。
+         */
         DeviceDTO: {
             /** Format: int64 */
             id: number;
@@ -5381,21 +5509,6 @@ export interface components {
             /** Format: int64 */
             exhibit_id?: number | null;
             exhibit_name?: string;
-            /** Format: int64 */
-            model_id: number;
-            model_code?: string;
-            model_name?: string;
-            brand_name?: string;
-            brand_logo_url?: string;
-            subcategory_code?: string;
-            subcategory_name?: string;
-            category_name?: string;
-            /**
-             * @description 2026-04-21 兼容修复：取 subcategory.code，缺省 fallback "unknown"。
-             *     老中控 App（Flutter Device.device_type required non-null）依赖此字段非空。
-             */
-            device_type: string;
-            protocol: string;
             name: string;
             connection_config: components["schemas"]["ConnectionConfig"];
             notes?: string;
@@ -5404,23 +5517,13 @@ export interface components {
             /** Format: date-time */
             last_heartbeat_at?: string | null;
         };
-        CreateDeviceRequest: {
-            /** Format: int64 */
-            hall_id: number;
-            /** Format: int64 */
-            exhibit_id?: number | null;
-            /** Format: int64 */
-            model_id: number;
-            name: string;
-            connection_config?: components["schemas"]["ConnectionConfig"];
-            notes?: string;
-            serial_no?: string;
-        };
+        /**
+         * @description 更新设备请求（device-mgmt-v2 P7-Cleanup 后只支持 connection_config / 元数据更新）。
+         *     创建走 v2 端点（/v2/devices），不再走 hall yaml 的 createDevice。
+         */
         UpdateDeviceRequest: {
             /** Format: int64 */
             exhibit_id?: number | null;
-            /** Format: int64 */
-            model_id?: number | null;
             name?: string | null;
             connection_config?: components["schemas"]["ConnectionConfig"] | null;
             notes?: string | null;
@@ -6701,22 +6804,17 @@ export interface components {
             display_mode: string;
             scripts: components["schemas"]["AppSyncScript"][];
         };
+        /**
+         * @description 设备同步 DTO（device-mgmt-v2 P7-Cleanup 后简化）。v1 时代的 model_id / device_type /
+         *     protocol / command_template 字段已随型号库下线一并拆除。命令通过 effective-commands
+         *     端点取，不再走 sync。
+         */
         AppSyncDevice: {
             /** Format: int64 */
             id: number;
             name: string;
-            /** Format: int64 */
-            model_id: number;
-            /** @description 兼容字段；Step 4 后填空串，由 App 改为通过 model_id 查询 */
-            device_type: string;
-            /** @description 兼容字段；Step 4 后填空串 */
-            protocol: string;
             /** @description service 层 json.RawMessage 透传 */
             connection_config?: {
-                [key: string]: unknown;
-            } | null;
-            /** @description 兼容字段；已弃用，由 effective-commands 接口替代（service 层 json.RawMessage） */
-            command_template?: {
                 [key: string]: unknown;
             } | null;
         };
@@ -7251,195 +7349,6 @@ export interface components {
         };
         OperationLogPage: components["schemas"]["PaginatedData"] & {
             list?: components["schemas"]["OperationLogItem"][];
-        };
-        DeviceCategoryDTO: {
-            /** Format: int64 */
-            id: number;
-            code: string;
-            name: string;
-            icon: string;
-            sort_order: number;
-        };
-        DeviceSubcategoryDTO: {
-            /** Format: int64 */
-            id: number;
-            /** Format: int64 */
-            category_id: number;
-            code: string;
-            name: string;
-            description?: string;
-            sort_order: number;
-        };
-        DeviceBrandDTO: {
-            /** Format: int64 */
-            id: number;
-            code: string;
-            name: string;
-            logo_url?: string;
-            website?: string;
-            notes?: string;
-        };
-        CreateDeviceBrandRequest: {
-            code: string;
-            name: string;
-            logo_url?: string;
-            website?: string;
-            notes?: string;
-        };
-        UpdateDeviceBrandRequest: {
-            name: string;
-            logo_url?: string;
-            website?: string;
-            notes?: string;
-        };
-        /**
-         * @description 型号生命周期；新建默认 active，弃用走 /device-models/:id/deprecate
-         * @enum {string}
-         */
-        DeviceModelStatus: "active" | "deprecated";
-        DeviceModelListItem: {
-            /** Format: int64 */
-            id: number;
-            /** Format: int64 */
-            subcategory_id: number;
-            subcategory_code: string;
-            subcategory_name: string;
-            /** Format: int64 */
-            brand_id: number;
-            brand_code: string;
-            brand_name: string;
-            brand_logo_url?: string;
-            model_code: string;
-            name: string;
-            protocol: string;
-            /** @description 命令数 = baseline ∪ model_commands 去重 */
-            command_count: number;
-            status: components["schemas"]["DeviceModelStatus"];
-            /** Format: date-time */
-            updated_at: string;
-        };
-        DeviceModelListPage: components["schemas"]["PaginatedData"] & {
-            list?: components["schemas"]["DeviceModelListItem"][];
-        };
-        DeviceCommandInput: {
-            code: string;
-            name: string;
-            category?: string;
-            icon?: string;
-            description?: string;
-            params_schema?: {
-                [key: string]: unknown;
-            } | null;
-        };
-        CreateDeviceModelRequest: {
-            /** Format: int64 */
-            subcategory_id: number;
-            /**
-             * Format: int64
-             * @description BrandID 优先；为 0 时按 brand_code+brand_name 自动建（autocomplete 新建场景）
-             */
-            brand_id?: number;
-            brand_code?: string;
-            brand_name?: string;
-            model_code: string;
-            name: string;
-            protocol: string;
-            connection_defaults?: {
-                [key: string]: unknown;
-            } | null;
-            commands?: components["schemas"]["DeviceCommandInput"][];
-            manual_url?: string;
-            description?: string;
-        };
-        DeviceCommandDTO: {
-            code: string;
-            name: string;
-            category?: string;
-            icon?: string;
-            description?: string;
-            /** @description JSON Schema 文档（Draft 7 子集 + ExCS widget 提示），可空 */
-            params_schema?: {
-                [key: string]: unknown;
-            } | null;
-        };
-        DeviceModelDetail: {
-            /**
-             * Format: int64
-             * @description clone 时 service 把 id 清零（前端识别为新建态）
-             */
-            id?: number;
-            /** Format: int64 */
-            subcategory_id: number;
-            /** Format: int64 */
-            brand_id: number;
-            model_code: string;
-            name: string;
-            protocol: string;
-            /** @description 连接默认参数（service 层零值兜底为 {}） */
-            connection_defaults: {
-                [key: string]: unknown;
-            };
-            commands: components["schemas"]["DeviceCommandDTO"][];
-            manual_url?: string;
-            description?: string;
-            status?: components["schemas"]["DeviceModelStatus"];
-            /** Format: date-time */
-            created_at?: string | null;
-            /** Format: date-time */
-            updated_at?: string | null;
-        };
-        UpdateDeviceModelRequest: {
-            /** Format: int64 */
-            subcategory_id: number;
-            /** Format: int64 */
-            brand_id: number;
-            name: string;
-            protocol: string;
-            connection_defaults?: {
-                [key: string]: unknown;
-            } | null;
-            commands?: components["schemas"]["DeviceCommandInput"][];
-            manual_url?: string;
-            description?: string;
-        };
-        DeprecateDeviceModelResponse: {
-            /**
-             * Format: int64
-             * @description 弃用后仍引用此型号的设备实例数
-             */
-            device_count: number;
-        };
-        ProtocolBaselineListItem: {
-            /** Format: int64 */
-            id: number;
-            protocol: string;
-            name: string;
-            command_count: number;
-            /** Format: date-time */
-            updated_at: string;
-        };
-        ProtocolBaselineDetail: {
-            protocol: string;
-            name: string;
-            /** @description 连接参数 JSON Schema（service 层零值兜底为 {}） */
-            connection_schema: {
-                [key: string]: unknown;
-            };
-            commands: components["schemas"]["DeviceCommandDTO"][];
-            notes?: string;
-        };
-        /**
-         * @description 所有字段都可选 —— 老前端 ProtocolBaselinePage 只传 commands；后端不强校验
-         *     name（service.UpdateBaselineCmd binding:"required" 在 typed handler 路径中
-         *     被 gen 取代，不再生效）。
-         */
-        UpdateProtocolBaselineRequest: {
-            name?: string;
-            connection_schema?: {
-                [key: string]: unknown;
-            } | null;
-            commands?: components["schemas"]["DeviceCommandInput"][];
-            notes?: string;
         };
         DashboardStats: {
             /** Format: int64 */
@@ -8431,6 +8340,443 @@ export interface components {
         };
         MarkAllReadResult: {
             ok: boolean;
+        };
+        CreateRecordingUploadUrlRequest: {
+            /**
+             * Format: int64
+             * @description 展项 ID（展厅 App 自身的 exhibit_id；后端按 token 校验同 hall）
+             */
+            exhibit_id: number;
+            /** @description 切片文件名（不含扩展名；展厅 App 端生成的 GUID + 切片序号） */
+            recording_id: string;
+            /**
+             * @description HTTP Content-Type，默认 application/gzip
+             * @default application/gzip
+             */
+            content_type: string;
+        };
+        RecordingUploadUrl: {
+            /** @description presigned PUT URL，1h 有效；展厅 App 直接 HTTP PUT .gz 流上去 */
+            put_url: string;
+            /** @description presigned GET URL，24h 有效；admin 下载该切片用 */
+            get_url: string;
+            /** @description OSS object key（recording/{exhibit_id}/{yyyyMMdd}/{recording_id}.gz） */
+            object_key: string;
+            /**
+             * Format: date-time
+             * @description PUT URL 过期时刻（UTC）
+             */
+            expires_at: string;
+        };
+        PresetCatalogDTO: {
+            key: string;
+            name: string;
+            manufacturer: string;
+            model_name: string;
+            transport_kind: string;
+            heartbeat_command_code?: string;
+            description?: string;
+            supported_since_version: string;
+            control_count: number;
+            query_count: number;
+        };
+        PresetCatalogList: components["schemas"]["PresetCatalogDTO"][];
+        /** @enum {string} */
+        CommandKind: "control" | "query";
+        /** @enum {string} */
+        PatternKind: "exact" | "regex" | "bytes";
+        /** @enum {string} */
+        FieldType: "bool" | "int" | "float" | "string" | "enum";
+        /**
+         * @description bytes 模式字节序，省略 = big
+         * @enum {string}
+         */
+        Endianness: "" | "big" | "little";
+        ResponseField: {
+            name: string;
+            type: components["schemas"]["FieldType"];
+            from: string;
+            endianness?: components["schemas"]["Endianness"];
+            map?: {
+                [key: string]: unknown;
+            };
+            /** @description 默认值（任意 JSON 标量） */
+            default?: unknown;
+        };
+        ResponseSchema: {
+            pattern_kind: components["schemas"]["PatternKind"];
+            pattern: string;
+            fields: components["schemas"]["ResponseField"][];
+            timeout_ms: number;
+        };
+        DeviceCommand: {
+            code: string;
+            name: string;
+            kind: components["schemas"]["CommandKind"];
+            category?: string;
+            icon?: string;
+            description?: string;
+            /** @description control 命令参数 JSON Schema 子集（透传） */
+            params_schema?: {
+                [key: string]: unknown;
+            };
+            /** @description 下发模板（如 PJLink "%1POWR 1\r"） */
+            request?: string;
+            /** @description query 命令响应模式（kind=query 必填） */
+            response_schema?: components["schemas"]["ResponseSchema"];
+        };
+        HeartbeatPattern: {
+            kind: components["schemas"]["PatternKind"];
+            pattern: string;
+            label: string;
+        };
+        DocumentedListenerPattern: {
+            label: string;
+            pattern_kind: components["schemas"]["PatternKind"];
+            pattern: string;
+            capture_groups?: string[];
+            example_payload: string;
+            example_meaning: string;
+        };
+        PresetDetailDTO: components["schemas"]["PresetCatalogDTO"] & {
+            connection_schema: {
+                [key: string]: unknown;
+            };
+            commands: components["schemas"]["DeviceCommand"][];
+            heartbeat_patterns?: components["schemas"]["HeartbeatPattern"][];
+            heartbeat_period_seconds_max?: number;
+            default_listener_patterns?: components["schemas"]["DocumentedListenerPattern"][];
+        };
+        ProtocolProfileListItem: {
+            /** Format: int64 */
+            id: number;
+            protocol: string;
+            name: string;
+            transport_kind?: string;
+            heartbeat_command_code?: string;
+            control_count: number;
+            query_count: number;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ProtocolProfileList: components["schemas"]["ProtocolProfileListItem"][];
+        /**
+         * @description 物理传输类型；smyoo 为闪优 Smyoo 云 HTTPS 网关（P7-SmyooPlugin）
+         * @enum {string}
+         */
+        TransportKind: "tcp" | "udp" | "serial" | "osc" | "artnet" | "modbus" | "http" | "smyoo";
+        CreateProtocolProfileRequest: {
+            protocol: string;
+            name: string;
+            transport_kind?: components["schemas"]["TransportKind"];
+            connection_schema?: {
+                [key: string]: unknown;
+            };
+            commands?: components["schemas"]["DeviceCommand"][];
+            heartbeat_command_code?: string;
+            notes?: string;
+            heartbeat_patterns?: components["schemas"]["HeartbeatPattern"][];
+            heartbeat_period_seconds_max?: number;
+            default_listener_patterns?: components["schemas"]["DocumentedListenerPattern"][];
+        };
+        ProtocolMutateResponse: {
+            protocol: string;
+        };
+        ProtocolProfileDetail: components["schemas"]["ProtocolProfileListItem"] & {
+            connection_schema: {
+                [key: string]: unknown;
+            };
+            commands: components["schemas"]["DeviceCommand"][];
+            notes?: string;
+            heartbeat_patterns?: components["schemas"]["HeartbeatPattern"][];
+            heartbeat_period_seconds_max?: number;
+            default_listener_patterns?: components["schemas"]["DocumentedListenerPattern"][];
+        };
+        UpdateProtocolProfileRequest: {
+            name?: string;
+            transport_kind?: components["schemas"]["TransportKind"];
+            connection_schema?: {
+                [key: string]: unknown;
+            };
+            commands?: components["schemas"]["DeviceCommand"][];
+            heartbeat_command_code?: string;
+            notes?: string;
+            heartbeat_patterns?: components["schemas"]["HeartbeatPattern"][];
+            heartbeat_period_seconds_max?: number;
+            default_listener_patterns?: components["schemas"]["DocumentedListenerPattern"][];
+        };
+        /** @enum {string} */
+        PluginStatus: "installed" | "disabled" | "error";
+        PluginDTO: {
+            /** Format: int64 */
+            id: number;
+            plugin_id: string;
+            name: string;
+            version: string;
+            manifest_url: string;
+            status: components["schemas"]["PluginStatus"];
+            /** Format: date-time */
+            installed_at: string;
+        };
+        PluginList: components["schemas"]["PluginDTO"][];
+        PluginDeviceDTO: {
+            plugin_id: string;
+            device_key: string;
+            name: string;
+            transport_kind?: string;
+            heartbeat_command_code?: string;
+            connection_schema: {
+                [key: string]: unknown;
+            };
+            commands: components["schemas"]["DeviceCommand"][];
+            heartbeat_patterns?: components["schemas"]["HeartbeatPattern"][];
+            heartbeat_period_seconds_max?: number;
+            default_listener_patterns?: components["schemas"]["DocumentedListenerPattern"][];
+        };
+        PluginDeviceList: components["schemas"]["PluginDeviceDTO"][];
+        /** @enum {string} */
+        TriggerKind: "listener" | "timer";
+        /** @enum {string} */
+        TriggerActionKind: "scene" | "command" | "media" | "query" | "webhook";
+        /**
+         * @description action 多态。payload 因 kind 而异：
+         *       - scene:   { scene_id }
+         *       - command: { device_id, command_code, params }
+         *       - media:   { action, content_id }
+         *       - query:   { device_id, command_code }
+         *       - webhook: { url, method, headers, body, hmac_secret_ref, allow_intranet }
+         */
+        TriggerAction: {
+            kind: components["schemas"]["TriggerActionKind"];
+            payload: {
+                [key: string]: unknown;
+            };
+        };
+        TriggerDTO: {
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            hall_id: number;
+            /** Format: int64 */
+            exhibit_id?: number | null;
+            /** Format: int64 */
+            device_id?: number | null;
+            name: string;
+            kind: components["schemas"]["TriggerKind"];
+            enabled: boolean;
+            /** @description kind=listener → ListenerSource；kind=timer → TimerSchedule */
+            source: {
+                [key: string]: unknown;
+            };
+            /** @description kind=listener 必填 ListenerPattern；kind=timer 应为 null */
+            condition?: {
+                [key: string]: unknown;
+            } | null;
+            action: components["schemas"]["TriggerAction"];
+            /** Format: date-time */
+            last_fired_at?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        TriggerListResponse: {
+            list: components["schemas"]["TriggerDTO"][];
+            total: number;
+        };
+        CreateTriggerRequest: {
+            /** Format: int64 */
+            hall_id: number;
+            /** Format: int64 */
+            exhibit_id?: number | null;
+            /** Format: int64 */
+            device_id?: number | null;
+            name: string;
+            kind: components["schemas"]["TriggerKind"];
+            enabled?: boolean | null;
+            source: {
+                [key: string]: unknown;
+            };
+            condition?: {
+                [key: string]: unknown;
+            } | null;
+            action: components["schemas"]["TriggerAction"];
+        };
+        UpdateTriggerRequest: {
+            name?: string | null;
+            enabled?: boolean | null;
+            source?: {
+                [key: string]: unknown;
+            };
+            condition?: {
+                [key: string]: unknown;
+            } | null;
+            action?: components["schemas"]["TriggerAction"];
+        };
+        DeleteTriggerResponse: {
+            /** Format: int64 */
+            id: number;
+        };
+        TestTriggerRequest: {
+            /** @description 模拟收到的字符串数据 */
+            data: string;
+        };
+        TestTriggerResult: {
+            matched: boolean;
+            captures?: string[];
+            /** @description 不匹配原因 */
+            reason?: string;
+            would_fire?: components["schemas"]["TriggerAction"];
+        };
+        /** @enum {string} */
+        ResourceKind: "tcp_port" | "udp_port" | "serial_port" | "osc_port" | "artnet_universe" | "modbus_unit";
+        Resource: {
+            kind: components["schemas"]["ResourceKind"];
+            /** @description 因 kind 而异（":2000" / "/dev/ttyUSB0" / "1" 等） */
+            identifier: string;
+        };
+        CheckConflictRequest: {
+            /** Format: int64 */
+            hall_id: number;
+            resource: components["schemas"]["Resource"];
+        };
+        InternalConflictRef: {
+            /** @enum {string} */
+            type: "trigger" | "device";
+            /** Format: int64 */
+            id: number;
+            name?: string;
+        };
+        ExternalProc: {
+            pid: number;
+            name?: string;
+            user?: string;
+        };
+        ConflictReport: {
+            has_conflict: boolean;
+            internal_owner?: components["schemas"]["InternalConflictRef"];
+            external_procs?: components["schemas"]["ExternalProc"][];
+            /** Format: date-time */
+            checked_at: string;
+        };
+        DisplayInfo: {
+            name: string;
+            manufacturer?: string;
+            model_name?: string;
+        };
+        /** @description Resolver 返回的能力 spec（DDD-v2 §2.5） */
+        ConnectorSpec: {
+            commands: components["schemas"]["DeviceCommand"][];
+            connection_schema: {
+                [key: string]: unknown;
+            };
+            heartbeat_command_code?: string;
+            transport_kind?: components["schemas"]["TransportKind"];
+            display_info: components["schemas"]["DisplayInfo"];
+            heartbeat_patterns?: components["schemas"]["HeartbeatPattern"][];
+            heartbeat_period_seconds_max?: number;
+            default_listener_patterns?: components["schemas"]["DocumentedListenerPattern"][];
+        };
+        /**
+         * @description v2 device + 解析后的 ConnectorSpec（device-mgmt-v2 P5 follow-up）。展厅 App 启动期 /
+         *     RoleChanged 后用于注册 device 心跳到 TriggerRuntime。v1 设备（connector_kind=""）
+         *     以 connector_spec=null 返回，客户端跳过即可。
+         */
+        HallDeviceWithSpec: {
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            hall_id: number;
+            /** Format: int64 */
+            exhibit_id?: number | null;
+            name: string;
+            connector_kind?: string;
+            connector_ref?: {
+                [key: string]: unknown;
+            };
+            connection_config?: {
+                [key: string]: unknown;
+            };
+            connector_spec?: components["schemas"]["ConnectorSpec"];
+        };
+        HallDevicesWithSpecResponse: {
+            list: components["schemas"]["HallDeviceWithSpec"][];
+            total: number;
+        };
+        DeviceState: {
+            /** Format: int64 */
+            device_id: number;
+            online: boolean;
+            /** Format: date-time */
+            last_seen_at: string;
+            fields?: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            updated_at: string;
+            /** @description poll | command_after | startup | heartbeat | heartbeat_offline */
+            source?: string;
+            error_reason?: string;
+        };
+        /** @description 展厅 App HeartbeatOfflineWatcher 探测 → 推 retained state */
+        ReportDeviceStateRequest: {
+            online: boolean;
+            /** @description heartbeat | heartbeat_offline */
+            source?: string;
+            error_reason?: string;
+        };
+        ReportDeviceStateResponse: {
+            /** Format: int64 */
+            id: number;
+            online: boolean;
+        };
+        /**
+         * @description 立即查询设备状态。成功 → 直接返回 DeviceState；连接失败但缓存已落 →
+         *     返回 { state, error } 包，前端可看到 error_reason 字段。
+         */
+        QueryDeviceNowResponse: components["schemas"]["DeviceState"] | {
+            state: components["schemas"]["DeviceState"];
+            error: string;
+        };
+        /**
+         * @description 设备接入方式（DDD-v2 §二）
+         * @enum {string}
+         */
+        ConnectorKind: "preset" | "protocol" | "raw_transport" | "plugin";
+        /**
+         * @description 多态引用，内容因 ConnectorKind 而异：
+         *       - preset:        { preset_key }
+         *       - protocol:      { protocol }
+         *       - raw_transport: { transport }
+         *       - plugin:        { plugin_id, plugin_device_key }
+         */
+        ConnectorRef: {
+            preset_key?: string;
+            protocol?: string;
+            transport?: components["schemas"]["TransportKind"];
+            plugin_id?: string;
+            plugin_device_key?: string;
+        };
+        CreateDeviceV2Request: {
+            /** Format: int64 */
+            hall_id: number;
+            /** Format: int64 */
+            exhibit_id?: number | null;
+            name: string;
+            connector_kind: components["schemas"]["ConnectorKind"];
+            connector_ref?: components["schemas"]["ConnectorRef"];
+            connection_config?: {
+                [key: string]: unknown;
+            };
+            inline_commands?: components["schemas"]["DeviceCommand"][];
+            inline_heartbeat_command_code?: string;
+            poll_interval_seconds?: number | null;
+            notes?: string;
+            serial_no?: string;
+        };
+        CreateDeviceV2Response: {
+            /** Format: int64 */
+            id: number;
         };
     };
     responses: {
@@ -10697,9 +11043,6 @@ export interface operations {
             query: {
                 hall_id: number;
                 exhibit_id?: number;
-                subcategory_id?: number;
-                brand_id?: number;
-                model_id?: number;
             };
             header?: never;
             path?: never;
@@ -10721,36 +11064,6 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
-        };
-    };
-    createDevice: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateDeviceRequest"];
-            };
-        };
-        responses: {
-            /** @description 创建成功 */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiResponse"] & {
-                        data?: components["schemas"]["DeviceDTO"];
-                    };
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            422: components["responses"]["BadRequest"];
         };
     };
     updateDevice: {
@@ -14531,462 +14844,6 @@ export interface operations {
             403: components["responses"]["Forbidden"];
         };
     };
-    listDeviceCategories: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 成功 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiResponse"] & {
-                        data?: components["schemas"]["DeviceCategoryDTO"][];
-                    };
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    listDeviceSubcategories: {
-        parameters: {
-            query?: {
-                category_id?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 成功 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiResponse"] & {
-                        data?: components["schemas"]["DeviceSubcategoryDTO"][];
-                    };
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    listDeviceBrands: {
-        parameters: {
-            query?: {
-                subcategory_id?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 成功 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiResponse"] & {
-                        data?: components["schemas"]["DeviceBrandDTO"][];
-                    };
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    createDeviceBrand: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateDeviceBrandRequest"];
-            };
-        };
-        responses: {
-            /** @description 创建成功（response.Created → HTTP 201） */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiResponse"] & {
-                        data?: components["schemas"]["DeviceBrandDTO"];
-                    };
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
-            422: components["responses"]["BadRequest"];
-        };
-    };
-    updateDeviceBrand: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateDeviceBrandRequest"];
-            };
-        };
-        responses: {
-            /** @description 成功 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiResponse"] & {
-                        data?: components["schemas"]["DeviceBrandDTO"];
-                    };
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            422: components["responses"]["BadRequest"];
-        };
-    };
-    deleteDeviceBrand: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 成功 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    listDeviceModels: {
-        parameters: {
-            query?: {
-                subcategory_id?: number;
-                brand_id?: number;
-                keyword?: string;
-                status?: components["schemas"]["DeviceModelStatus"];
-                /** @description 默认 1 */
-                page?: number;
-                /** @description 默认 20 */
-                page_size?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 成功 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiResponse"] & {
-                        data?: components["schemas"]["DeviceModelListPage"];
-                    };
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    createDeviceModel: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateDeviceModelRequest"];
-            };
-        };
-        responses: {
-            /** @description 创建成功 */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiResponse"] & {
-                        data?: components["schemas"]["DeviceModelDetail"];
-                    };
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
-            422: components["responses"]["BadRequest"];
-        };
-    };
-    getDeviceModel: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 成功 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiResponse"] & {
-                        data?: components["schemas"]["DeviceModelDetail"];
-                    };
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    updateDeviceModel: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateDeviceModelRequest"];
-            };
-        };
-        responses: {
-            /** @description 成功 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiResponse"] & {
-                        data?: components["schemas"]["DeviceModelDetail"];
-                    };
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            422: components["responses"]["BadRequest"];
-        };
-    };
-    deleteDeviceModel: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 成功 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    cloneDeviceModel: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 成功 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiResponse"] & {
-                        data?: components["schemas"]["DeviceModelDetail"];
-                    };
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    deprecateDeviceModel: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 成功；message 字段是动态文案"型号已标记为弃用，N 台设备实例继续可用" */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiResponse"] & {
-                        data?: components["schemas"]["DeprecateDeviceModelResponse"];
-                    };
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    listProtocolBaselines: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 成功 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiResponse"] & {
-                        data?: components["schemas"]["ProtocolBaselineListItem"][];
-                    };
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    getProtocolBaseline: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description protocol code（如 lutron / dali / kx100） */
-                protocol: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 成功 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiResponse"] & {
-                        data?: components["schemas"]["ProtocolBaselineDetail"];
-                    };
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    updateProtocolBaseline: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description protocol code（如 lutron / dali / kx100） */
-                protocol: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateProtocolBaselineRequest"];
-            };
-        };
-        responses: {
-            /** @description 成功 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiResponse"] & {
-                        data?: components["schemas"]["ProtocolBaselineDetail"];
-                    };
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            422: components["responses"]["BadRequest"];
-        };
-    };
     getDashboardStats: {
         parameters: {
             query?: never;
@@ -16985,6 +16842,659 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    createRecordingUploadUrl: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateRecordingUploadUrlRequest"];
+            };
+        };
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["RecordingUploadUrl"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    listPresetCatalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["PresetCatalogList"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getPresetCatalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["PresetDetailDTO"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description preset 不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
+                };
+            };
+        };
+    };
+    listProtocolProfiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["ProtocolProfileList"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    createProtocolProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateProtocolProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["ProtocolMutateResponse"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description protocol 名重复 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
+                };
+            };
+            /** @description 参数非法 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
+                };
+            };
+        };
+    };
+    getProtocolProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                protocol: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["ProtocolProfileDetail"];
+                    };
+                };
+            };
+            /** @description protocol 不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
+                };
+            };
+        };
+    };
+    updateProtocolProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                protocol: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProtocolProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["ProtocolMutateResponse"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description protocol 不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
+                };
+            };
+            /** @description 参数非法 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
+                };
+            };
+        };
+    };
+    listPlugins: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["PluginList"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    listPluginDevices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pluginId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["PluginDeviceList"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    listTriggers: {
+        parameters: {
+            query: {
+                hall_id: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["TriggerListResponse"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createTrigger: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTriggerRequest"];
+            };
+        };
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["TriggerDTO"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description trigger 校验失败 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
+                };
+            };
+        };
+    };
+    getTrigger: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["TriggerDTO"];
+                    };
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateTrigger: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateTriggerRequest"];
+            };
+        };
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["TriggerDTO"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            /** @description trigger 校验失败 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
+                };
+            };
+        };
+    };
+    deleteTrigger: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["DeleteTriggerResponse"];
+                    };
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    testTrigger: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TestTriggerRequest"];
+            };
+        };
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["TestTriggerResult"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    checkTriggerConflict: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckConflictRequest"];
+            };
+        };
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["ConflictReport"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description 展厅 App 离线（无法预检） */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
+                };
+            };
+        };
+    };
+    listHallDevicesWithSpec: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hallId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["HallDevicesWithSpecResponse"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getDeviceState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["DeviceState"];
+                    };
+                };
+            };
+            /** @description 缓存为空（轮询未启动 / master 未接管） */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
+                };
+            };
+        };
+    };
+    reportDeviceState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportDeviceStateRequest"];
+            };
+        };
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["ReportDeviceStateResponse"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    queryDeviceNow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["QueryDeviceNowResponse"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createDeviceV2: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateDeviceV2Request"];
+            };
+        };
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["CreateDeviceV2Response"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description connector_ref / response_schema 校验失败 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
+                };
+            };
         };
     };
 }

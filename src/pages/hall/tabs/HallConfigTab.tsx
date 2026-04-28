@@ -64,6 +64,7 @@ import type {
   ExhibitListItem,
   MasterCandidateDTO,
 } from '@/api/gen/client';
+import styles from './HallConfigTab.module.scss';
 
 dayjs.extend(relativeTime);
 dayjs.locale('zh-cn');
@@ -103,32 +104,25 @@ function SortableExhibitRow({
     id: `prio-${exhibitId}`,
     disabled,
   });
-  const style: React.CSSProperties = {
+  // 仅保留 dnd-kit 必需的动态 transform/transition 在 inline；其他视觉走 SCSS。
+  const dndStyle: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.6 : 1,
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-    padding: '8px 12px',
-    border: '1px solid var(--ant-color-border-secondary, #e5e7eb)',
-    borderRadius: 6,
-    background: 'var(--ant-color-bg-container, #fff)',
   };
   return (
-    <div ref={setNodeRef} style={style}>
+    <div
+      ref={setNodeRef}
+      style={dndStyle}
+      className={`${styles.dragRow}${isDragging ? ` ${styles.dragging}` : ''}`}
+    >
       <span
         {...(disabled ? {} : attributes)}
         {...(disabled ? {} : listeners)}
-        style={{
-          cursor: disabled ? 'not-allowed' : 'grab',
-          color: 'rgba(0,0,0,0.45)',
-          fontSize: 16,
-        }}
+        className={`${styles.dragHandle}${disabled ? ` ${styles.disabled}` : ''}`}
       >
         <HolderOutlined />
       </span>
-      <span style={{ flex: 1, fontWeight: 500 }}>{exhibitName}</span>
+      <span className={styles.dragName}>{exhibitName}</span>
       {isCurrentMaster && <Tag color="blue">当前主控</Tag>}
       {isOnline === true && <Tag color="green">在线</Tag>}
       {isOnline === false && <Tag>离线</Tag>}
@@ -314,7 +308,7 @@ export default function HallConfigTab({ hallId, hall, canConfig }: HallConfigTab
           ) : undefined
         }
       >
-        <Form form={form} layout="vertical" disabled={!canConfig} style={{ maxWidth: 720 }}>
+        <Form form={form} layout="vertical" disabled={!canConfig} className={styles.aiForm}>
           <Form.Item name="ai_knowledge_text" label="AI 知识文本">
             <Input.TextArea
               rows={6}
@@ -357,11 +351,11 @@ export default function HallConfigTab({ hallId, hall, canConfig }: HallConfigTab
         }
       >
         <Space direction="vertical" size="small" style={{ width: '100%' }}>
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          <Typography.Text type="secondary" className={styles.hint}>
             候补队列按拖拽顺序选举（第一个 online 实例即主控）；未列入的展项会按 sort_order
             兜底追加。
             {noCandidate && (
-              <Tag color="error" style={{ marginLeft: 8 }}>
+              <Tag color="error" className={styles.alertTagInline}>
                 <ExclamationCircleFilled /> 当前无主控（候补全离线）
               </Tag>
             )}
@@ -369,7 +363,7 @@ export default function HallConfigTab({ hallId, hall, canConfig }: HallConfigTab
 
           <Space size="middle" wrap>
             <Space>
-              <span style={{ color: 'rgba(0,0,0,0.55)' }}>当前主控：</span>
+              <span className={styles.inlineLabel}>当前主控：</span>
               {currentMaster ? (
                 <Tag color="blue" icon={<CheckCircleFilled />}>
                   {exhibitMap.get(currentMaster)?.name ?? `#${currentMaster}`}
@@ -379,13 +373,13 @@ export default function HallConfigTab({ hallId, hall, canConfig }: HallConfigTab
               )}
             </Space>
             {masterStatus?.last_election_at && (
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              <Typography.Text type="secondary" className={styles.hint}>
                 上次切换：{dayjs(masterStatus.last_election_at).fromNow()}
                 {lastReasonZh ? ` · ${lastReasonZh}` : ''}
               </Typography.Text>
             )}
             <Space>
-              <span style={{ color: 'rgba(0,0,0,0.55)' }}>自动回迁：</span>
+              <span className={styles.inlineLabel}>自动回迁：</span>
               <Tooltip title="开启时，原主控离线后选举器立即切到队列下一个；关闭时，需要手动重选才会切。">
                 <Switch
                   checked={autoFailback}
@@ -398,7 +392,7 @@ export default function HallConfigTab({ hallId, hall, canConfig }: HallConfigTab
             </Space>
           </Space>
 
-          <Divider style={{ margin: '12px 0' }} />
+          <Divider className={styles.dividerTight} />
 
           {priority.length === 0 ? (
             <Empty description="未配置优先级，将完全按展项 sort_order 兜底选举" />
@@ -434,7 +428,7 @@ export default function HallConfigTab({ hallId, hall, canConfig }: HallConfigTab
           )}
 
           {canConfig && tailExhibits.length > 0 && (
-            <Space style={{ marginTop: 12 }}>
+            <Space className={styles.addRow}>
               <Select
                 placeholder="选择要加入队列的展项"
                 style={{ width: 240 }}
@@ -450,7 +444,7 @@ export default function HallConfigTab({ hallId, hall, canConfig }: HallConfigTab
           )}
 
           {tailExhibits.length > 0 && (
-            <Typography.Text type="secondary" style={{ fontSize: 12, marginTop: 8 }}>
+            <Typography.Text type="secondary" className={`${styles.hint} ${styles.tailHint}`}>
               未列入的展项（按 sort_order 兜底选举）：
               {tailExhibits.map((e) => e.name).join('、')}
             </Typography.Text>

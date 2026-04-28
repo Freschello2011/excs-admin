@@ -25,6 +25,7 @@ import PillTabs, { type PillTab } from '@/components/common/PillTabs';
 import ContentStatusTag, { CONTENT_STATUS_LABEL } from '@/components/content/ContentStatusTag';
 import ContentDetailDrawer from '@/components/content/ContentDetailDrawer';
 import RejectContentModal from '@/components/content/RejectContentModal';
+import RiskyActionButton from '@/components/authz/RiskyActionButton';
 import { useMessage } from '@/hooks/useMessage';
 import { contentApi } from '@/api/content';
 import { hallApi } from '@/api/hall';
@@ -138,7 +139,8 @@ export default function VendorUploadsTab({ vendorId }: Props) {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (contentId: number) => contentApi.deleteContent(contentId),
+    mutationFn: ({ contentId, reason }: { contentId: number; reason?: string }) =>
+      contentApi.deleteContent(contentId, reason),
     onSuccess: () => {
       message.success('已删除');
       queryClient.invalidateQueries({ queryKey: ['admin', 'contents'] });
@@ -229,14 +231,20 @@ export default function VendorUploadsTab({ vendorId }: Props) {
               </Popconfirm>
             )}
             {(status === 'rejected' || status === 'withdrawn') && (
-              <Popconfirm
-                title="确认删除？OSS 原文件与缩略图将一并清理"
-                okText="删除"
-                okButtonProps={{ danger: true }}
-                onConfirm={() => deleteMutation.mutate(record.id)}
+              <RiskyActionButton
+                action="content.delete"
+                type="link"
+                size="small"
+                danger
+                icon={<DeleteOutlined />}
+                confirmTitle="删除内容"
+                confirmContent="OSS 原文件与缩略图将一并清理。请填写操作原因（≥ 5 字，审计用）。"
+                onConfirm={async (reason) => {
+                  await deleteMutation.mutateAsync({ contentId: record.id, reason });
+                }}
               >
-                <Button type="link" size="small" danger icon={<DeleteOutlined />}>删除</Button>
-              </Popconfirm>
+                删除
+              </RiskyActionButton>
             )}
             </>)}
           </Space>

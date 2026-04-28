@@ -1,7 +1,10 @@
 import type { PanelSection, PanelCard } from '@/api/gen/client';
 import type { NameMaps } from './PreviewPanel';
 import { PT } from './previewTokens';
+import PanelButtonCell from './PanelButtonCell';
+import { CELL_VARS } from './cellTokens';
 import PreviewCard from './PreviewCard';
+import { buildLayoutRows } from './buildLayoutRows';
 
 interface PreviewSectionProps {
   section: PanelSection;
@@ -97,8 +100,8 @@ export default function PreviewSection({
                 />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <DeviceGridPreview
-                  cards={row.cards.slice(1)}
+                <MediaRightColumn
+                  rightCards={row.cards.slice(1)}
                   nameMaps={nameMaps}
                   highlightedCardId={highlightedCardId}
                   onCardMouseEnter={onCardMouseEnter}
@@ -107,6 +110,17 @@ export default function PreviewSection({
                 />
               </div>
             </div>
+          )}
+
+          {row.type === 'toggle-group' && (
+            <ToggleGroupCard
+              cards={row.cards}
+              nameMaps={nameMaps}
+              highlightedCardId={highlightedCardId}
+              onCardMouseEnter={onCardMouseEnter}
+              onCardMouseLeave={onCardMouseLeave}
+              onCardClick={onCardClick}
+            />
           )}
 
           {row.type === 'script-ai' && (
@@ -128,6 +142,157 @@ export default function PreviewSection({
         </div>
       ))}
     </div>
+  );
+}
+
+/* ─── media/show 右侧 1/3 列：device_toggle 聚合为"展项设备卡片"网格，
+       device_command 单独以 PanelButtonCell 2 列窄网格渲染 ─── */
+
+function MediaRightColumn({
+  rightCards,
+  nameMaps,
+  highlightedCardId,
+  onCardMouseEnter,
+  onCardMouseLeave,
+  onCardClick,
+}: {
+  rightCards: PanelCard[];
+  nameMaps: NameMaps;
+  highlightedCardId?: number | null;
+  onCardMouseEnter?: (cardId: number) => void;
+  onCardMouseLeave?: () => void;
+  onCardClick?: (cardId: number) => void;
+}) {
+  // 按 source order 把连续 device_toggle 聚合成一个 grid block，device_command 单独 block
+  type Block =
+    | { kind: 'toggles'; cards: PanelCard[] }
+    | { kind: 'command'; card: PanelCard };
+  const blocks: Block[] = [];
+  let pending: PanelCard[] = [];
+  const flush = () => {
+    if (pending.length > 0) {
+      blocks.push({ kind: 'toggles', cards: pending });
+      pending = [];
+    }
+  };
+  for (const c of rightCards) {
+    if (c.card_type === 'device_toggle') {
+      pending.push(c);
+    } else if (c.card_type === 'device_command') {
+      flush();
+      blocks.push({ kind: 'command', card: c });
+    }
+  }
+  flush();
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%' }}>
+      {blocks.map((b, i) => {
+        if (b.kind === 'toggles') {
+          return (
+            <DeviceGridPreview
+              key={'t' + i}
+              cards={b.cards}
+              nameMaps={nameMaps}
+              highlightedCardId={highlightedCardId}
+              onCardMouseEnter={onCardMouseEnter}
+              onCardMouseLeave={onCardMouseLeave}
+              onCardClick={onCardClick}
+            />
+          );
+        }
+        return (
+          <PreviewCard
+            key={'c' + b.card.id}
+            card={b.card}
+            nameMaps={nameMaps}
+            isHighlighted={highlightedCardId === b.card.id}
+            onMouseEnter={() => onCardMouseEnter?.(b.card.id)}
+            onMouseLeave={onCardMouseLeave}
+            onClick={() => onCardClick?.(b.card.id)}
+            previewColumns={2}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+/* ─── 独占整行的 device_toggle 聚合卡：玻璃卡片 + "设备开关卡片"标题 + 6 列 PanelButtonCell 网格 ─── */
+
+function ToggleGroupCard({
+  cards,
+  nameMaps,
+  highlightedCardId,
+  onCardMouseEnter,
+  onCardMouseLeave,
+  onCardClick,
+}: {
+  cards: PanelCard[];
+  nameMaps: NameMaps;
+  highlightedCardId?: number | null;
+  onCardMouseEnter?: (cardId: number) => void;
+  onCardMouseLeave?: () => void;
+  onCardClick?: (cardId: number) => void;
+}) {
+  const cols = 6;
+  const totalSlots = Math.ceil(Math.max(cards.length, 1) / cols) * cols;
+  const emptyCount = totalSlots - cards.length;
+  return (
+    <div
+      style={{
+        padding: 12,
+        background: PT.glassFill,
+        border: `1px solid ${PT.glassStroke}`,
+        borderRadius: PT.radiusCard,
+        backdropFilter: PT.blur,
+        WebkitBackdropFilter: PT.blur,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 15,
+          fontWeight: 600,
+          color: PT.textPrimary,
+          marginBottom: 10,
+        }}
+      >
+        设备开关卡片
+      </div>
+      <div
+        style={{
+          ...CELL_VARS,
+          display: 'grid',
+          gridTemplateColumns: `repeat(${cols}, 1fr)`,
+          gap: 'var(--cell-gap)',
+        }}
+      >
+        {cards.map((card) => (
+          <div
+            key={card.id}
+            onMouseEnter={() => onCardMouseEnter?.(card.id)}
+            onMouseLeave={onCardMouseLeave}
+            onClick={() => onCardClick?.(card.id)}
+            className={highlightedCardId === card.id ? 'preview-card-highlighted' : undefined}
+          >
+            <DeviceTogglePreviewCell card={card} nameMaps={nameMaps} />
+          </div>
+        ))}
+        {Array.from({ length: emptyCount }).map((_, i) => (
+          <PanelButtonCell key={`empty-${i}`} empty />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** 单个 device_toggle 用 PanelButtonCell 渲染 —— 默认"待命"态（admin 预览不含实时设备状态）。 */
+function DeviceTogglePreviewCell({ card, nameMaps }: { card: PanelCard; nameMaps: NameMaps }) {
+  const binding = card.binding as { id?: number } | null | undefined;
+  const id = binding?.id;
+  const label = id ? nameMaps.device.get(id) ?? `设备 #${id}` : '未绑定';
+  return (
+    <PanelButtonCell tone="device" label={label} status="待命" />
   );
 }
 
@@ -239,65 +404,4 @@ function EmptyTile() {
   );
 }
 
-/* ─── 布局行构建（复刻 Flutter PanelSectionWidget._buildRows 逻辑）─── */
-
-interface LayoutRow {
-  type: 'full' | 'media-device' | 'script-ai';
-  cards: PanelCard[];
-}
-
-function buildLayoutRows(cards: PanelCard[]): LayoutRow[] {
-  const rows: LayoutRow[] = [];
-  let i = 0;
-
-  while (i < cards.length) {
-    const card = cards[i];
-
-    switch (card.card_type) {
-      case 'scene_group':
-      case 'device_command':
-      case 'device_status':
-      case 'smarthome_status' as string:
-        rows.push({ type: 'full', cards: [card] });
-        i++;
-        break;
-
-      case 'media':
-      case 'show': {
-        // media/show + 相邻 device_toggle → 2:1 行
-        const group: PanelCard[] = [card];
-        let j = i + 1;
-        while (j < cards.length && cards[j].card_type === 'device_toggle') {
-          group.push(cards[j]);
-          j++;
-        }
-        rows.push({ type: group.length > 1 ? 'media-device' : 'full', cards: group });
-        i = j;
-        break;
-      }
-
-      case 'script': {
-        // script + 后续 ai → 1:1 行
-        const group: PanelCard[] = [card];
-        let j = i + 1;
-        if (j < cards.length && cards[j].card_type === 'ai') {
-          group.push(cards[j]);
-          j++;
-        }
-        rows.push({ type: group.length > 1 ? 'script-ai' : 'full', cards: group });
-        i = j;
-        break;
-      }
-
-      case 'ai':
-      case 'device_toggle':
-      case 'slider':
-      default:
-        rows.push({ type: 'full', cards: [card] });
-        i++;
-        break;
-    }
-  }
-
-  return rows;
-}
+/* ─── 布局行构建逻辑：详见 buildLayoutRows.ts（双端契约纯函数） ─── */

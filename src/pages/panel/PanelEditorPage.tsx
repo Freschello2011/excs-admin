@@ -897,7 +897,7 @@ export default function PanelEditorPage() {
                 placeholder="选择设备"
                 options={(devices ?? []).map((d: DeviceListItem) => ({
                   value: d.id,
-                  label: `${d.name}（${d.subcategory_name ?? d.subcategory_code ?? '设备'}）`,
+                  label: d.name,
                 }))}
               />
             </Form.Item>
@@ -927,7 +927,7 @@ export default function PanelEditorPage() {
                 placeholder="选择设备"
                 options={(devices ?? []).map((d: DeviceListItem) => ({
                   value: d.id,
-                  label: `${d.name}（${d.subcategory_name ?? d.subcategory_code ?? '设备'}）`,
+                  label: d.name,
                 }))}
               />
             </Form.Item>

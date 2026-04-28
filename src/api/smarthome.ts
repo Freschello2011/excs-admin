@@ -113,34 +113,40 @@ export const smarthomeApi = {
 
   async createRule(
     data: CreateEventRuleRequest,
+    reason?: string,
   ): Promise<AxiosResponse<ApiResponse<EventRuleDTO>>> {
-    return wrapAxios(await smarthomeClient.createEventRule(data));
+    return wrapAxios(await smarthomeClient.createEventRule(data, reason));
   },
 
   async updateRule(
     id: string,
     data: UpdateEventRuleRequest,
+    reason?: string,
   ): Promise<AxiosResponse<ApiResponse<EventRuleDTO>>> {
-    return wrapAxios(await smarthomeClient.updateEventRule(id, data));
+    return wrapAxios(await smarthomeClient.updateEventRule(id, data, reason));
   },
 
-  async deleteRule(id: string): Promise<AxiosResponse<ApiResponse<void>>> {
-    await smarthomeClient.deleteEventRule(id);
+  async deleteRule(id: string, reason?: string): Promise<AxiosResponse<ApiResponse<void>>> {
+    await smarthomeClient.deleteEventRule(id, reason);
     return wrapAxios<void>(undefined as never);
   },
 
-  async enableRule(id: string): Promise<AxiosResponse<ApiResponse<void>>> {
-    await smarthomeClient.enableEventRule(id);
+  async enableRule(id: string, reason?: string): Promise<AxiosResponse<ApiResponse<void>>> {
+    await smarthomeClient.enableEventRule(id, reason);
     return wrapAxios<void>(undefined as never);
   },
 
-  async disableRule(id: string): Promise<AxiosResponse<ApiResponse<void>>> {
-    await smarthomeClient.disableEventRule(id);
+  async disableRule(id: string, reason?: string): Promise<AxiosResponse<ApiResponse<void>>> {
+    await smarthomeClient.disableEventRule(id, reason);
     return wrapAxios<void>(undefined as never);
   },
 
-  async setDebugMode(id: string, debug: boolean): Promise<AxiosResponse<ApiResponse<void>>> {
-    await smarthomeClient.setRuleDebugMode(id, debug);
+  async setDebugMode(
+    id: string,
+    debug: boolean,
+    reason?: string,
+  ): Promise<AxiosResponse<ApiResponse<void>>> {
+    await smarthomeClient.setRuleDebugMode(id, debug, reason);
     return wrapAxios<void>(undefined as never);
   },
 

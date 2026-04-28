@@ -41,19 +41,25 @@ function ok<T>(data: T, status = 200): AxiosResponse<ApiResponse<T>> {
 }
 
 export const releaseApi = {
-  requestUpload(body: RequestUploadBody): Promise<AxiosResponse<ApiResponse<RequestUploadResult>>> {
-    return releaseClient.requestReleaseUpload(body).then((d) => ok(d));
+  requestUpload(
+    body: RequestUploadBody,
+    reason?: string,
+  ): Promise<AxiosResponse<ApiResponse<RequestUploadResult>>> {
+    return releaseClient.requestReleaseUpload(body, reason).then((d) => ok(d));
   },
   listReleases(
     params: ReleaseListParams,
   ): Promise<AxiosResponse<ApiResponse<PageData<AppRelease>>>> {
     return releaseClient.listReleases(params).then((d) => ok(d));
   },
-  createRelease(body: CreateReleaseBody): Promise<AxiosResponse<ApiResponse<AppRelease>>> {
-    return releaseClient.createRelease(body).then((d) => ok(d, 201));
+  createRelease(
+    body: CreateReleaseBody,
+    reason?: string,
+  ): Promise<AxiosResponse<ApiResponse<AppRelease>>> {
+    return releaseClient.createRelease(body, reason).then((d) => ok(d, 201));
   },
-  deleteRelease(id: number): Promise<AxiosResponse<ApiResponse<null>>> {
-    return releaseClient.deleteRelease(id).then(() => ok(null));
+  deleteRelease(id: number, reason?: string): Promise<AxiosResponse<ApiResponse<null>>> {
+    return releaseClient.deleteRelease(id, reason).then(() => ok(null));
   },
   getHallVersion(
     hallId: number,
@@ -63,10 +69,15 @@ export const releaseApi = {
   setHallVersion(
     hallId: number,
     body: SetHallVersionBody,
+    reason?: string,
   ): Promise<AxiosResponse<ApiResponse<null>>> {
-    return releaseClient.setHallAppVersion(hallId, body).then(() => ok(null));
+    return releaseClient.setHallAppVersion(hallId, body, reason).then(() => ok(null));
   },
-  notifyUpdate(hallId: number, version: string): Promise<AxiosResponse<ApiResponse<null>>> {
-    return releaseClient.notifyAppUpdate(hallId, { version }).then(() => ok(null));
+  notifyUpdate(
+    hallId: number,
+    version: string,
+    reason?: string,
+  ): Promise<AxiosResponse<ApiResponse<null>>> {
+    return releaseClient.notifyAppUpdate(hallId, { version }, reason).then(() => ok(null));
   },
 };

@@ -343,8 +343,11 @@ export default function AiAvatarConfigPanel({ exhibitId, hallId }: AiAvatarConfi
   // ─── Tag search config popover content ───
   const tagConfigContent = (
     <div style={{ width: 300 }}>
-      <div style={{ marginBottom: 12 }}>
-        <div style={{ marginBottom: 4, fontSize: 13 }}>片段时长 (秒)</div>
+      <div className={styles.popoverField}>
+        <div className={styles.popoverFieldLabel}>
+          <span>片段时长 (秒)</span>
+          <span className={styles.popoverSliderValue}>{tagConfig.segment_duration_ms / 1000}s</span>
+        </div>
         <Slider
           min={5} max={30} step={1}
           value={tagConfig.segment_duration_ms / 1000}
@@ -352,8 +355,8 @@ export default function AiAvatarConfigPanel({ exhibitId, hallId }: AiAvatarConfi
           marks={{ 5: '5', 10: '10', 20: '20', 30: '30' }}
         />
       </div>
-      <div style={{ marginBottom: 12 }}>
-        <div style={{ marginBottom: 4, fontSize: 13 }}>过渡方式</div>
+      <div className={styles.popoverField}>
+        <div className={styles.popoverFieldLabel}>过渡方式</div>
         <Select
           value={tagConfig.transition_type}
           onChange={(v) => setTagConfig((c) => ({ ...c, transition_type: v }))}
@@ -364,8 +367,8 @@ export default function AiAvatarConfigPanel({ exhibitId, hallId }: AiAvatarConfi
           ]}
         />
       </div>
-      <div style={{ marginBottom: 12 }}>
-        <div style={{ marginBottom: 4, fontSize: 13 }}>搜索范围</div>
+      <div className={styles.popoverField}>
+        <div className={styles.popoverFieldLabel}>搜索范围</div>
         <Select
           value={tagConfig.search_scope}
           onChange={(v) => setTagConfig((c) => ({ ...c, search_scope: v }))}
@@ -376,16 +379,19 @@ export default function AiAvatarConfigPanel({ exhibitId, hallId }: AiAvatarConfi
           ]}
         />
       </div>
-      <div style={{ marginBottom: 12 }}>
-        <div style={{ marginBottom: 4, fontSize: 13 }}>最大片段数</div>
+      <div className={styles.popoverField}>
+        <div className={styles.popoverFieldLabel}>最大片段数</div>
         <InputNumber
           min={1} max={20} value={tagConfig.max_segments}
           onChange={(v) => v && setTagConfig((c) => ({ ...c, max_segments: v }))}
           style={{ width: '100%' }}
         />
       </div>
-      <div>
-        <div style={{ marginBottom: 4, fontSize: 13 }}>最低置信度</div>
+      <div className={styles.popoverField}>
+        <div className={styles.popoverFieldLabel}>
+          <span>最低置信度</span>
+          <span className={styles.popoverSliderValue}>{tagConfig.min_confidence.toFixed(2)}</span>
+        </div>
         <Slider
           min={0} max={1} step={0.05}
           value={tagConfig.min_confidence}

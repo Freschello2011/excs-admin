@@ -1,0 +1,48 @@
+/**
+ * FieldRow — 把 inline `color: '#888'/'#999'`、`fontSize: 12` 全部 token 化。
+ * 红线：不改字段、控件类型、value/onChange 行为；仅替换样式。
+ */
+
+/* 行下灰色帮助文字（int 字段的副说明） */
+.helpText {
+  color: var(--color-on-surface-variant);
+  font-size: 12px;
+}
+
+/* 标签行（短标题 + ⓘ Tooltip 触发器） */
+.label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  line-height: 1.4;
+}
+
+.labelTitle {
+  font-weight: 500;
+  color: var(--color-on-surface);
+}
+
+.labelInfoIcon {
+  color: var(--color-outline);
+  font-size: 12px;
+  cursor: help;
+}
+
+/* int 字段的单位文本（200px 宽 InputNumber 旁边的灰字） */
+.unitText {
+  font-size: 13px;
+  white-space: nowrap;
+  color: var(--color-on-surface-variant);
+}
+
+/* int 字段的"InputNumber + 单位"行内容器 */
+.numberRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* int Form.Item 行额外缩短 marginBottom（替代 inline style） */
+.intRow {
+  margin-bottom: 12px;
+}

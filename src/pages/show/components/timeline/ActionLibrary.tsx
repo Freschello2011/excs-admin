@@ -1,22 +1,19 @@
 import { useState, useMemo } from 'react';
-import { Tabs, Input, Collapse, Tag, Empty, Spin, Button, Tooltip } from 'antd';
+import { Tabs, Input, Empty, Spin, Button, Tooltip } from 'antd';
 import {
   MenuFoldOutlined, MenuUnfoldOutlined, SearchOutlined,
   ThunderboltOutlined, AppstoreOutlined, PlaySquareOutlined,
 } from '@ant-design/icons';
 import { useDraggable } from '@dnd-kit/core';
-import { useQueries, useQuery } from '@tanstack/react-query';
-import { deviceModelApi } from '@/api/deviceModel';
+import { useQuery } from '@tanstack/react-query';
 import { commandApi } from '@/api/command';
 import { contentApi } from '@/api/content';
 import { queryKeys } from '@/api/queryKeys';
 import type {
   ContentListItem,
-  DeviceModelDetail,
-  DeviceModelListItem,
-  ProtocolCommand,
   SceneListItem,
 } from '@/api/gen/client';
+import type { DeviceCommand as ProtocolCommand } from '@/types/deviceConnector';
 
 /* ==================== DnD data types ==================== */
 
@@ -81,84 +78,18 @@ function DraggableCard({ id, data, label, sub }: {
   );
 }
 
-/* ==================== Tab: Device commands (by device model) ==================== */
+/* ==================== Tab: Device commands ==================== */
+//
+// device-mgmt-v2 P7-Cleanup 后型号库下线，原"按型号 → 命令"列表已无数据源。v2 时间轴
+// 编辑器的 device 命令拖曳入口待与 P7-OssRecording / P7-SmyooPlugin 完工后基于
+// preset / protocol_profile / inline_commands 重做（hall.md §timeline-editor 跟踪）。
 
-function DeviceCommandsTab({ search }: { search: string }) {
-  // 1. 拉型号列表（仅 active）
-  const { data: modelList, isLoading: listLoading } = useQuery({
-    queryKey: queryKeys.deviceModels({ status: 'active', page: 1, page_size: 200 }),
-    queryFn: () => deviceModelApi.list({ status: 'active', page: 1, page_size: 200 }),
-    select: (res): DeviceModelListItem[] => res.data.data?.list ?? [],
-  });
-
-  // 2. 并行拉每个型号的详情以取 commands
-  const detailQueries = useQueries({
-    queries: (modelList ?? []).map((m) => ({
-      queryKey: queryKeys.deviceModelDetail(m.id),
-      queryFn: () => deviceModelApi.get(m.id),
-      select: (res: { data: { data: DeviceModelDetail } }) => res.data.data,
-      enabled: !!modelList,
-    })),
-  });
-
-  const detailsLoading = detailQueries.some((q) => q.isLoading);
-  const isLoading = listLoading || detailsLoading;
-
-  const filtered = useMemo(() => {
-    if (!modelList) return [];
-    const q = search.toLowerCase();
-    return modelList
-      .map((m, idx) => {
-        const detail = detailQueries[idx]?.data;
-        const commands = detail?.commands ?? [];
-        const subcategoryCode = m.subcategory_code;
-        return {
-          id: m.id,
-          subcategoryCode,
-          subcategoryName: m.subcategory_name,
-          brandName: m.brand_name,
-          name: m.name,
-          commands: commands.filter((cmd) =>
-            !q || cmd.name.toLowerCase().includes(q) || cmd.code.toLowerCase().includes(q)
-              || m.name.toLowerCase().includes(q) || m.brand_name.toLowerCase().includes(q),
-          ),
-        };
-      })
-      .filter((g) => g.commands.length > 0);
-  }, [modelList, detailQueries, search]);
-
-  if (isLoading) return <Spin size="small" style={{ display: 'block', margin: '24px auto' }} />;
-  if (filtered.length === 0) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="无设备命令" />;
-
+function DeviceCommandsTab({ search: _search }: { search: string }) {
   return (
-    <Collapse
-      size="small"
-      defaultActiveKey={filtered.map((t) => String(t.id))}
-      items={filtered.map((g) => ({
-        key: String(g.id),
-        label: (
-          <span>
-            <Tag style={{ fontSize: 10, lineHeight: '16px', padding: '0 4px', marginRight: 4 }}>
-              {g.subcategoryName}
-            </Tag>
-            {g.brandName} · {g.name}
-          </span>
-        ),
-        children: (
-          <div>
-            {g.commands.map((cmd, idx) => (
-              <DraggableCard
-                key={`model-${g.id}-${cmd.code}-${idx}`}
-                id={`device-${g.id}-${cmd.code}-${idx}`}
-                data={{ type: 'device', deviceType: g.subcategoryCode, command: cmd }}
-                label={cmd.name}
-                sub={cmd.code}
-              />
-            ))}
-          </div>
-        ),
-      }))}
-      style={{ background: 'transparent' }}
+    <Empty
+      image={Empty.PRESENTED_IMAGE_SIMPLE}
+      description="设备命令拖曳暂未接入（v2 时间轴编辑器后续阶段重做）"
+      style={{ marginTop: 24 }}
     />
   );
 }

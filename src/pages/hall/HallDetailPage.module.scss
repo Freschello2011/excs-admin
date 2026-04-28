@@ -1,0 +1,24 @@
+/**
+ * 展厅详情页外壳 —— 替代 inline `marginTop: 16/24/120`。
+ * 红线：仅样式 token 化；不改字段、操作、流程。
+ */
+
+.spinCenter {
+  display: flex;
+  justify-content: center;
+  margin-top: 120px;
+}
+
+.notFound {
+  text-align: center;
+  margin-top: 120px;
+  color: var(--color-on-surface-variant);
+}
+
+.section {
+  margin-top: 16px;
+}
+
+.sectionLg {
+  margin-top: 24px;
+}

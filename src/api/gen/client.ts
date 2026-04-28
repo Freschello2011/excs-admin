@@ -396,8 +396,13 @@ export const contentClient = {
   updateContent(contentId: number, body: UpdateContentRequest): Promise<ContentDetailDTO> {
     return unwrap(request.put<ApiEnvelope<ContentDetailDTO>>(`/api/v1/contents/${contentId}`, body));
   },
-  deleteContent(contentId: number): Promise<void> {
-    return unwrap(request.delete<ApiEnvelope<void>>(`/api/v1/contents/${contentId}`));
+  /** content.delete 标了 RequireReason: true（critical）。reason 走 body.reason（≥ 5 字）。 */
+  deleteContent(contentId: number, reason?: string): Promise<void> {
+    return unwrap(
+      request.delete<ApiEnvelope<void>>(`/api/v1/contents/${contentId}`, {
+        data: mergeReasonBody(undefined, reason),
+      }),
+    );
   },
 
   /* ---- 绑定 / 解绑展项 ---- */
@@ -480,8 +485,14 @@ export const contentClient = {
   getOSSStats(hallId: number): Promise<OSSStatsResult> {
     return unwrap(request.get<ApiEnvelope<OSSStatsResult>>(`/api/v1/halls/${hallId}/oss-stats`));
   },
-  triggerCleanup(hallId: number): Promise<CleanupResult> {
-    return unwrap(request.post<ApiEnvelope<CleanupResult>>(`/api/v1/halls/${hallId}/content-cleanup`));
+  /** content.cleanup 标了 RequireReason: true（critical）。reason 走 body.reason（≥ 5 字）。 */
+  triggerCleanup(hallId: number, reason?: string): Promise<CleanupResult> {
+    return unwrap(
+      request.post<ApiEnvelope<CleanupResult>>(
+        `/api/v1/halls/${hallId}/content-cleanup`,
+        mergeReasonBody(undefined, reason),
+      ),
+    );
   },
 
   /* ---- 展项内容 / 未绑定内容 ---- */
@@ -614,7 +625,6 @@ export type UpdateScriptsRequest = components['schemas']['UpdateScriptsRequest']
 
 // ---- Device ----
 export type DeviceDTO = components['schemas']['DeviceDTO'];
-export type CreateDeviceRequest = components['schemas']['CreateDeviceRequest'];
 export type UpdateDeviceRequest = components['schemas']['UpdateDeviceRequest'];
 export type EffectiveCommandDTO = components['schemas']['EffectiveCommandDTO'];
 
@@ -689,7 +699,6 @@ export type ExhibitListItem = ExhibitListItemDTO;
 export type ExhibitBody = CreateExhibitRequest;
 export type ExhibitScript = ScriptItem;
 export type DeviceListItem = DeviceDTO;
-export type DeviceBody = CreateDeviceRequest;
 export type EffectiveCommand = EffectiveCommandDTO;
 export type AppInstanceListItem = AppInstanceDTO;
 export type PairingCodeListItem = PairingCodeDTO;
@@ -771,8 +780,18 @@ export const hallClient = {
   updateHallConfig(hallId: number, body: UpdateHallConfigRequest): Promise<void> {
     return unwrap(request.put<ApiEnvelope<void>>(`/api/v1/halls/${hallId}/config`, body));
   },
-  updateServicePeriod(hallId: number, body: UpdateServicePeriodRequest): Promise<void> {
-    return unwrap(request.put<ApiEnvelope<void>>(`/api/v1/halls/${hallId}/service-period`, body));
+  /** hall.update_service_period 标了 RequireReason: true（critical）。 */
+  updateServicePeriod(
+    hallId: number,
+    body: UpdateServicePeriodRequest,
+    reason?: string,
+  ): Promise<void> {
+    return unwrap(
+      request.put<ApiEnvelope<void>>(
+        `/api/v1/halls/${hallId}/service-period`,
+        mergeReasonBody(body as unknown as Record<string, unknown>, reason),
+      ),
+    );
   },
   getHallStatus(hallId: number): Promise<HallStatusDTO> {
     return unwrap(request.get<ApiEnvelope<HallStatusDTO>>(`/api/v1/halls/${hallId}/status`));
@@ -802,12 +821,9 @@ export const hallClient = {
     );
   },
 
-  /* ---- 设备 CRUD + effective-commands ---- */
+  /* ---- 设备 CRUD + effective-commands（device-mgmt-v2 P7-Cleanup 后创建走 POST /v2/devices） ---- */
   listDevices(params: ListDevicesParams): Promise<DeviceDTO[]> {
     return unwrap(request.get<ApiEnvelope<DeviceDTO[]>>('/api/v1/devices', { params }));
-  },
-  createDevice(body: CreateDeviceRequest): Promise<DeviceDTO> {
-    return unwrap(request.post<ApiEnvelope<DeviceDTO>>('/api/v1/devices', body));
   },
   updateDevice(deviceId: number, body: UpdateDeviceRequest): Promise<DeviceDTO> {
     return unwrap(request.put<ApiEnvelope<DeviceDTO>>(`/api/v1/devices/${deviceId}`, body));
@@ -1134,13 +1150,6 @@ export function hallIsActive(d: HallDetailDTO): boolean {
  */
 export function isFusionExhibit(e: ExhibitListItemDTO): boolean {
   return e.display_mode === 'simple_fusion';
-}
-
-/**
- * 显式访问 DeviceDTO.subcategory_code —— 破坏测试锚点（DeviceListItem 历史就靠 subcategory_code 渲染图标）。
- */
-export function deviceSubcategoryCode(d: DeviceDTO): string {
-  return d.subcategory_code ?? '';
 }
 
 /**
@@ -2338,30 +2347,51 @@ export interface ReleaseListParams {
 // release 上传凭证别名留在 api/release.ts 局部定义，避免命名冲突。
 
 export const releaseClient = {
+  /** release.manage 标了 RequireReason: true（critical）。reason 合进 body.reason。 */
   requestReleaseUpload(
     body: RequestReleaseUploadRequest,
+    reason?: string,
   ): Promise<RequestReleaseUploadResponse> {
     return unwrap(
       request.post<ApiEnvelope<RequestReleaseUploadResponse>>(
         '/api/v1/releases/request-upload',
-        body,
+        mergeReasonBody(body as unknown as Record<string, unknown>, reason),
       ),
     );
   },
-  createRelease(body: CreateReleaseRequest): Promise<AppRelease> {
-    return unwrap(request.post<ApiEnvelope<AppRelease>>('/api/v1/releases', body));
+  /** release.manage 标了 RequireReason: true（critical）。 */
+  createRelease(body: CreateReleaseRequest, reason?: string): Promise<AppRelease> {
+    return unwrap(
+      request.post<ApiEnvelope<AppRelease>>(
+        '/api/v1/releases',
+        mergeReasonBody(body as unknown as Record<string, unknown>, reason),
+      ),
+    );
   },
   listReleases(params: ReleaseListParams): Promise<PageData<AppRelease>> {
     return unwrap(
       request.get<ApiEnvelope<PageData<AppRelease>>>('/api/v1/releases', { params }),
     );
   },
-  deleteRelease(id: number): Promise<void> {
-    return unwrap(request.delete<ApiEnvelope<void>>(`/api/v1/releases/${id}`));
-  },
-  setHallAppVersion(hallId: number, body: SetHallVersionRequest): Promise<void> {
+  /** release.manage 标了 RequireReason: true（critical）。reason 走 DELETE body.reason。 */
+  deleteRelease(id: number, reason?: string): Promise<void> {
     return unwrap(
-      request.put<ApiEnvelope<void>>(`/api/v1/halls/${hallId}/app-version`, body),
+      request.delete<ApiEnvelope<void>>(`/api/v1/releases/${id}`, {
+        data: mergeReasonBody(undefined, reason),
+      }),
+    );
+  },
+  /** release.manage 标了 RequireReason: true（critical）。 */
+  setHallAppVersion(
+    hallId: number,
+    body: SetHallVersionRequest,
+    reason?: string,
+  ): Promise<void> {
+    return unwrap(
+      request.put<ApiEnvelope<void>>(
+        `/api/v1/halls/${hallId}/app-version`,
+        mergeReasonBody(body as unknown as Record<string, unknown>, reason),
+      ),
     );
   },
   getHallAppVersion(hallId: number): Promise<HallAppVersionDTO | null> {
@@ -2371,9 +2401,17 @@ export const releaseClient = {
       ),
     );
   },
-  notifyAppUpdate(hallId: number, body: NotifyAppUpdateRequest): Promise<void> {
+  /** release.notify 标了 RequireReason: true（critical）。 */
+  notifyAppUpdate(
+    hallId: number,
+    body: NotifyAppUpdateRequest,
+    reason?: string,
+  ): Promise<void> {
     return unwrap(
-      request.post<ApiEnvelope<void>>(`/api/v1/halls/${hallId}/notify-update`, body),
+      request.post<ApiEnvelope<void>>(
+        `/api/v1/halls/${hallId}/notify-update`,
+        mergeReasonBody(body as unknown as Record<string, unknown>, reason),
+      ),
     );
   },
   checkAppUpdate(params: {
@@ -2522,10 +2560,12 @@ export const sysConfigClient = {
       }),
     );
   },
-  regenerateNASToken(): Promise<RegenerateNASTokenResponse> {
+  /** config.regenerate_nas_token 标了 RequireReason: true（critical）。 */
+  regenerateNASToken(reason?: string): Promise<RegenerateNASTokenResponse> {
     return unwrap(
       request.post<ApiEnvelope<RegenerateNASTokenResponse>>(
         '/api/v1/sys-configs/nas/regenerate-token',
+        mergeReasonBody(undefined, reason),
       ),
     );
   },
@@ -2596,161 +2636,6 @@ export const operationLogsClient = {
  */
 export function operationLogSummary(item: OperationLogItem): string {
   return `[${item.action}] ${item.target_type}#${item.target_id}`;
-}
-
-/* ============================================================
- * Device-Catalog context typed client（16 个端点）—— Phase 3-E
- *
- * 包含 read（7）+ write（9）。命令的 params_schema 走 free-form Record（hall context
- * DeviceInfoMetaKnown 同模式），UI 编辑器在 components/device-catalog/ 内部消化。
- * ============================================================ */
-
-export type DeviceCategoryDTO = components['schemas']['DeviceCategoryDTO'];
-export type DeviceSubcategoryDTO = components['schemas']['DeviceSubcategoryDTO'];
-export type DeviceBrandDTO = components['schemas']['DeviceBrandDTO'];
-export type DeviceCommandDTO = components['schemas']['DeviceCommandDTO'];
-export type DeviceCommandInput = components['schemas']['DeviceCommandInput'];
-export type DeviceModelStatus = components['schemas']['DeviceModelStatus'];
-export type DeviceModelListItem = components['schemas']['DeviceModelListItem'];
-export type DeviceModelListPage = components['schemas']['DeviceModelListPage'];
-export type DeviceModelDetail = components['schemas']['DeviceModelDetail'];
-export type CreateDeviceBrandRequest = components['schemas']['CreateDeviceBrandRequest'];
-export type UpdateDeviceBrandRequest = components['schemas']['UpdateDeviceBrandRequest'];
-export type CreateDeviceModelRequest = components['schemas']['CreateDeviceModelRequest'];
-export type UpdateDeviceModelRequest = components['schemas']['UpdateDeviceModelRequest'];
-export type ProtocolBaselineListItem = components['schemas']['ProtocolBaselineListItem'];
-export type ProtocolBaselineDetail = components['schemas']['ProtocolBaselineDetail'];
-export type UpdateProtocolBaselineRequest = components['schemas']['UpdateProtocolBaselineRequest'];
-export type DeprecateDeviceModelResponse = components['schemas']['DeprecateDeviceModelResponse'];
-
-/** params_schema / connection_schema 的 free-form Record 视图（types/deviceProtocolBaseline.ts 兼容别名）。 */
-export type ParamsSchema = Record<string, unknown>;
-export type ConnectionSchema = Record<string, unknown>;
-
-/** 历史命名兼容（types/device*.ts 删除前的别名）。 */
-export type ProtocolCommand = DeviceCommandInput;
-export type ProtocolBaselineListItemDTO = ProtocolBaselineListItem;
-export type ProtocolBaselineDetailDTO = ProtocolBaselineDetail;
-export type CreateBrandBody = CreateDeviceBrandRequest;
-export type UpdateBrandBody = UpdateDeviceBrandRequest;
-export type CreateModelBody = CreateDeviceModelRequest;
-export type UpdateModelBody = UpdateDeviceModelRequest;
-export type UpdateProtocolBaselineBody = UpdateProtocolBaselineRequest;
-
-/** 列表查询参数 typed 视图（与 ListDeviceBrandsParams / ListDeviceModelsParams 等价）。 */
-export interface BrandListQuery {
-  subcategory_id?: number;
-}
-export interface ModelListQuery {
-  subcategory_id?: number;
-  brand_id?: number;
-  keyword?: string;
-  status?: DeviceModelStatus;
-  page?: number;
-  page_size?: number;
-}
-
-export const deviceCatalogClient = {
-  /* ---- read (7) ---- */
-  listDeviceCategories(): Promise<DeviceCategoryDTO[]> {
-    return unwrap(request.get<ApiEnvelope<DeviceCategoryDTO[]>>('/api/v1/device-categories'));
-  },
-  listDeviceSubcategories(categoryId?: number): Promise<DeviceSubcategoryDTO[]> {
-    return unwrap(
-      request.get<ApiEnvelope<DeviceSubcategoryDTO[]>>('/api/v1/device-subcategories', {
-        params: categoryId !== undefined ? { category_id: categoryId } : undefined,
-      }),
-    );
-  },
-  listDeviceBrands(params?: BrandListQuery): Promise<DeviceBrandDTO[]> {
-    return unwrap(
-      request.get<ApiEnvelope<DeviceBrandDTO[]>>('/api/v1/device-brands', { params }),
-    );
-  },
-  listDeviceModels(params?: ModelListQuery): Promise<DeviceModelListPage> {
-    return unwrap(
-      request.get<ApiEnvelope<DeviceModelListPage>>('/api/v1/device-models', { params }),
-    );
-  },
-  getDeviceModel(id: number): Promise<DeviceModelDetail> {
-    return unwrap(
-      request.get<ApiEnvelope<DeviceModelDetail>>(`/api/v1/device-models/${id}`),
-    );
-  },
-  listProtocolBaselines(): Promise<ProtocolBaselineListItem[]> {
-    return unwrap(
-      request.get<ApiEnvelope<ProtocolBaselineListItem[]>>('/api/v1/protocol-baselines'),
-    );
-  },
-  getProtocolBaseline(protocol: string): Promise<ProtocolBaselineDetail> {
-    return unwrap(
-      request.get<ApiEnvelope<ProtocolBaselineDetail>>(
-        `/api/v1/protocol-baselines/${encodeURIComponent(protocol)}`,
-      ),
-    );
-  },
-
-  /* ---- write (9) ---- */
-  createDeviceBrand(body: CreateDeviceBrandRequest): Promise<DeviceBrandDTO> {
-    return unwrap(request.post<ApiEnvelope<DeviceBrandDTO>>('/api/v1/device-brands', body));
-  },
-  updateDeviceBrand(id: number, body: UpdateDeviceBrandRequest): Promise<DeviceBrandDTO> {
-    return unwrap(request.put<ApiEnvelope<DeviceBrandDTO>>(`/api/v1/device-brands/${id}`, body));
-  },
-  deleteDeviceBrand(id: number): Promise<void> {
-    return unwrap(request.delete<ApiEnvelope<void>>(`/api/v1/device-brands/${id}`));
-  },
-  createDeviceModel(body: CreateDeviceModelRequest): Promise<DeviceModelDetail> {
-    return unwrap(request.post<ApiEnvelope<DeviceModelDetail>>('/api/v1/device-models', body));
-  },
-  updateDeviceModel(id: number, body: UpdateDeviceModelRequest): Promise<DeviceModelDetail> {
-    return unwrap(
-      request.put<ApiEnvelope<DeviceModelDetail>>(`/api/v1/device-models/${id}`, body),
-    );
-  },
-  cloneDeviceModel(id: number): Promise<DeviceModelDetail> {
-    return unwrap(
-      request.post<ApiEnvelope<DeviceModelDetail>>(`/api/v1/device-models/${id}/clone`),
-    );
-  },
-  deprecateDeviceModel(id: number): Promise<DeprecateDeviceModelResponse> {
-    return unwrap(
-      request.post<ApiEnvelope<DeprecateDeviceModelResponse>>(
-        `/api/v1/device-models/${id}/deprecate`,
-      ),
-    );
-  },
-  deleteDeviceModel(id: number): Promise<void> {
-    return unwrap(request.delete<ApiEnvelope<void>>(`/api/v1/device-models/${id}`));
-  },
-  updateProtocolBaseline(
-    protocol: string,
-    body: UpdateProtocolBaselineRequest,
-  ): Promise<ProtocolBaselineDetail> {
-    return unwrap(
-      request.put<ApiEnvelope<ProtocolBaselineDetail>>(
-        `/api/v1/protocol-baselines/${encodeURIComponent(protocol)}`,
-        body,
-      ),
-    );
-  },
-};
-
-/* ---- device-catalog context 破坏测试锚点（Phase 3-E） ---- */
-
-/**
- * 显式访问 DeviceModelListItem.command_count + status —— 破坏测试锚点。
- * 前端列表 Tag 渲染常用。
- */
-export function deviceModelIsActive(m: DeviceModelListItem): boolean {
-  return m.status === 'active' && m.command_count > 0;
-}
-
-/**
- * 显式访问 ProtocolBaselineDetail.protocol + commands.length —— 破坏测试锚点。
- */
-export function baselineCommandCount(b: ProtocolBaselineDetail): number {
-  return b.commands.length;
 }
 
 /* ============================================================
@@ -2947,24 +2832,61 @@ export const smarthomeClient = {
   getEventRule(id: string): Promise<EventRuleDTO> {
     return unwrap(request.get<ApiEnvelope<EventRuleDTO>>(`/api/v1/smarthome/rules/${id}`));
   },
-  createEventRule(body: CreateEventRuleRequest): Promise<EventRuleDTO> {
-    return unwrap(request.post<ApiEnvelope<EventRuleDTO>>('/api/v1/smarthome/rules', body));
-  },
-  updateEventRule(id: string, body: UpdateEventRuleRequest): Promise<EventRuleDTO> {
-    return unwrap(request.put<ApiEnvelope<EventRuleDTO>>(`/api/v1/smarthome/rules/${id}`, body));
-  },
-  deleteEventRule(id: string): Promise<void> {
-    return unwrap(request.delete<ApiEnvelope<void>>(`/api/v1/smarthome/rules/${id}`));
-  },
-  enableEventRule(id: string): Promise<void> {
-    return unwrap(request.post<ApiEnvelope<void>>(`/api/v1/smarthome/rules/${id}/enable`));
-  },
-  disableEventRule(id: string): Promise<void> {
-    return unwrap(request.post<ApiEnvelope<void>>(`/api/v1/smarthome/rules/${id}/disable`));
-  },
-  setRuleDebugMode(id: string, debug: boolean): Promise<void> {
+  /** smarthome.manage_rule 标了 RequireReason: true（critical）。 */
+  createEventRule(body: CreateEventRuleRequest, reason?: string): Promise<EventRuleDTO> {
     return unwrap(
-      request.put<ApiEnvelope<void>>(`/api/v1/smarthome/rules/${id}/debug`, { debug }),
+      request.post<ApiEnvelope<EventRuleDTO>>(
+        '/api/v1/smarthome/rules',
+        mergeReasonBody(body as unknown as Record<string, unknown>, reason),
+      ),
+    );
+  },
+  /** smarthome.manage_rule 标了 RequireReason: true（critical）。 */
+  updateEventRule(
+    id: string,
+    body: UpdateEventRuleRequest,
+    reason?: string,
+  ): Promise<EventRuleDTO> {
+    return unwrap(
+      request.put<ApiEnvelope<EventRuleDTO>>(
+        `/api/v1/smarthome/rules/${id}`,
+        mergeReasonBody(body as unknown as Record<string, unknown>, reason),
+      ),
+    );
+  },
+  /** smarthome.manage_rule 标了 RequireReason: true（critical）。 */
+  deleteEventRule(id: string, reason?: string): Promise<void> {
+    return unwrap(
+      request.delete<ApiEnvelope<void>>(`/api/v1/smarthome/rules/${id}`, {
+        data: mergeReasonBody(undefined, reason),
+      }),
+    );
+  },
+  /** smarthome.manage_rule 标了 RequireReason: true（critical）。 */
+  enableEventRule(id: string, reason?: string): Promise<void> {
+    return unwrap(
+      request.post<ApiEnvelope<void>>(
+        `/api/v1/smarthome/rules/${id}/enable`,
+        mergeReasonBody(undefined, reason),
+      ),
+    );
+  },
+  /** smarthome.manage_rule 标了 RequireReason: true（critical）。 */
+  disableEventRule(id: string, reason?: string): Promise<void> {
+    return unwrap(
+      request.post<ApiEnvelope<void>>(
+        `/api/v1/smarthome/rules/${id}/disable`,
+        mergeReasonBody(undefined, reason),
+      ),
+    );
+  },
+  /** smarthome.manage_rule 标了 RequireReason: true（critical）。 */
+  setRuleDebugMode(id: string, debug: boolean, reason?: string): Promise<void> {
+    return unwrap(
+      request.put<ApiEnvelope<void>>(
+        `/api/v1/smarthome/rules/${id}/debug`,
+        mergeReasonBody({ debug }, reason),
+      ),
     );
   },
   dryRunEventRule(id: string): Promise<DryRunResultDTO> {

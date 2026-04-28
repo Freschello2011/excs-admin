@@ -7,6 +7,7 @@ import { sysConfigApi } from '@/api/sysConfig';
 import { useBrandingStore } from '@/stores/brandingStore';
 import { queryKeys } from '@/api/queryKeys';
 import type { ConfigItem } from '@/api/gen/client';
+import styles from './BrandingForm.module.scss';
 
 export default function BrandingForm() {
   const { message } = useMessage();
@@ -84,15 +85,12 @@ export default function BrandingForm() {
   };
 
   if (isLoading) {
-    return <Card style={{ marginTop: 16 }}><div style={{ textAlign: 'center', padding: 60 }}>加载中...</div></Card>;
+    return <Card style={{ marginTop: 16 }}><div className={styles.loadingState}>加载中...</div></Card>;
   }
 
   return (
     <Card style={{ marginTop: 16 }} styles={{ body: { paddingTop: 24 } }}>
-      <div style={{ marginBottom: 20, fontWeight: 600, fontSize: 15 }}>
-        <span style={{ display: 'inline-block', width: 3, height: 16, background: '#1677ff', borderRadius: 2, marginRight: 8, verticalAlign: 'text-bottom' }} />
-        品牌信息
-      </div>
+      <div className={styles.subTitle}>品牌信息</div>
 
       <Form
         form={form}
@@ -107,7 +105,7 @@ export default function BrandingForm() {
         <Form.Item
           name="company_name"
           label="公司名称"
-          help={<span style={{ color: '#999', fontSize: 12 }}>显示在侧边栏和页脚的公司名称</span>}
+          help={<span className={styles.fieldHelp}>显示在侧边栏和页脚的公司名称</span>}
         >
           <Input placeholder="请输入公司名称" />
         </Form.Item>
@@ -115,28 +113,18 @@ export default function BrandingForm() {
         <Form.Item
           name="system_name"
           label="系统名称"
-          help={<span style={{ color: '#999', fontSize: 12 }}>显示在侧边栏和浏览器标签页标题中的系统名称</span>}
+          help={<span className={styles.fieldHelp}>显示在侧边栏和浏览器标签页标题中的系统名称</span>}
         >
           <Input placeholder="请输入系统名称" />
         </Form.Item>
 
         <Form.Item
           label="系统 Logo"
-          help={<span style={{ color: '#999', fontSize: 12 }}>上传后将替换侧边栏的默认图标，建议使用正方形图片</span>}
+          help={<span className={styles.fieldHelp}>上传后将替换侧边栏的默认图标，建议使用正方形图片</span>}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div className={styles.logoUpload}>
             {logoUrl ? (
-              <div style={{
-                width: 64,
-                height: 64,
-                border: '1px solid var(--ant-color-border)',
-                borderRadius: 8,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                overflow: 'hidden',
-                background: '#fafafa',
-              }}>
+              <div className={styles.logoThumb}>
                 <Image
                   src={logoUrl}
                   alt="Logo"
@@ -147,17 +135,7 @@ export default function BrandingForm() {
                 />
               </div>
             ) : (
-              <div style={{
-                width: 64,
-                height: 64,
-                border: '1px dashed var(--ant-color-border)',
-                borderRadius: 8,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#999',
-                fontSize: 12,
-              }}>
+              <div className={styles.logoEmpty}>
                 无 Logo
               </div>
             )}

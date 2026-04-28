@@ -48,7 +48,8 @@ interface RiskyActionButtonProps
   reasonMinLength?: number;
   /** 若需要显示二次确认而 action 的风险低于 medium（例：需要显示 reason 但 action 自身是 medium） */
   forceRiskLevel?: RiskLevel;
-  children: React.ReactNode;
+  /** 可选；icon-only 按钮（仅 `icon` 无文字标签）时省略。 */
+  children?: React.ReactNode;
 }
 
 const DEFAULT_REASON_MIN_LENGTH = 5;

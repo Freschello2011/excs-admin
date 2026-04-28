@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Table, Select, Space, Button, Modal, Form, Input, InputNumber,
-  Popconfirm, Tag, Divider, Card,
+  Tag, Divider, Card,
 } from 'antd';
 import { useMessage } from '@/hooks/useMessage';
 import type { TableColumnsType } from 'antd';
 import { PlusOutlined, DeleteOutlined, PlusCircleOutlined, BugOutlined, PlayCircleOutlined } from '@ant-design/icons';
 import PageHeader from '@/components/common/PageHeader';
+import RiskyActionButton from '@/components/authz/RiskyActionButton';
 import { smarthomeApi } from '@/api/smarthome';
 import { hallApi } from '@/api/hall';
 import { commandApi } from '@/api/command';
@@ -107,7 +108,7 @@ export default function RulesPage() {
     select: (res) => res.data.data,
     enabled: !!selectedHallId,
   });
-  const deviceOptions = devices.map((d: DeviceListItem) => ({ value: d.id, label: `${d.name}（${d.subcategory_name ?? d.model_name ?? ''}）` }));
+  const deviceOptions = devices.map((d: DeviceListItem) => ({ value: d.id, label: d.name }));
 
   // Scenes for action dropdowns
   const { data: scenes = [] } = useQuery({
@@ -118,51 +119,67 @@ export default function RulesPage() {
   });
   const sceneOptions = scenes.map((s: SceneListItem) => ({ value: s.id, label: s.name }));
 
-  // Mutations
+  // Mutations —— smarthome.manage_rule 是 critical action，全部带 reason。
   const createMutation = useMutation({
-    mutationFn: smarthomeApi.createRule,
+    mutationFn: ({ data, reason }: {
+      data: Parameters<typeof smarthomeApi.createRule>[0];
+      reason?: string;
+    }) => smarthomeApi.createRule(data, reason),
     onSuccess: () => {
       message.success('规则创建成功');
       queryClient.invalidateQueries({ queryKey: ['smarthome', 'rules'] });
       closeModal();
     },
+    onError: (err: Error) => message.error(err.message || '创建失败'),
   });
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Parameters<typeof smarthomeApi.updateRule>[1] }) =>
-      smarthomeApi.updateRule(id, data),
+    mutationFn: ({ id, data, reason }: {
+      id: string;
+      data: Parameters<typeof smarthomeApi.updateRule>[1];
+      reason?: string;
+    }) => smarthomeApi.updateRule(id, data, reason),
     onSuccess: () => {
       message.success('规则更新成功');
       queryClient.invalidateQueries({ queryKey: ['smarthome', 'rules'] });
       closeModal();
     },
+    onError: (err: Error) => message.error(err.message || '更新失败'),
   });
   const deleteMutation = useMutation({
-    mutationFn: smarthomeApi.deleteRule,
+    mutationFn: ({ id, reason }: { id: string; reason?: string }) =>
+      smarthomeApi.deleteRule(id, reason),
     onSuccess: () => {
       message.success('规则已删除');
       queryClient.invalidateQueries({ queryKey: ['smarthome', 'rules'] });
     },
+    onError: (err: Error) => message.error(err.message || '删除失败'),
   });
   const enableMutation = useMutation({
-    mutationFn: smarthomeApi.enableRule,
+    mutationFn: ({ id, reason }: { id: string; reason?: string }) =>
+      smarthomeApi.enableRule(id, reason),
     onSuccess: () => {
       message.success('规则已启用');
       queryClient.invalidateQueries({ queryKey: ['smarthome', 'rules'] });
     },
+    onError: (err: Error) => message.error(err.message || '启用失败'),
   });
   const disableMutation = useMutation({
-    mutationFn: smarthomeApi.disableRule,
+    mutationFn: ({ id, reason }: { id: string; reason?: string }) =>
+      smarthomeApi.disableRule(id, reason),
     onSuccess: () => {
       message.success('规则已禁用');
       queryClient.invalidateQueries({ queryKey: ['smarthome', 'rules'] });
     },
+    onError: (err: Error) => message.error(err.message || '禁用失败'),
   });
   const debugMutation = useMutation({
-    mutationFn: ({ id, debug }: { id: string; debug: boolean }) => smarthomeApi.setDebugMode(id, debug),
+    mutationFn: ({ id, debug, reason }: { id: string; debug: boolean; reason?: string }) =>
+      smarthomeApi.setDebugMode(id, debug, reason),
     onSuccess: (_, vars) => {
       message.success(vars.debug ? '已开启调试模式' : '已关闭调试模式');
       queryClient.invalidateQueries({ queryKey: ['smarthome', 'rules'] });
     },
+    onError: (err: Error) => message.error(err.message || '调试模式切换失败'),
   });
   const dryRunMutation = useMutation({
     mutationFn: smarthomeApi.dryRunRule,
@@ -185,6 +202,7 @@ export default function RulesPage() {
 
   const openEdit = (record: EventRuleDTO) => {
     setEditingRule(record);
+    form.resetFields();
     form.setFieldsValue({
       name: record.name,
       description: record.description,
@@ -222,18 +240,31 @@ export default function RulesPage() {
         message.error('请至少添加一个有效的触发器');
         return;
       }
+      const reason = (values.reason as string | undefined)?.trim();
+      if (!reason || reason.length < 5) {
+        message.error('请填写操作原因（≥ 5 字，审计用）');
+        return;
+      }
+      // 提取出 reason，不要把它带进 update/create 请求体（虽然后端 middleware 会容忍多余字段，
+      // 但 yaml typed schema 不收 reason；我们已经通过第三参数注入 body.reason）
+      const { reason: _r, ...formValues } = values;
+      void _r;
       if (editingRule) {
         updateMutation.mutate({
           id: editingRule.id,
-          data: { ...values, triggers, conditions, actions },
+          data: { ...formValues, triggers, conditions, actions },
+          reason,
         });
       } else {
         createMutation.mutate({
-          ...values,
-          hall_id: selectedHallId!,
-          triggers,
-          conditions,
-          actions,
+          data: {
+            ...formValues,
+            hall_id: selectedHallId!,
+            triggers,
+            conditions,
+            actions,
+          },
+          reason,
         });
       }
     });
@@ -293,24 +324,69 @@ export default function RulesPage() {
       render: (v: string) => new Date(v).toLocaleString('zh-CN'),
     },
     {
-      title: '操作', width: 280,
+      title: '操作', width: 360,
       render: (_: unknown, record: EventRuleDTO) => (
         <Space size="small" wrap>
           <a onClick={() => openEdit(record)}>编辑</a>
           {record.enabled ? (
-            <a onClick={() => disableMutation.mutate(record.id)}>禁用</a>
+            <RiskyActionButton
+              action="smarthome.manage_rule"
+              type="link"
+              size="small"
+              style={{ padding: 0 }}
+              confirmTitle={`禁用规则 ${record.name}`}
+              confirmContent="禁用后该规则将不再触发动作。请填写操作原因（≥ 5 字，审计用）。"
+              onConfirm={async (reason) => {
+                await disableMutation.mutateAsync({ id: record.id, reason });
+              }}
+            >
+              禁用
+            </RiskyActionButton>
           ) : (
-            <a onClick={() => enableMutation.mutate(record.id)}>启用</a>
+            <RiskyActionButton
+              action="smarthome.manage_rule"
+              type="link"
+              size="small"
+              style={{ padding: 0 }}
+              confirmTitle={`启用规则 ${record.name}`}
+              confirmContent="启用后该规则将开始响应触发器事件。请填写操作原因（≥ 5 字，审计用）。"
+              onConfirm={async (reason) => {
+                await enableMutation.mutateAsync({ id: record.id, reason });
+              }}
+            >
+              启用
+            </RiskyActionButton>
           )}
-          <a onClick={() => debugMutation.mutate({ id: record.id, debug: !record.debug_mode })}>
+          <RiskyActionButton
+            action="smarthome.manage_rule"
+            type="link"
+            size="small"
+            style={{ padding: 0 }}
+            confirmTitle={record.debug_mode ? '关闭调试模式' : '开启调试模式'}
+            confirmContent="切换调试模式将影响规则执行行为（dry-run 或真实触发）。请填写操作原因（≥ 5 字，审计用）。"
+            onConfirm={async (reason) => {
+              await debugMutation.mutateAsync({ id: record.id, debug: !record.debug_mode, reason });
+            }}
+          >
             {record.debug_mode ? '关闭调试' : '调试模式'}
-          </a>
+          </RiskyActionButton>
           <a onClick={() => dryRunMutation.mutate(record.id)}>
             <PlayCircleOutlined /> Dry-run
           </a>
-          <Popconfirm title="确定删除该规则？" onConfirm={() => deleteMutation.mutate(record.id)}>
-            <a style={{ color: 'var(--ant-color-error)' }}>删除</a>
-          </Popconfirm>
+          <RiskyActionButton
+            action="smarthome.manage_rule"
+            type="link"
+            size="small"
+            danger
+            style={{ padding: 0 }}
+            confirmTitle={`删除规则 ${record.name}`}
+            confirmContent="删除后无法恢复。请填写操作原因（≥ 5 字，审计用）。"
+            onConfirm={async (reason) => {
+              await deleteMutation.mutateAsync({ id: record.id, reason });
+            }}
+          >
+            删除
+          </RiskyActionButton>
         </Space>
       ),
     },
@@ -539,6 +615,19 @@ export default function RulesPage() {
           {/* Cooldown */}
           <Form.Item name="cooldown_sec" label="防抖设置（触发后多少秒内不重复触发）">
             <InputNumber min={0} max={86400} style={{ width: 200 }} addonAfter="秒" />
+          </Form.Item>
+
+          {/* 操作原因（smarthome.manage_rule 是 critical action，必填） */}
+          <Form.Item
+            name="reason"
+            label="操作原因"
+            rules={[
+              { required: true, message: '请填写操作原因（审计用）' },
+              { min: 5, message: '操作原因至少 5 字' },
+            ]}
+            help="smarthome.manage_rule 是高风险操作，原因将记入审计日志（≥ 5 字）"
+          >
+            <Input.TextArea rows={2} maxLength={500} showCount placeholder="例如：新增主厅暮色场景联动" />
           </Form.Item>
         </Form>
       </Modal>

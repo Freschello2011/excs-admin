@@ -54,7 +54,7 @@ export default function PropertyPanel({ action, hallId, onChange }: PropertyPane
 
   const deviceOptions = useMemo(() =>
     (devices ?? []).map((d) => ({
-      label: `${d.name} (${d.subcategory_name ?? d.subcategory_code ?? '设备'})`,
+      label: d.name,
       value: d.id,
     })),
   [devices]);

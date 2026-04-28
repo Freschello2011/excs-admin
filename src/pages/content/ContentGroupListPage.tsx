@@ -28,6 +28,7 @@ import PillTabs, { type PillTab } from '@/components/common/PillTabs';
 import ContentStatusTag from '@/components/content/ContentStatusTag';
 import RejectContentModal from '@/components/content/RejectContentModal';
 import ContentDetailDrawer from '@/components/content/ContentDetailDrawer';
+import RiskyActionButton from '@/components/authz/RiskyActionButton';
 import { contentApi } from '@/api/content';
 import { hallApi } from '@/api/hall';
 import { vendorApi } from '@/api/vendor';
@@ -180,7 +181,8 @@ export default function ContentGroupListPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (contentId: number) => contentApi.deleteContent(contentId),
+    mutationFn: ({ contentId, reason }: { contentId: number; reason?: string }) =>
+      contentApi.deleteContent(contentId, reason),
     onSuccess: () => {
       message.success('文件已删除');
       queryClient.invalidateQueries({ queryKey: ['admin', 'contents'] });
@@ -323,15 +325,20 @@ export default function ContentGroupListPage() {
                 </Popconfirm>
               ) : null}
               {(record.status === 'pending_accept' || record.status === 'rejected' || record.status === 'withdrawn' || record.status === 'archived') && (
-                <Popconfirm
-                  title="确认删除？"
-                  description="OSS 文件与关联标签将一并清除（已绑定状态请先解绑或归档）"
-                  onConfirm={() => deleteMutation.mutate(record.id)}
-                  okText="删除"
-                  okButtonProps={{ danger: true }}
+                <RiskyActionButton
+                  action="content.delete"
+                  type="link"
+                  size="small"
+                  danger
+                  icon={<DeleteOutlined />}
+                  confirmTitle="删除内容"
+                  confirmContent="OSS 文件与关联标签将一并清除（已绑定状态请先解绑或归档）。请填写操作原因（≥ 5 字，审计用）。"
+                  onConfirm={async (reason) => {
+                    await deleteMutation.mutateAsync({ contentId: record.id, reason });
+                  }}
                 >
-                  <Button type="link" size="small" danger icon={<DeleteOutlined />}>删除</Button>
-                </Popconfirm>
+                  删除
+                </RiskyActionButton>
               )}
             </>
           )}

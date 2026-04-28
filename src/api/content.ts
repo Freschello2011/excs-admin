@@ -66,8 +66,8 @@ export const contentApi = {
   updateContent(contentId: number, name: string) {
     return asAxiosResp<ContentDetailDTO>(contentClient.updateContent(contentId, { name }));
   },
-  deleteContent(contentId: number) {
-    return asAxiosResp<void>(contentClient.deleteContent(contentId));
+  deleteContent(contentId: number, reason?: string) {
+    return asAxiosResp<void>(contentClient.deleteContent(contentId, reason));
   },
 
   /* ==================== Bind / Unbind ==================== */
@@ -132,8 +132,8 @@ export const contentApi = {
   getOSSStats(hallId: number) {
     return asAxiosResp<OSSStatsResult>(contentClient.getOSSStats(hallId));
   },
-  triggerCleanup(hallId: number) {
-    return asAxiosResp<CleanupResult>(contentClient.triggerCleanup(hallId));
+  triggerCleanup(hallId: number, reason?: string) {
+    return asAxiosResp<CleanupResult>(contentClient.triggerCleanup(hallId, reason));
   },
   getQueueStatus() {
     return asAxiosResp<QueueStatusResult>(contentClient.getQueueStatus());

@@ -21,6 +21,8 @@ interface PreviewCardProps {
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
   onClick?: () => void;
+  /** 列数提示——窄列（媒体右侧）= 2，独占整行 = 6（device_command 等用） */
+  previewColumns?: number;
 }
 
 export default function PreviewCard({
@@ -30,6 +32,7 @@ export default function PreviewCard({
   onMouseEnter,
   onMouseLeave,
   onClick,
+  previewColumns,
 }: PreviewCardProps) {
   const content = (() => {
     switch (card.card_type) {
@@ -42,7 +45,7 @@ export default function PreviewCard({
       case 'device_toggle':
         return <DeviceToggleCard card={card} nameMaps={nameMaps} />;
       case 'device_command':
-        return <DeviceCommandCard card={card} nameMaps={nameMaps} />;
+        return <DeviceCommandCard card={card} nameMaps={nameMaps} columns={previewColumns} />;
       case 'device_status':
         return <DeviceStatusCard card={card} nameMaps={nameMaps} />;
       case 'slider':

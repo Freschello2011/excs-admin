@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Table, Space, Modal,
-  Descriptions,
 } from 'antd';
 import { useMessage } from '@/hooks/useMessage';
 import type { TableColumnsType } from 'antd';
@@ -16,6 +15,19 @@ import { useHallStore } from '@/stores/hallStore';
 import { useExhibitContextSync } from '@/hooks/useExhibitContextSync';
 import type { ExhibitListItem, AiAvatarConfig } from '@/api/gen/client';
 import AiAvatarConfigPanel from './AiAvatarConfigPanel';
+import styles from './AiAvatarListPage.module.scss';
+
+/** Hero 抽象对话气泡 icon —— 不臆造具体形象（per UI 对齐 mockup #2） */
+function ChatBubbleIcon() {
+  return (
+    <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 18 L12 38 Q12 42 16 42 L40 42 L48 50 L48 42 L52 42 Q56 42 56 38 L56 18 Q56 14 52 14 L16 14 Q12 14 12 18 Z" fill="rgba(255,255,255,0.10)" />
+      <circle cx="22" cy="28" r="2" fill="white" stroke="none" />
+      <circle cx="32" cy="28" r="2" fill="white" stroke="none" />
+      <circle cx="42" cy="28" r="2" fill="white" stroke="none" />
+    </svg>
+  );
+}
 
 export default function AiAvatarListPage() {
   const { message } = useMessage();
@@ -76,11 +88,11 @@ export default function AiAvatarListPage() {
       width: 120,
       render: (v: boolean, record) => {
         if (record.display_mode === 'simple_fusion') {
-          return <span style={{ color: 'var(--ant-color-text-quaternary)' }}>融合模式不支持</span>;
+          return <span className={styles.tableCellMuted}>融合模式不支持</span>;
         }
         return v
           ? <StatusTag status="active" label="已配置" />
-          : <span style={{ color: 'var(--ant-color-text-quaternary)' }}>未配置</span>;
+          : <span className={styles.tableCellMuted}>未配置</span>;
       },
     },
     {
@@ -93,12 +105,12 @@ export default function AiAvatarListPage() {
             {record.has_ai_avatar && <a onClick={() => openDetail(record.id)}>查看</a>}
             {canManage && !isFusion && <a onClick={() => useHallStore.getState().setSelectedExhibit(record.id, record.name)}>配置</a>}
             {canManage && isFusion && (
-              <span style={{ color: 'var(--ant-color-text-disabled)' }}>配置</span>
+              <span className={styles.tableCellDisabled}>配置</span>
             )}
             {canControl && record.has_ai_avatar && !isFusion && (
               <>
                 <a onClick={() => activateMutation.mutate(record.id)}>激活</a>
-                <a style={{ color: 'var(--ant-color-error)' }} onClick={() => deactivateMutation.mutate(record.id)}>
+                <a className={styles.tableLinkDanger} onClick={() => deactivateMutation.mutate(record.id)}>
                   停用
                 </a>
               </>
@@ -127,7 +139,7 @@ export default function AiAvatarListPage() {
       />
 
       {!selectedHallId ? (
-        <div style={{ textAlign: 'center', color: 'var(--color-outline)', padding: 60 }}>
+        <div className={styles.emptyHallHint}>
           请先在顶栏选择展厅
         </div>
       ) : (
@@ -141,36 +153,125 @@ export default function AiAvatarListPage() {
         />
       )}
 
-      {/* Detail Modal */}
+      {/* Detail Modal —— 紫色 Hero + 双列子卡（视觉对齐 ui-align mockup #2，字段集合不变） */}
       <Modal
-        title={`数字人详情 — ${avatarDetail?.exhibit_name ?? ''}`}
         open={detailModalOpen}
         onCancel={() => setDetailModalOpen(false)}
         footer={null}
-        width={560}
+        title={null}
+        closable={false}
+        width={880}
+        className={styles.detailModal}
+        styles={{ body: { padding: 0 } }}
+        destroyOnClose
       >
         {avatarDetail ? (
-          <Descriptions bordered size="small" column={2} style={{ marginTop: 16 }}>
-            <Descriptions.Item label="展项">{avatarDetail.exhibit_name}</Descriptions.Item>
-            <Descriptions.Item label="状态"><StatusTag status={avatarDetail.status} /></Descriptions.Item>
-            <Descriptions.Item label="形象模板" span={2}>{avatarDetail.template_name ?? '-'}</Descriptions.Item>
-            <Descriptions.Item label="访客输入">{avatarDetail.visitor_input_enabled ? '允许' : '禁止'}</Descriptions.Item>
-            <Descriptions.Item label="语音 ID">{(avatarDetail.config as AiAvatarConfig | undefined)?.voice_id ?? '-'}</Descriptions.Item>
-            <Descriptions.Item label="语速">{(avatarDetail.config as AiAvatarConfig | undefined)?.speech_rate ?? '-'}</Descriptions.Item>
-            <Descriptions.Item label="更新时间">{avatarDetail.updated_at}</Descriptions.Item>
-            <Descriptions.Item label="开场白" span={2}>
-              <div style={{ maxHeight: 100, overflow: 'auto', whiteSpace: 'pre-wrap' }}>
-                {avatarDetail.greeting_message || '（空）'}
+          <div className={styles.modalRoot}>
+            {/* Hero */}
+            <div className={styles.hero}>
+              <button
+                type="button"
+                className={styles.heroClose}
+                aria-label="关闭"
+                onClick={() => setDetailModalOpen(false)}
+              >
+                ×
+              </button>
+              <div className={styles.avatarThumb}><ChatBubbleIcon /></div>
+              <div className={styles.heroMeta}>
+                <div className={styles.heroEyebrow}>数字人详情</div>
+                <h2 className={styles.heroTitle}>{avatarDetail.exhibit_name}</h2>
+                <div className={styles.heroTags}>
+                  <StatusTag status={avatarDetail.status} />
+                </div>
               </div>
-            </Descriptions.Item>
-            <Descriptions.Item label="知识文本" span={2}>
-              <div style={{ maxHeight: 200, overflow: 'auto', whiteSpace: 'pre-wrap' }}>
-                {avatarDetail.knowledge_text || '（空）'}
+            </div>
+
+            {/* Body —— 双列 */}
+            <div className={styles.modalBody}>
+              {/* 左列：基本信息 + 语音参数 */}
+              <div className={styles.modalCol}>
+                <section className={styles.subCard}>
+                  <div className={styles.subHead}>
+                    <div className={styles.subTitle}><span className={styles.subTitleIcon}>i</span>基本信息</div>
+                  </div>
+                  <div className={styles.subBody}>
+                    <div className={styles.pairList}>
+                      <div className={styles.pair}>
+                        <div className={styles.pairKey}>展项</div>
+                        <div className={styles.pairVal}>{avatarDetail.exhibit_name}</div>
+                      </div>
+                      <div className={styles.pair}>
+                        <div className={styles.pairKey}>状态</div>
+                        <div className={styles.pairVal}><StatusTag status={avatarDetail.status} /></div>
+                      </div>
+                      <div className={styles.pair}>
+                        <div className={styles.pairKey}>形象模板</div>
+                        <div className={styles.pairVal}>{avatarDetail.template_name ?? '-'}</div>
+                      </div>
+                      <div className={styles.pair}>
+                        <div className={styles.pairKey}>访客输入</div>
+                        <div className={styles.pairVal}>{avatarDetail.visitor_input_enabled ? '允许' : '禁止'}</div>
+                      </div>
+                      <div className={styles.pair}>
+                        <div className={styles.pairKey}>更新时间</div>
+                        <div className={styles.pairVal}>{avatarDetail.updated_at}</div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <section className={styles.subCard}>
+                  <div className={styles.subHead}>
+                    <div className={styles.subTitle}><span className={styles.subTitleIcon}>♪</span>语音参数</div>
+                  </div>
+                  <div className={styles.subBody}>
+                    <div className={styles.pairList}>
+                      <div className={styles.pair}>
+                        <div className={styles.pairKey}>语音 ID</div>
+                        <div className={`${styles.pairVal} ${styles.pairValMono}`}>
+                          {(avatarDetail.config as AiAvatarConfig | undefined)?.voice_id ?? '-'}
+                        </div>
+                      </div>
+                      <div className={styles.pair}>
+                        <div className={styles.pairKey}>语速</div>
+                        <div className={styles.pairVal}>
+                          {(avatarDetail.config as AiAvatarConfig | undefined)?.speech_rate ?? '-'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
               </div>
-            </Descriptions.Item>
-          </Descriptions>
+
+              {/* 右列：开场白 + 知识文本 */}
+              <div className={styles.modalCol}>
+                <section className={styles.subCard}>
+                  <div className={styles.subHead}>
+                    <div className={styles.subTitle}><span className={styles.subTitleIcon}>“</span>开场白</div>
+                  </div>
+                  <div className={styles.subBody}>
+                    <div className={styles.longtext}>
+                      {avatarDetail.greeting_message || <span className={styles.longtextEmpty}>（空）</span>}
+                    </div>
+                  </div>
+                </section>
+
+                <section className={styles.subCard}>
+                  <div className={styles.subHead}>
+                    <div className={styles.subTitle}><span className={styles.subTitleIcon}>📚</span>知识文本</div>
+                  </div>
+                  <div className={styles.subBody}>
+                    <div className={`${styles.longtext} ${styles.longtextTall}`}>
+                      {avatarDetail.knowledge_text || <span className={styles.longtextEmpty}>（空）</span>}
+                    </div>
+                  </div>
+                </section>
+              </div>
+            </div>
+          </div>
         ) : (
-          <div style={{ textAlign: 'center', color: 'var(--ant-color-text-quaternary)', padding: 24 }}>加载中...</div>
+          <div className={styles.modalLoading}>加载中...</div>
         )}
       </Modal>
     </div>

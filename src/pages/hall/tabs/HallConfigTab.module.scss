@@ -1,0 +1,88 @@
+/**
+ * HallConfigTab —— DnD 行视觉对齐 + 灰字 token 化。
+ * 红线：仅样式 token 化；不改字段、操作（保存优先级 / 立即重选 / 自动回迁）、流程。
+ */
+
+/* ===== 拖拽行（替代 SortableExhibitRow 的 inline style block） ===== */
+.dragRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: 10px;
+  background: var(--color-surface-container-lowest);
+  transition: box-shadow 0.18s, border-color 0.18s;
+}
+
+.dragRow:hover {
+  border-color: rgba(var(--color-primary-rgb), 0.35);
+  box-shadow: 0 2px 8px rgba(80, 60, 170, 0.08);
+}
+
+.dragRow.dragging {
+  opacity: 0.6;
+  /* 拖拽中保持高亮 + 立体感 */
+  box-shadow: 0 12px 28px -4px rgba(80, 60, 170, 0.22);
+  border-color: rgba(var(--color-primary-rgb), 0.5);
+}
+
+.dragHandle {
+  cursor: grab;
+  color: var(--color-outline);
+  font-size: 16px;
+  display: inline-flex;
+  align-items: center;
+
+  &:hover { color: var(--color-primary); }
+}
+
+.dragHandle.disabled {
+  cursor: not-allowed;
+  &:hover { color: var(--color-outline); }
+}
+
+.dragName {
+  flex: 1;
+  font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ===== 灰字 hint （替代 inline color: rgba(0,0,0,0.55) / fontSize: 12） ===== */
+.hint {
+  color: var(--color-on-surface-variant);
+  font-size: 12px;
+}
+
+/* "当前主控：" / "自动回迁：" 行内灰字 prefix */
+.inlineLabel {
+  color: var(--color-on-surface-variant);
+}
+
+/* "当前无主控（候补全离线）" Tag 旁边的间距（替代 marginLeft:8 inline） */
+.alertTagInline {
+  margin-left: 8px;
+}
+
+/* Divider 两端的间距统一 */
+.dividerTight {
+  margin: 12px 0;
+}
+
+/* "选择要加入队列的展项" select + 按钮行 */
+.addRow {
+  margin-top: 12px;
+}
+
+/* "未列入的展项..." 行 */
+.tailHint {
+  margin-top: 8px;
+}
+
+/* AI 知识 Form 的 maxWidth（保留原 720） */
+.aiForm {
+  max-width: 720px;
+}

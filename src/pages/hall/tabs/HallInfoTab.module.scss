@@ -1,0 +1,72 @@
+/**
+ * HallInfoTab —— 自定义 info-grid 替代 AntD bordered Descriptions。
+ * 红线：仅样式 / 组件选型替换；字段集合（id/mdm_id/name/status/service_period/exhibit_count/device_count/mqtt/created_at/updated_at）完全一致。
+ */
+
+.cardBody {
+  /* 让 info-grid 几乎贴满 Card body 边缘，靠 row 自身的 padding 拉开节奏 */
+  padding: 4px 4px;
+}
+
+.infoGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.infoItem {
+  padding: 12px 16px;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  border-bottom: 1px dashed var(--color-outline-variant);
+  min-width: 0;
+}
+
+/* 最后一行（每列最后一个）取消下划线 —— 只对 2 列布局 */
+.infoItem:nth-last-child(-n+2) {
+  border-bottom: none;
+}
+
+.infoItemFull {
+  grid-column: 1 / -1;
+}
+
+.infoItemFull + .infoItem,
+.infoItem + .infoItemFull {
+  /* full-row 与相邻行之间保留下划线 */
+  border-bottom: 1px dashed var(--color-outline-variant);
+}
+
+.infoLabel {
+  font-size: 12px;
+  color: var(--color-outline);
+  min-width: 84px;
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+}
+
+.infoValue {
+  font-size: 14px;
+  color: var(--color-on-surface);
+  font-weight: 500;
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.infoValueMono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+}
+
+.infoMqttSuffix {
+  margin-left: 8px;
+  font-weight: normal;
+  color: var(--color-on-surface-variant);
+  font-size: 12px;
+}
+
+/* Modal 内 Form 的顶部留白 */
+.modalForm {
+  margin-top: 16px;
+}

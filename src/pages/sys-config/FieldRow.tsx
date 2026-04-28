@@ -2,6 +2,7 @@ import { Form, Input, InputNumber, Switch, Tooltip, Typography } from 'antd';
 import { EyeInvisibleOutlined, EyeTwoTone, InfoCircleOutlined } from '@ant-design/icons';
 import type { ConfigItem } from '@/api/gen/client';
 import type { FieldRef } from './ia';
+import styles from './FieldRow.module.scss';
 
 const { Text } = Typography;
 
@@ -35,16 +36,16 @@ export default function FieldRow({ ref, item, fieldName }: FieldRowProps) {
     item.description !== item.key;
 
   const finalHelp = showHelp ? (
-    <span style={{ color: '#888', fontSize: 12 }}>{item.description}</span>
+    <span className={styles.helpText}>{item.description}</span>
   ) : null;
 
   // === 标题节点：短标题 + 灰字 key + ⓘ Tooltip（含后端 description） ===
   const tooltipContent = tooltipDesc || `key: ${item.key}`;
   const labelNode = (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, lineHeight: 1.4 }}>
-      <span style={{ fontWeight: 500 }}>{shortLabel}</span>
+    <span className={styles.label}>
+      <span className={styles.labelTitle}>{shortLabel}</span>
       <Tooltip title={tooltipContent} placement="top">
-        <InfoCircleOutlined style={{ color: '#999', fontSize: 12, cursor: 'help' }} />
+        <InfoCircleOutlined className={styles.labelInfoIcon} />
       </Tooltip>
     </span>
   );
@@ -72,12 +73,12 @@ export default function FieldRow({ ref, item, fieldName }: FieldRowProps) {
     const inlineHelp = ref.label
       ? null
       : item.description && item.description !== item.key
-        ? <span style={{ color: '#888', fontSize: 12 }}>{item.description}</span>
+        ? <span className={styles.helpText}>{item.description}</span>
         : null;
 
     return (
-      <Form.Item label={labelNode} help={inlineHelp} colon={false} style={{ marginBottom: 12 }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+      <Form.Item label={labelNode} help={inlineHelp} colon={false} className={styles.intRow}>
+        <span className={styles.numberRow}>
           <Form.Item name={fieldName} noStyle>
             <InputNumber
               style={{ width: NUMBER_INPUT_WIDTH }}
@@ -87,7 +88,7 @@ export default function FieldRow({ ref, item, fieldName }: FieldRowProps) {
             />
           </Form.Item>
           {ref.suffix && (
-            <Text type="secondary" style={{ fontSize: 13, whiteSpace: 'nowrap' }}>{ref.suffix}</Text>
+            <Text type="secondary" className={styles.unitText}>{ref.suffix}</Text>
           )}
         </span>
       </Form.Item>

@@ -1,0 +1,17 @@
+/**
+ * ReleasesPage — 把 inline 灰字 / 流程文案 token 化。
+ * 红线：仅样式 token；表格列、上传/指定流程、按钮一一保留。
+ */
+
+/* "流程：设置目标版本（待推送）→ 推送通知（推送中）→ ..." 灰色提示 */
+.flowHint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--color-on-surface-variant);
+}
+
+/* SHA-256 hash 表格列 mono 字 */
+.shaMono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}

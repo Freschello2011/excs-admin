@@ -2,11 +2,12 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Card, Table, Button, Space, Tag, Tabs, Modal, Form, Input,
-  Select, Popconfirm, Progress, Typography,
+  Select, Progress, Typography,
 } from 'antd';
 import { useMessage } from '@/hooks/useMessage';
 import { UploadOutlined, DeleteOutlined, SendOutlined } from '@ant-design/icons';
 import PageHeader from '@/components/common/PageHeader';
+import RiskyActionButton from '@/components/authz/RiskyActionButton';
 import { releaseApi } from '@/api/release';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
@@ -14,6 +15,7 @@ import { useHallStore } from '@/stores/hallStore';
 import type { AppRelease } from '@/api/gen/client';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
+import styles from './ReleasesPage.module.scss';
 
 const { Text } = Typography;
 
@@ -63,12 +65,13 @@ export default function ReleasesPage() {
   // ==================== 删除版本 ====================
 
   const deleteMutation = useMutation({
-    mutationFn: (id: number) => releaseApi.deleteRelease(id),
+    mutationFn: ({ id, reason }: { id: number; reason?: string }) =>
+      releaseApi.deleteRelease(id, reason),
     onSuccess: () => {
       message.success('版本已删除');
       queryClient.invalidateQueries({ queryKey: queryKeys.releases({}) });
     },
-    onError: () => message.error('删除失败'),
+    onError: (err: Error) => message.error(err.message || '删除失败'),
   });
 
   // ==================== 上传新版本 ====================
@@ -86,6 +89,12 @@ export default function ReleasesPage() {
         message.error(fileError);
         return;
       }
+      // release.manage 是 critical action，requestUpload + createRelease 都要带 reason。
+      const reason = (values.reason as string | undefined)?.trim();
+      if (!reason || reason.length < 5) {
+        message.error('请填写发布原因（≥ 5 字，审计必填）');
+        return;
+      }
 
       setUploading(true);
       setUploadProgress(0);
@@ -97,7 +106,7 @@ export default function ReleasesPage() {
         version: values.version,
         filename: file.name,
         content_type: file.type || 'application/octet-stream',
-      });
+      }, reason);
       const { presigned_url, oss_key } = uploadRes.data.data;
 
       // 2. 上传文件到 OSS
@@ -127,7 +136,7 @@ export default function ReleasesPage() {
         file_size: file.size,
         sha256,
         release_notes: values.release_notes || '',
-      });
+      }, reason);
 
       message.success('版本发布成功');
       setUploadModalOpen(false);
@@ -165,8 +174,8 @@ export default function ReleasesPage() {
   });
 
   const assignMutation = useMutation({
-    mutationFn: (data: { hallId: number; version: string }) =>
-      releaseApi.setHallVersion(data.hallId, { target_version: data.version }),
+    mutationFn: (data: { hallId: number; version: string; reason?: string }) =>
+      releaseApi.setHallVersion(data.hallId, { target_version: data.version }, data.reason),
     onSuccess: (_data, variables) => {
       message.success('目标版本已设置');
       setAssignModalOpen(false);
@@ -176,10 +185,10 @@ export default function ReleasesPage() {
   });
 
   const notifyMutation = useMutation({
-    mutationFn: (data: { hallId: number; version: string }) =>
-      releaseApi.notifyUpdate(data.hallId, data.version),
+    mutationFn: (data: { hallId: number; version: string; reason?: string }) =>
+      releaseApi.notifyUpdate(data.hallId, data.version, data.reason),
     onSuccess: () => message.success('更新通知已推送'),
-    onError: () => message.error('推送失败'),
+    onError: (err: Error) => message.error(err.message || '推送失败'),
   });
 
   // ==================== 表格列 ====================
@@ -193,7 +202,7 @@ export default function ReleasesPage() {
     { title: '文件大小', dataIndex: 'file_size', key: 'file_size', width: 100, render: formatFileSize },
     {
       title: 'SHA-256', dataIndex: 'sha256', key: 'sha256', width: 160,
-      render: (s: string) => <Text copyable={{ text: s }} style={{ fontSize: 12 }}>{s.slice(0, 12)}...</Text>,
+      render: (s: string) => <Text copyable={{ text: s }} className={styles.shaMono}>{s.slice(0, 12)}...</Text>,
     },
     {
       title: '发布说明', dataIndex: 'release_notes', key: 'release_notes', ellipsis: true,
@@ -205,9 +214,18 @@ export default function ReleasesPage() {
     {
       title: '操作', key: 'action', width: 80,
       render: (_, record) => (
-        <Popconfirm title="确认删除此版本？" onConfirm={() => deleteMutation.mutate(record.id)}>
-          <Button type="text" danger icon={<DeleteOutlined />} size="small" />
-        </Popconfirm>
+        <RiskyActionButton
+          action="release.manage"
+          type="text"
+          danger
+          icon={<DeleteOutlined />}
+          size="small"
+          confirmTitle={`删除版本 ${record.version}`}
+          confirmContent="删除版本会从 OSS 移除安装包，已设置该版本为目标版本的展厅将无法升级。请填写操作原因（≥ 5 字，审计用）。"
+          onConfirm={async (reason) => {
+            await deleteMutation.mutateAsync({ id: record.id, reason });
+          }}
+        />
       ),
     },
   ];
@@ -249,19 +267,26 @@ export default function ReleasesPage() {
                hallVersionData.rollout_status}
             </Tag>
             {hallVersionData.rollout_status !== 'done' && (
-              <Button
+              <RiskyActionButton
+                action="release.notify"
                 type="link"
                 size="small"
-                onClick={() => notifyMutation.mutate({
-                  hallId: selectedHallId, version: hallVersionData.target_version,
-                })}
                 loading={notifyMutation.isPending}
+                confirmTitle="推送 App 更新通知"
+                confirmContent={`将向展厅 App 广播版本 ${hallVersionData.target_version} 可升级。请填写操作原因（≥ 5 字，审计用）。`}
+                onConfirm={async (reason) => {
+                  await notifyMutation.mutateAsync({
+                    hallId: selectedHallId,
+                    version: hallVersionData.target_version,
+                    reason,
+                  });
+                }}
               >
                 {hallVersionData.rollout_status === 'pending' ? '推送更新通知' : '重新推送'}
-              </Button>
+              </RiskyActionButton>
             )}
           </Space>
-          <div style={{ marginTop: 8, fontSize: 12, color: '#999' }}>
+          <div className={styles.flowHint}>
             流程：设置目标版本（待推送）→ 推送通知（推送中）→ 终端确认安装（已完成）
           </div>
         </Card>
@@ -316,6 +341,17 @@ export default function ReleasesPage() {
           <Form.Item name="release_notes" label="发布说明">
             <Input.TextArea rows={3} placeholder="本次更新内容..." />
           </Form.Item>
+          <Form.Item
+            name="reason"
+            label="操作原因"
+            rules={[
+              { required: true, message: '请填写操作原因（审计用）' },
+              { min: 5, message: '操作原因至少 5 字' },
+            ]}
+            help="release.manage 是高风险操作，原因将记入审计日志（≥ 5 字）"
+          >
+            <Input.TextArea rows={2} maxLength={500} showCount placeholder="例如：发布 macOS arm64 v1.3.0 修复 XX 闪退" />
+          </Form.Item>
           {uploading && <Progress percent={uploadProgress} />}
         </Form>
       </Modal>
@@ -326,7 +362,11 @@ export default function ReleasesPage() {
         open={assignModalOpen}
         onOk={async () => {
           const values = await assignForm.validateFields();
-          assignMutation.mutate({ hallId: values.hall_id, version: values.version });
+          assignMutation.mutate({
+            hallId: values.hall_id,
+            version: values.version,
+            reason: values.reason,
+          });
         }}
         onCancel={() => { setAssignModalOpen(false); assignForm.resetFields(); }}
         confirmLoading={assignMutation.isPending}
@@ -344,6 +384,17 @@ export default function ReleasesPage() {
               placeholder="选择版本"
               options={releases.map(r => ({ value: r.version, label: `${r.version} (${r.platform})` }))}
             />
+          </Form.Item>
+          <Form.Item
+            name="reason"
+            label="操作原因"
+            rules={[
+              { required: true, message: '请填写操作原因（审计用）' },
+              { min: 5, message: '操作原因至少 5 字' },
+            ]}
+            help="release.manage 是高风险操作，原因将记入审计日志（≥ 5 字）"
+          >
+            <Input.TextArea rows={2} maxLength={500} showCount placeholder="例如：序厅试点灰度升级到 v1.3.0" />
           </Form.Item>
         </Form>
       </Modal>

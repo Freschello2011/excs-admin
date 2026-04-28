@@ -52,7 +52,7 @@ export const nasArchiveApi = {
     return nasArchiveClient.retryNASArchive(id).then((d) => ok({ ok: d.ok }));
   },
   /** Phase 3-E：迁移到 sysConfigClient.regenerateNASToken。NASConfigTab 调用方零改动。 */
-  regenerateToken(): Promise<AxiosResponse<ApiResponse<NASRegenerateTokenResp>>> {
-    return sysConfigClient.regenerateNASToken().then((d) => ok(d));
+  regenerateToken(reason?: string): Promise<AxiosResponse<ApiResponse<NASRegenerateTokenResp>>> {
+    return sysConfigClient.regenerateNASToken(reason).then((d) => ok(d));
   },
 };

@@ -16,7 +16,6 @@ import type {
   AppInstanceListItem,
   BatchGenerateResult,
   ControlAppSessionItem,
-  CreateDeviceRequest,
   CreateExhibitRequest,
   CreateHallViaMdmRequest,
   DeviceDTO,
@@ -117,8 +116,9 @@ export const hallApi = {
   updateServicePeriod(
     hallId: number,
     data: ServicePeriodBody,
+    reason?: string,
   ): Promise<AxiosResponse<ApiResponse<void>>> {
-    return asAxiosResp(hallClient.updateServicePeriod(hallId, data));
+    return asAxiosResp(hallClient.updateServicePeriod(hallId, data, reason));
   },
 
   getHallStatus(hallId: number): Promise<AxiosResponse<ApiResponse<HallRuntimeStatus>>> {
@@ -165,11 +165,9 @@ export const hallApi = {
     return asAxiosResp(hallClient.getExhibitScripts(hallId, exhibitId));
   },
 
-  /* ==================== Device ==================== */
-
-  createDevice(data: CreateDeviceRequest): Promise<AxiosResponse<ApiResponse<DeviceListItem>>> {
-    return asAxiosResp(hallClient.createDevice(data));
-  },
+  /* ==================== Device ====================
+   * device-mgmt-v2 P7-Cleanup 起创建只走 POST /v2/devices（types/deviceConnector + api/device.ts）。
+   */
 
   updateDevice(
     deviceId: number,
