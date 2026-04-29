@@ -22,6 +22,9 @@ const ShowListPage = lazy(() => import('@/pages/show/ShowListPage'));
 const ShowDetailPage = lazy(() => import('@/pages/show/ShowDetailPage'));
 const ShowTimelinePage = lazy(() => import('@/pages/show/ShowTimelinePage'));
 const DeviceListPage = lazy(() => import('@/pages/device/DeviceListPage'));
+const DeviceDebugConsolePage = lazy(
+  () => import('@/pages/device/DeviceDebugConsole/DeviceDebugConsolePage'),
+);
 const AiAvatarListPage = lazy(() => import('@/pages/ai/AiAvatarListPage'));
 const AiAvatarLibraryPage = lazy(() => import('@/pages/ai/AiAvatarLibraryPage'));
 // device-mgmt-v2 P6：4 tab 合并页（预置型号 / 协议库 / 插件 / 触发器模板占位）
@@ -137,6 +140,20 @@ export const router = createBrowserRouter([
   {
     path: '/invite/:token',
     element: <SuspenseWrap><AcceptInvitePage /></SuspenseWrap>,
+  },
+
+  /* ─── device-mgmt-v2 P9-C.2：设备调试台（独立全屏，不进 AdminLayout） */
+  {
+    path: '/devices/:deviceId/debug',
+    element: (
+      <RequireAuth>
+        <ErrorBoundary>
+          <SuspenseWrap>
+            <DeviceDebugConsolePage />
+          </SuspenseWrap>
+        </ErrorBoundary>
+      </RequireAuth>
+    ),
   },
 
   /* ─── Phase 9：供应商专属子树（独立 layout，不挂在 AdminLayout 下） ─── */

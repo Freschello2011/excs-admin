@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Tooltip } from 'antd';
+import { Switch, Tooltip } from 'antd';
 import { useMessage } from '@/hooks/useMessage';
+import { useFieldMode } from '@/stores/fieldModeStore';
+import FieldModeFab from '@/components/common/FieldModeFab';
 import { useAuthStore } from '@/stores/authStore';
 import { hasAnyAction } from '@/lib/authz/can';
 import ForceChangePasswordModal from '@/components/auth/ForceChangePasswordModal';
@@ -287,6 +289,17 @@ export default function AdminLayout() {
 
   const theme = useAppStore((s) => s.theme);
   const toggleTheme = useAppStore((s) => s.toggleTheme);
+
+  const fieldModeEnabled = useFieldMode((s) => s.enabled);
+  const toggleFieldMode = useFieldMode((s) => s.toggle);
+  const handleFieldModeToggle = (next: boolean) => {
+    toggleFieldMode();
+    if (next) {
+      message.warning('已开启现场模式 / 屏幕将保持常亮');
+    } else {
+      message.info('已关闭现场模式');
+    }
+  };
 
   const selectedHallId = useHallStore((s) => s.selectedHallId);
   const selectedHallName = useHallStore((s) => s.selectedHallName);
@@ -745,6 +758,18 @@ export default function AdminLayout() {
             </div>
           </div>
           <div className={styles['admin-layout__topbar-right']}>
+            <Tooltip title={fieldModeEnabled ? '关闭现场模式（恢复办公室密度）' : '开启现场模式（大字号 / 高按钮 / 屏幕常亮 / 危险操作冷却）'}>
+              <button
+                type="button"
+                className={`${styles['admin-layout__field-mode-chip']} ${fieldModeEnabled ? styles['admin-layout__field-mode-chip--active'] : ''}`}
+                onClick={() => handleFieldModeToggle(!fieldModeEnabled)}
+                aria-pressed={fieldModeEnabled}
+              >
+                <span className={styles['admin-layout__field-mode-emoji']} aria-hidden="true">🚧</span>
+                <span className={styles['admin-layout__field-mode-text']}>现场实施模式</span>
+                <Switch size="small" checked={fieldModeEnabled} onChange={handleFieldModeToggle} />
+              </button>
+            </Tooltip>
             <div className={styles['admin-layout__search-box']}>
               <label htmlFor="admin-global-search" className={styles['sr-only']}>搜索资源</label>
               <span className={`material-symbols-outlined ${styles['admin-layout__search-icon']}`}>search</span>
@@ -853,6 +878,9 @@ export default function AdminLayout() {
 
       {/* Phase 11.9：首登强制改密 Modal（全局挂载；只有 user.must_change_pwd=true 时显示） */}
       <ForceChangePasswordModal />
+
+      {/* device-mgmt-v2 P9-D：现场态浮动操作按钮（仅 fieldMode.enabled 时挂载） */}
+      <FieldModeFab />
     </div>
   );
 }

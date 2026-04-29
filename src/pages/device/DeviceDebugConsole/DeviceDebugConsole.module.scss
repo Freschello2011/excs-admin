@@ -1,0 +1,604 @@
+/* device-mgmt-v2 P9-C.2 — 设备调试台样式
+ *
+ * 直接转写自 07-ui/mockup/device-mgmt-v2.1/05-device-debug-console-k32.html 与
+ * 06-device-debug-console-smyoo.html。复用 admin 全局 token（var(--ant-color-*)）。
+ */
+
+.shell {
+  display: grid;
+  grid-template-rows: 56px 56px 1fr;
+  min-height: 100vh;
+  background: var(--ant-color-bg-layout, #f5f5f5);
+}
+
+.top {
+  background: var(--ant-color-bg-container);
+  border-bottom: 1px solid var(--ant-color-border);
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  overflow: hidden;
+}
+
+.crumb {
+  font-size: 12.5px;
+  color: var(--ant-color-text-secondary);
+  white-space: nowrap;
+}
+
+.deviceTitle {
+  font-size: 16px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.deviceId {
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--ant-color-text-tertiary);
+}
+
+.heartbeatBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.heartbeatBadge.online {
+  background: #d9f7be;
+  color: #1f6b3a;
+}
+
+.heartbeatBadge.offline {
+  background: #fff1f0;
+  color: #cf1322;
+}
+
+.heartbeatBadge.unknown {
+  background: var(--ant-color-fill-tertiary);
+  color: var(--ant-color-text-secondary);
+}
+
+.heartbeatPulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #52c41a;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.flexSpacer {
+  flex: 1;
+}
+
+/* Tab 切换 */
+.tabs {
+  background: var(--ant-color-bg-container);
+  border-bottom: 1px solid var(--ant-color-border);
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.tab {
+  padding: 16px 18px;
+  cursor: pointer;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--ant-color-text-secondary);
+  border-bottom: 3px solid transparent;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+}
+
+.tab:hover {
+  color: var(--ant-color-text);
+}
+
+.tab.active {
+  color: var(--ant-color-primary);
+  border-bottom-color: var(--ant-color-primary);
+  font-weight: 600;
+}
+
+.tabBadge {
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--ant-color-fill-tertiary);
+  color: var(--ant-color-text-secondary);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+/* 主体 */
+.body {
+  display: grid;
+  grid-template-columns: 1fr 480px;
+  gap: 16px;
+  padding: 16px 20px;
+  overflow: auto;
+}
+
+.matrixWrap {
+  background: var(--ant-color-bg-container);
+  border: 1px solid var(--ant-color-border);
+  border-radius: 8px;
+  padding: 16px 18px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.tools {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed var(--ant-color-border);
+}
+
+.toolsLabel {
+  font-size: 12px;
+  color: var(--ant-color-text-secondary);
+  margin-right: 4px;
+}
+
+.chip {
+  padding: 4px 10px;
+  border-radius: 14px;
+  font-size: 11.5px;
+  background: var(--ant-color-fill-tertiary);
+  color: var(--ant-color-text-secondary);
+  cursor: pointer;
+  border: 1px solid transparent;
+  user-select: none;
+}
+
+.chip:hover {
+  background: var(--ant-color-fill-secondary);
+}
+
+.chip.active {
+  background: var(--ant-color-primary-bg);
+  color: var(--ant-color-primary);
+  border-color: var(--ant-color-primary-border);
+  font-weight: 600;
+}
+
+.chipDisabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* 矩阵 grid（K32 单台 / 双联 / 三联） */
+.matrixGrid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+}
+
+.matrixGrid.cascade2 {
+  grid-template-columns: repeat(16, 1fr);
+  gap: 3px;
+}
+
+.matrixGrid.cascade3 {
+  grid-template-columns: repeat(24, 1fr);
+  gap: 2px;
+}
+
+/* 联级单元分隔（每 8 列加竖虚线） */
+.matrixGrid.cascade2 .channel:nth-child(8n) {
+  margin-right: 6px;
+  box-shadow: 6px 0 0 -4px var(--ant-color-primary-border);
+}
+
+.matrixGrid.cascade3 .channel:nth-child(8n) {
+  margin-right: 5px;
+  box-shadow: 5px 0 0 -4px var(--ant-color-primary-border);
+}
+
+/* 闪优 16 路：8×2 紧凑 */
+.matrixGrid16 {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 5px;
+}
+
+.channel {
+  aspect-ratio: 1;
+  border: 1px solid var(--ant-color-border);
+  border-radius: 5px;
+  background: var(--ant-color-bg-container);
+  padding: 4px 3px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1px;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.12s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.channel:hover {
+  border-color: var(--ant-color-primary-border);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+  z-index: 2;
+}
+
+.matrixGrid16 .channel {
+  aspect-ratio: 1.1;
+  border-width: 1.5px;
+  border-radius: 6px;
+  padding: 5px 4px 4px;
+}
+
+.channelNum {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ant-color-text);
+}
+
+.channelLabel {
+  font-size: 13px;
+  line-height: 1.05;
+  text-align: center;
+  color: var(--ant-color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.channelLabelPlaceholder {
+  color: var(--ant-color-text-quaternary);
+}
+
+.channelGroupTag {
+  font-size: 10px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(106, 78, 232, 0.16);
+  color: var(--ant-color-primary);
+  font-weight: 600;
+  line-height: 1.2;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 双联：缩小 */
+.matrixGrid.cascade2 .channel {
+  padding: 2px 1px;
+  border-radius: 4px;
+}
+
+.matrixGrid.cascade2 .channelNum {
+  font-size: 12px;
+}
+
+.matrixGrid.cascade2 .channelLabel {
+  font-size: 11px;
+}
+
+/* 三联：仅显示通道号 */
+.matrixGrid.cascade3 .channel {
+  padding: 1px;
+  border-radius: 3px;
+}
+
+.matrixGrid.cascade3 .channelNum {
+  font-size: 11px;
+}
+
+.matrixGrid.cascade3 .channelLabel,
+.matrixGrid.cascade3 .channelGroupTag {
+  display: none;
+}
+
+.channelStateDot {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.matrixGrid16 .channelStateDot {
+  width: 7px;
+  height: 7px;
+  top: 4px;
+  right: 4px;
+}
+
+.matrixGrid.cascade2 .channelStateDot {
+  width: 5px;
+  height: 5px;
+}
+
+.matrixGrid.cascade3 .channelStateDot {
+  width: 4px;
+  height: 4px;
+  top: 1px;
+  right: 1px;
+}
+
+.channelOn {
+  background: linear-gradient(180deg, #fef9c3 0%, #fde68a 100%);
+  border-color: #fbbf24;
+}
+
+.channelOn .channelNum {
+  color: #92400e;
+}
+
+.channelOn .channelStateDot {
+  background: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2);
+  animation: glow 1.6s infinite;
+}
+
+@keyframes glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(245, 158, 11, 0.35);
+  }
+}
+
+.channelOff {
+  background: var(--ant-color-fill-tertiary);
+  border-color: var(--ant-color-border);
+}
+
+.channelOff .channelNum {
+  color: var(--ant-color-text-secondary);
+}
+
+.channelOff .channelStateDot {
+  background: var(--ant-color-border);
+}
+
+.channelUnknown {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--ant-color-fill-tertiary) 0 6px,
+    var(--ant-color-fill-quaternary) 6px 12px
+  );
+  border-color: var(--ant-color-border);
+  border-style: dashed;
+}
+
+.channelUnknown .channelNum {
+  color: var(--ant-color-text-quaternary);
+  opacity: 0.6;
+}
+
+.channelUnknown .channelStateDot {
+  background: var(--ant-color-text-quaternary);
+}
+
+.channelSelected {
+  box-shadow: 0 0 0 2px var(--ant-color-primary);
+}
+
+.channelSelected::before {
+  content: '✓';
+  position: absolute;
+  top: -6px;
+  left: -6px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--ant-color-primary);
+  color: #fff;
+  font-size: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3;
+}
+
+.legend {
+  display: flex;
+  gap: 20px;
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--ant-color-border);
+  font-size: 12px;
+  color: var(--ant-color-text-secondary);
+  flex-wrap: wrap;
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legendDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.selectionBar {
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: var(--ant-color-primary-bg);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+
+/* 侧栏 */
+.sidePanel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: auto;
+}
+
+.sideCard {
+  background: var(--ant-color-bg-container);
+  border: 1px solid var(--ant-color-border);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+
+.sideCardCreds {
+  background: #e6f4ff;
+  border-color: #91caff;
+}
+
+.sideCardTitle {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.sideCardTitle small {
+  font-size: 11px;
+  color: var(--ant-color-text-secondary);
+  font-weight: 400;
+}
+
+.statRow {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 12.5px;
+}
+
+.statRow strong {
+  font-family: monospace;
+}
+
+/* 指令组列表 */
+.presetItem {
+  padding: 8px 10px;
+  background: var(--ant-color-fill-tertiary);
+  border-radius: 6px;
+  font-size: 12.5px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.presetName {
+  font-weight: 500;
+}
+
+.presetMono {
+  font-size: 11px;
+  font-family: monospace;
+  color: var(--ant-color-text-secondary);
+}
+
+.presetVerifyOk {
+  color: #52c41a;
+  font-size: 11px;
+  margin-left: 6px;
+  white-space: nowrap;
+}
+
+.presetVerifyFail {
+  color: #ff4d4f;
+  font-size: 11px;
+  margin-left: 6px;
+  white-space: nowrap;
+}
+
+/* Raw 流 */
+.rawStream {
+  background: #0f1226;
+  color: #c4b5fb;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-family: monospace;
+  font-size: 11.5px;
+  height: 360px;
+  overflow: auto;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.rawOut {
+  color: #93c5fd;
+}
+
+.rawIn {
+  color: #86efac;
+}
+
+.rawHb {
+  color: #6e7189;
+}
+
+.rawErr {
+  color: #fca5a5;
+}
+
+.rawTriggerFire {
+  color: #fbbf24;
+}
+
+.rawListener {
+  color: #c4b5fb;
+}
+
+/* 响应解析 hex 双栏 */
+.hexBlock {
+  font-family: monospace;
+  font-size: 12px;
+  background: var(--ant-color-fill-tertiary);
+  padding: 8px 10px;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.callout {
+  padding: 10px 14px;
+  background: #fffbe6;
+  border: 1px solid #ffe58f;
+  border-radius: 6px;
+  font-size: 12.5px;
+  color: var(--ant-color-text);
+}

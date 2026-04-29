@@ -447,6 +447,43 @@
     gap: 16px;
   }
 
+  /* device-mgmt-v2 P9-D：现场模式 chip（顶栏 toggle 入口） */
+  &__field-mode-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: 9999px;
+    border: 1px solid var(--color-outline-variant);
+    background: var(--color-surface-container-low);
+    color: var(--color-on-surface-variant);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease,
+      box-shadow 0.18s ease;
+
+    &:hover {
+      border-color: rgba(var(--color-primary-rgb), 0.4);
+    }
+
+    &--active {
+      background: rgba(214, 138, 42, 0.15); /* warning container 半透明 */
+      border-color: var(--color-warning, #d68a2a);
+      color: var(--color-warning, #d68a2a);
+      box-shadow: 0 0 0 3px rgba(214, 138, 42, 0.18);
+    }
+  }
+
+  &__field-mode-emoji {
+    font-size: 14px;
+    line-height: 1;
+  }
+
+  &__field-mode-text {
+    line-height: 1;
+  }
+
   &__search-box {
     position: relative;
     display: flex;

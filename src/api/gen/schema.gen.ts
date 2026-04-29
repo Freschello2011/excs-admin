@@ -4500,6 +4500,106 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v2/devices/{id}/channel-map": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * 全量替换 device 的 channel_map（field-deployment §4.4）
+         * @description 不变量校验（域聚合 Device.UpdateChannelMap）：
+         *       - channel_map[].index ∈ [1, max_channel]（max_channel 来自 connection_config，
+         *         K32 默认 32 / 闪优 16；缺省回落 9999）
+         *       - channel_map[].index 同 device 内唯一
+         *       - channel_map[].label trim 后非空
+         *     成功后立即触发 retained MQTT broadcast 重发（携新 channel_map）；
+         *     订阅方按 label 重渲染。
+         */
+        patch: operations["updateDeviceChannelMap"];
+        trace?: never;
+    };
+    "/v2/devices/{id}/command-presets/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                /**
+                 * @description preset 名（同 device 内唯一）；不允许 `/` 与换行符（path 参数注入防御）。
+                 *     客户端调用时按 RFC 3986 url-encode（中文如 "奥运场馆全开" → "%E5%A5%A5..."）。
+                 */
+                name: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * 按 name 删除单条 command_preset
+         * @description device 不存在 → 404；preset 不存在 → 404；删除成功 → 200。
+         */
+        delete: operations["deleteDeviceCommandPreset"];
+        options?: never;
+        head?: never;
+        /**
+         * 新增 / 替换单条 command_preset（按 path 中的 name 唯一）
+         * @description 不变量校验：
+         *       - command_code 必须命中该 device 的 effective-commands 输出
+         *       - expected_state ∈ {'', 'on', 'off', 'blink'}
+         *     首次创建时 created_at 后端赋 now；同名重复 upsert 沿用原 created_at（首次创建时间不变）。
+         */
+        patch: operations["upsertDeviceCommandPreset"];
+        trace?: never;
+    };
+    "/v2/vendor-credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列厂家凭据（不返 payload 明文） */
+        get: operations["listVendorCredentials"];
+        put?: never;
+        /** 新建厂家凭据（payload AES-256-GCM 加密入库） */
+        post: operations["createVendorCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/vendor-credentials/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** 更新厂家凭据（payload 非空 → 触发 last_rotated_at = now） */
+        put: operations["updateVendorCredential"];
+        post?: never;
+        /** 删除厂家凭据（前置：未被 device 引用 → 409） */
+        delete: operations["deleteVendorCredential"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -8777,6 +8877,169 @@ export interface components {
         CreateDeviceV2Response: {
             /** Format: int64 */
             id: number;
+        };
+        /**
+         * @description 单条通道映射。index 对应物理通道号（K32: 1-32 / 闪优: 1-16 / Modbus: 线圈号 /
+         *     Art-Net: DMX 通道）；label 是该通道挂的实物名（"长城" / "水立方"）；
+         *     group 可选，把多通道组合成命名组（"奥运场馆"）。
+         */
+        ChannelEntry: {
+            /** @description 物理通道号；上限按 device.connection_config.max_channel（K32 默认 32 / 闪优 16） */
+            index: number;
+            /**
+             * @description 实物名（trim 后非空）
+             * @example 长城
+             */
+            label: string;
+            /**
+             * @description 可选分组
+             * @example 奥运场馆
+             */
+            group?: string;
+        };
+        /** @description 同 device 内 index 唯一 */
+        ChannelMap: components["schemas"]["ChannelEntry"][];
+        UpdateChannelMapRequest: {
+            channel_map: components["schemas"]["ChannelMap"];
+        };
+        UpdateChannelMapResponse: {
+            /** Format: int64 */
+            device_id: number;
+            channel_count: number;
+        };
+        /**
+         * @description name 在 path 参数中给出（PATCH /v2/devices/:id/command-presets/:name）；
+         *     body 不重复带 name。CreatedAt 由后端管：新建赋 now，重复 upsert 沿用原值。
+         */
+        UpsertCommandPresetRequest: {
+            description?: string;
+            command_code: string;
+            params?: {
+                [key: string]: unknown;
+            };
+            expected_channels?: number[];
+            /** @enum {string} */
+            expected_state?: "" | "on" | "off" | "blink";
+        };
+        /**
+         * @description 设备实例级命令书签。引用方式仍是 device + command_code + params；preset 本身不
+         *     进入命令路径，仅为 admin / 中控面板 / 演出编辑器 UI 复用。
+         */
+        CommandPreset: {
+            /**
+             * @description 同 device 内唯一；不允许 / 与换行（path 参数注入防御）
+             * @example 奥运场馆全开
+             */
+            name: string;
+            description?: string;
+            /**
+             * @description 必须命中该 device 的 effective-commands 输出
+             * @example channel_on
+             */
+            command_code: string;
+            /** @description 该 command 的参数 */
+            params?: {
+                [key: string]: unknown;
+            };
+            /**
+             * @description 校验用——调用后这些通道应处于 expected_state
+             * @example [
+             *       1,
+             *       3,
+             *       5
+             *     ]
+             */
+            expected_channels?: number[];
+            /**
+             * @description 空 = 不校验状态，仅记录通道列表
+             * @enum {string}
+             */
+            expected_state?: "" | "on" | "off" | "blink";
+            /**
+             * Format: date-time
+             * @description 首次创建时间；upsert 同名时沿用原值
+             */
+            created_at: string;
+        };
+        VendorCredentialDTO: {
+            /**
+             * Format: int64
+             * @example 12
+             */
+            id: number;
+            /**
+             * @description 厂家 key（如 smyoo / pjlink_oem_xxx）
+             * @example smyoo
+             */
+            vendor_key: string;
+            /**
+             * @description 凭据显示名（admin 起的）
+             * @example 我公司主账号 20019****
+             */
+            label: string;
+            /**
+             * @description 闪优 vendor_key=smyoo 时计算：末 4 位保留 + 前面星号；其它 vendor_key 此字段空。
+             *     例：`*******8736`（11 位手机号）。
+             * @example *******2736
+             */
+            phone_masked?: string;
+            /**
+             * @description vendor_key schema 必填字段是否齐全（闪优需 phone/password/client_id/client_secret）
+             * @example true
+             */
+            complete: boolean;
+            /** @example 厂家联系电话：13800138000 */
+            notes?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: date-time */
+            last_rotated_at?: string | null;
+        };
+        CreateVendorCredentialRequest: {
+            /** @example smyoo */
+            vendor_key: string;
+            /** @example 我公司主账号 20019812736 */
+            label: string;
+            /**
+             * @description 凭据明文 — 服务端立即 AES-256-GCM 加密入库，永不回显。
+             *     不同 vendor_key 字段集合不同（map[string]string）：
+             *       - smyoo: phone / password / client_id / client_secret 必填
+             *     其它 vendor_key 仅校验非空。
+             * @example {
+             *       "phone": "20019812736",
+             *       "password": "<password>",
+             *       "client_id": "<client_id>",
+             *       "client_secret": "<client_secret>"
+             *     }
+             */
+            payload: {
+                [key: string]: string;
+            };
+            notes?: string;
+        };
+        VendorCredentialCreatedDTO: {
+            /** Format: int64 */
+            id: number;
+            vendor_key: string;
+            label: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        UpdateVendorCredentialRequest: {
+            label?: string;
+            payload?: {
+                [key: string]: string;
+            };
+            notes?: string;
+        };
+        VendorCredentialUpdatedDTO: {
+            /** Format: int64 */
+            id: number;
+            label?: string;
+            /** Format: date-time */
+            last_rotated_at?: string | null;
         };
     };
     responses: {
@@ -17488,6 +17751,244 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             /** @description connector_ref / response_schema 校验失败 */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
+                };
+            };
+        };
+    };
+    updateDeviceChannelMap: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateChannelMapRequest"];
+            };
+        };
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["UpdateChannelMapResponse"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description 设备不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
+                };
+            };
+        };
+    };
+    deleteDeviceCommandPreset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                /**
+                 * @description preset 名（同 device 内唯一）；不允许 `/` 与换行符（path 参数注入防御）。
+                 *     客户端调用时按 RFC 3986 url-encode（中文如 "奥运场馆全开" → "%E5%A5%A5..."）。
+                 */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
+                };
+            };
+            /** @description 设备 / preset 不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
+                };
+            };
+        };
+    };
+    upsertDeviceCommandPreset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                /**
+                 * @description preset 名（同 device 内唯一）；不允许 `/` 与换行符（path 参数注入防御）。
+                 *     客户端调用时按 RFC 3986 url-encode（中文如 "奥运场馆全开" → "%E5%A5%A5..."）。
+                 */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpsertCommandPresetRequest"];
+            };
+        };
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["CommandPreset"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description 设备不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
+                };
+            };
+        };
+    };
+    listVendorCredentials: {
+        parameters: {
+            query?: {
+                vendor_key?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["VendorCredentialDTO"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createVendorCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateVendorCredentialRequest"];
+            };
+        };
+        responses: {
+            /** @description 创建成功 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["VendorCredentialCreatedDTO"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    updateVendorCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateVendorCredentialRequest"];
+            };
+        };
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["VendorCredentialUpdatedDTO"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteVendorCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description 凭据被 device 引用，无法删除 */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

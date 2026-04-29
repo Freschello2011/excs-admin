@@ -1,0 +1,21 @@
+/* =============================================
+   ExCS — Field Mode Density Tokens (P9-D / ADR-0015)
+   现场模式 = 同一组件库的两套 CSS density token 切换。
+   外层 <html data-field-mode="true|false"> 由 fieldModeStore 同步。
+   ============================================= */
+
+:root {
+  --density-font-base: 14px;
+  --density-button-height: 32px;
+  --density-button-padding: 6px 14px;
+  --density-table-row-height: 36px;
+  --density-form-field-gap: 8px;
+}
+
+[data-field-mode="true"] {
+  --density-font-base: 16.5px;
+  --density-button-height: 48px;
+  --density-button-padding: 12px 24px;
+  --density-table-row-height: 56px;
+  --density-form-field-gap: 14px;
+}

@@ -14,7 +14,6 @@ import {
   Input,
   InputNumber,
   Modal,
-  Popconfirm,
   Radio,
   Select,
   Space,
@@ -28,6 +27,7 @@ import type { TableColumnsType } from 'antd';
 import { PlusOutlined, ExperimentOutlined } from '@ant-design/icons';
 import { useMessage } from '@/hooks/useMessage';
 import PageHeader from '@/components/common/PageHeader';
+import DangerConfirm from '@/components/common/DangerConfirm';
 import { triggerApi } from '@/api/triggers';
 import { diagApi } from '@/api/diag';
 import { hallApi } from '@/api/hall';
@@ -189,12 +189,12 @@ export default function TriggerListPage() {
               <ExperimentOutlined /> 测试
             </a>
           </Tooltip>
-          <Popconfirm
+          <DangerConfirm
             title="确定删除此触发器？"
             onConfirm={() => deleteMutation.mutate(r.id)}
           >
             <a style={{ color: 'var(--ant-color-error)' }}>删除</a>
-          </Popconfirm>
+          </DangerConfirm>
         </Space>
       ),
     },

@@ -33,12 +33,16 @@ interface Props {
   hallId: number;
   exhibitId: number;
   canManage: boolean;
-  /** 行操作 [调试] 触发——父页面切到 debug tab 并预填 deviceId */
+  /**
+   * 行操作 [调试] 触发——P9-C.2 起改为跳全屏调试台 /devices/:id/debug。
+   * 老 callback 形态保留以兼容父页面 inner-tab 切换路径（暂不再使用，留作 escape hatch）。
+   */
   onOpenDebug?: (deviceId: number) => void;
 }
 
 export default function ExhibitDevicesTab({ hallId, exhibitId, canManage, onOpenDebug }: Props) {
   const navigate = useNavigate();
+  void onOpenDebug;
 
   const { data: devices = [], isLoading } = useQuery({
     queryKey: queryKeys.devices({ hall_id: hallId, exhibit_id: exhibitId } as Record<string, unknown>),
@@ -87,11 +91,9 @@ export default function ExhibitDevicesTab({ hallId, exhibitId, canManage, onOpen
       width: 140,
       render: (_, r) => (
         <Space size="small">
-          {onOpenDebug && (
-            <a onClick={() => onOpenDebug(r.id)}>
-              <ToolOutlined /> 调试
-            </a>
-          )}
+          <a onClick={() => navigate(`/devices/${r.id}/debug`)}>
+            <ToolOutlined /> 调试
+          </a>
         </Space>
       ),
     },

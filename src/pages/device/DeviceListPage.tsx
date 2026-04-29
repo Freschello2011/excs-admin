@@ -18,7 +18,6 @@ import {
   Form,
   Input,
   InputNumber,
-  Popconfirm,
   Select,
   Space,
   Table,
@@ -27,9 +26,11 @@ import {
   Empty,
   Tooltip,
 } from 'antd';
+import DangerConfirm from '@/components/common/DangerConfirm';
 import { useMessage } from '@/hooks/useMessage';
 import type { TableColumnsType } from 'antd';
-import { PlusOutlined, CopyOutlined } from '@ant-design/icons';
+import { PlusOutlined, CopyOutlined, ToolOutlined } from '@ant-design/icons';
+import { useNavigate } from 'react-router-dom';
 import PageHeader from '@/components/common/PageHeader';
 import StatusTag from '@/components/common/StatusTag';
 import { hallApi } from '@/api/hall';
@@ -66,6 +67,7 @@ interface DeviceListItemV2 extends DeviceListItem {
 export default function DeviceListPage() {
   const { message } = useMessage();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const isAdmin = useAuthStore((s) => s.isAdmin);
   const user = useAuthStore((s) => s.user);
   const selectedHallId = useHallStore((s) => s.selectedHallId);
@@ -176,22 +178,25 @@ export default function DeviceListPage() {
       ? [
           {
             title: '操作',
-            width: 220,
+            width: 260,
             render: (_: unknown, record: DeviceListItemV2) => (
               <Space size="small">
+                <a onClick={() => navigate(`/devices/${record.id}/debug`)}>
+                  <ToolOutlined /> 调试
+                </a>
                 <a onClick={() => openEdit(record)}>编辑</a>
                 <Tooltip title="保留 connector + 命令清单，留空 name + 连接参数；适合批量录入同型号设备">
                   <a onClick={() => cloneMutation.mutate(record.id)}>
                     <CopyOutlined /> 克隆
                   </a>
                 </Tooltip>
-                <Popconfirm
+                <DangerConfirm
                   title="确定删除此设备？"
                   description="需要设备未被场景动作 / 触发器引用"
                   onConfirm={() => deleteMutation.mutate(record.id)}
                 >
                   <a style={{ color: 'var(--ant-color-error)' }}>删除</a>
-                </Popconfirm>
+                </DangerConfirm>
               </Space>
             ),
           },

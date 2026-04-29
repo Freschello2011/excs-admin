@@ -17,13 +17,12 @@ export default function ExhibitManagementPage() {
 
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab: OuterTab = searchParams.get('tab') === 'pairing-codes' ? 'pairing-codes' : 'list';
+  const canConfig = useCan('exhibit.edit', hallId ? { type: 'hall', id: String(hallId) } : undefined);
 
   // 顶栏已选中展项 → 直接进入展项详情（需保留配对码 tab 上下文时除外）
   if (hallId && effectiveExhibitId && activeTab === 'list') {
     return <Navigate to={`/halls/${hallId}/exhibit-management/${effectiveExhibitId}`} replace />;
   }
-
-  const canConfig = useCan('exhibit.edit', hallId ? { type: 'hall', id: String(hallId) } : undefined);
 
   const handleTabChange = (v: string) => {
     const next = new URLSearchParams(searchParams);
