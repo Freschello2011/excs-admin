@@ -3,6 +3,13 @@ import axios, {
   type InternalAxiosRequestConfig,
 } from 'axios';
 import { messageBus } from '@/utils/messageBus';
+import { useDirectConnect } from '@/stores/directConnectStore';
+import {
+  describeRequest,
+  listPending,
+  removePending,
+  type PendingOp,
+} from '@/utils/pendingWriteDB';
 
 const emitError = (content: string) => messageBus.emit({ level: 'error', content });
 
@@ -11,6 +18,93 @@ declare module 'axios' {
   interface AxiosRequestConfig {
     /** 设为 true 时，响应拦截器不弹 message.error */
     skipErrorMessage?: boolean;
+    /** P9-E.2 内部标记：避免 LAN path mapping 后再次进入拦截/暂存路径 */
+    _directConnectMapped?: boolean;
+    /** P9-E.2 内部标记：本请求由 flushPendingWrites 重放，跳过 enqueue 逻辑 */
+    _isFlushingPending?: boolean;
+    /** P9-E.2 内部：单次请求开始时间戳，用于 latency 采样 */
+    _startTs?: number;
+  }
+}
+
+const CLOUD_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) || '/';
+
+/* ==================== Direct-Connect path mapping (ADR-0016) ==================== */
+
+interface PathMapResult {
+  url: string;
+  /** 该 url 在 LAN 模式下能否本地执行（false = 必须走云端，写操作要 enqueue） */
+  lanCapable: boolean;
+}
+
+/**
+ * 把云端路径翻译成 9900 /diag/* 路径。返回 null = 该路径无 LAN 等价端点。
+ *
+ * 覆盖端点：
+ *   GET  /api/v1/v2/exhibits/:id/diag/*    →  /diag/*
+ *   GET  /api/v1/v2/devices/:id/state      →  /diag/state/:id
+ *   POST /api/v1/v2/scenes/:id/fire        →  /diag/scene/:id/fire
+ *   POST /api/v1/v2/halls/:id/discovery/scan      →  /diag/discover
+ *   GET  /api/v1/v2/halls/:id/discovery/results   →  /diag/discover/results
+ */
+function mapToLanPath(url: string): PathMapResult {
+  // 展项 diag 全套
+  let m = url.match(/^\/api\/v1\/v2\/exhibits\/\d+\/diag\/(.+)$/);
+  if (m) return { url: `/diag/${m[1]}`, lanCapable: true };
+
+  // 设备 retained state（直连读 hall_master 内存）
+  m = url.match(/^\/api\/v1\/v2\/devices\/(\d+)\/state(\?.*)?$/);
+  if (m) return { url: `/diag/state/${m[1]}${m[2] ?? ''}`, lanCapable: true };
+
+  // 场景直触
+  m = url.match(/^\/api\/v1\/v2\/scenes\/(\d+)\/fire$/);
+  if (m) return { url: `/diag/scene/${m[1]}/fire`, lanCapable: true };
+
+  // 扫描发现 scan
+  if (/^\/api\/v1\/v2\/halls\/\d+\/discovery\/scan$/.test(url)) {
+    return { url: '/diag/discover', lanCapable: true };
+  }
+
+  // 扫描发现 results（保留 query string）
+  m = url.match(/^\/api\/v1\/v2\/halls\/\d+\/discovery\/results(\?.*)?$/);
+  if (m) return { url: `/diag/discover/results${m[1] ?? ''}`, lanCapable: true };
+
+  return { url, lanCapable: false };
+}
+
+const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+function isWriteMethod(method?: string): boolean {
+  return !READ_METHODS.has((method ?? 'GET').toUpperCase());
+}
+
+/* ==================== Cloud failure / latency tracker ==================== */
+
+let cloudFailCounter = 0;
+const FAIL_THRESHOLD = 3;
+
+/** 自动回落控制：仅 cloud 模式下计数；切到 lan 后不再统计 */
+function noteCloudFailure(): void {
+  if (useDirectConnect.getState().mode !== 'cloud') return;
+  cloudFailCounter++;
+  if (cloudFailCounter >= FAIL_THRESHOLD) {
+    const { lanAddress, switchToLan, setDisconnected } = useDirectConnect.getState();
+    if (lanAddress) {
+      cloudFailCounter = 0;
+      messageBus.emit({
+        level: 'warning',
+        content: `云端连续 ${FAIL_THRESHOLD} 次失败，已自动切到本地直连`,
+      });
+      switchToLan();
+    } else {
+      setDisconnected('云端连续失败且未配置本地直连地址');
+    }
+  }
+}
+
+function noteCloudSuccess(latencyMs: number): void {
+  cloudFailCounter = 0;
+  if (useDirectConnect.getState().mode !== 'lan') {
+    useDirectConnect.getState().setCloudLatency(latencyMs);
   }
 }
 
@@ -40,7 +134,7 @@ const PERMISSION_DENIED_FALLBACK: Record<string, string> = {
 
 /* ==================== Create Axios Instance ==================== */
 const request = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/',
+  baseURL: CLOUD_BASE_URL,
   timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
@@ -61,11 +155,71 @@ function addPendingRequest(cb: (token: string) => void): void {
 }
 
 /* ==================== Request Interceptor ==================== */
+
+/** 标记同步抛出 — 用于直连模式下被暂存的写请求（response 拦截器据此跳过 emitError） */
+const ENQUEUED_FLAG = Symbol('directConnectEnqueued');
+
 request.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
+  (config: InternalAxiosRequestConfig & { _startTs?: number }) => {
     const token = localStorage.getItem('excs-access-token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+    config._startTs = Date.now();
+
+    const dc = useDirectConnect.getState();
+
+    // P9-E.2：LAN 模式 — baseURL 切换 + path mapping + 写操作暂存
+    if (dc.mode === 'lan' && !config._directConnectMapped) {
+      const url = config.url ?? '';
+      const isApiCall = url.startsWith('/api/');
+      // 仅对原本走云端 /api/* 的请求做 mapping；/diag/* 直接放行
+      if (isApiCall) {
+        const mapped = mapToLanPath(url);
+        if (mapped.lanCapable) {
+          // 切到 9900 baseURL + 注入 LAN token
+          config.baseURL = dc.lanAddress;
+          config.url = mapped.url;
+          config._directConnectMapped = true;
+          if (dc.lanToken) {
+            config.headers['X-Diag-Token'] = dc.lanToken;
+          }
+        } else if (isWriteMethod(config.method) && !config._isFlushingPending) {
+          // 无 LAN 等价 + 写操作：暂存到 IndexedDB，UI 立即得知"已暂存"
+          const description = describeRequest(config.method ?? 'POST', url);
+          void dc
+            .enqueuePending({
+              method: (config.method ?? 'POST').toUpperCase(),
+              url,
+              data: config.data,
+              params: config.params,
+              description,
+            })
+            .then(({ trimmed }) => {
+              messageBus.emit({
+                level: 'warning',
+                content: `云端不可达，已暂存「${description}」到本地，恢复后自动同步`,
+              });
+              if (trimmed > 0) {
+                messageBus.emit({
+                  level: 'warning',
+                  content: `本地暂存超过上限，已丢弃 ${trimmed} 条最老的记录`,
+                });
+              }
+            });
+          // 同步抛出 — 不发起真实请求；上层 .catch 会感知到
+          const err: Error & { [ENQUEUED_FLAG]?: boolean } = new Error(
+            'request enqueued: cloud unreachable in direct-connect mode',
+          );
+          err[ENQUEUED_FLAG] = true;
+          throw err;
+        } else if (isWriteMethod(config.method)) {
+          // 写操作但是 flush 流程：放行（云端模式回到云端 baseURL 自然走）
+        } else {
+          // 无 LAN 等价的读操作（如 list devices）→ 暂时仍走云端 baseURL；
+          // 实际效果：在 LAN-only 网络下会 timeout，由响应拦截器 fallback 提示
+        }
+      }
     }
     return config;
   },
@@ -75,6 +229,17 @@ request.interceptors.request.use(
 /* ==================== Response Interceptor ==================== */
 request.interceptors.response.use(
   (response: AxiosResponse) => {
+    // P9-E.2：成功响应 = 网络正常，记录 latency；只在云端模式下采样
+    if (
+      useDirectConnect.getState().mode === 'cloud' &&
+      response.config.url?.startsWith('/api/')
+    ) {
+      const start = (response.config as InternalAxiosRequestConfig & { _startTs?: number })
+        ._startTs;
+      if (start) noteCloudSuccess(Date.now() - start);
+      else noteCloudSuccess(0);
+    }
+
     const res = response.data;
 
     // Successful response
@@ -145,6 +310,16 @@ request.interceptors.response.use(
     return response;
   },
   (error) => {
+    // P9-E.2：被 request 拦截器同步抛出的"已暂存"标记 — 不弹错（已弹 warn）
+    if (error && (error as { [k: symbol]: boolean })[ENQUEUED_FLAG]) {
+      return Promise.reject(error);
+    }
+
+    // P9-E.2：网络层错误（无 response）= 云端可能挂了，统计 + 自动回落
+    if (!error.response && useDirectConnect.getState().mode === 'cloud') {
+      noteCloudFailure();
+    }
+
     // Network or server errors
     if (error.response) {
       const status = error.response.status as number;
@@ -241,6 +416,84 @@ export function redirectToSSO(options?: { prompt?: string }): void {
     url += `&prompt=${encodeURIComponent(options.prompt)}`;
   }
   window.location.href = url;
+}
+
+/* ==================== Direct-Connect helpers (P9-E.2) ==================== */
+
+export interface FlushConflict {
+  op: PendingOp;
+  serverError: { code?: number; message?: string; status?: number };
+}
+
+export interface FlushReport {
+  succeeded: PendingOp[];
+  conflicts: FlushConflict[];
+  failed: { op: PendingOp; error: unknown }[];
+}
+
+/**
+ * 顺序回放 pending writes 到云端。冲突（HTTP 409 / code 1006）回到 conflicts；
+ * 其它错误回到 failed（保留原 op，admin 可再次重试）。succeeded 的 op 立即从 IndexedDB
+ * 删除。
+ */
+export async function flushPendingWrites(): Promise<FlushReport> {
+  const all = await listPending();
+  const report: FlushReport = { succeeded: [], conflicts: [], failed: [] };
+  for (const op of all) {
+    try {
+      const res = await request.request({
+        method: op.method,
+        url: op.url,
+        data: op.data,
+        params: op.params,
+        skipErrorMessage: true,
+        _isFlushingPending: true,
+      });
+      const body = res.data as { code?: number; message?: string };
+      if (body && body.code === 0) {
+        await removePending(op.id);
+        report.succeeded.push(op);
+      } else if (body && body.code === 1006) {
+        report.conflicts.push({ op, serverError: body });
+      } else {
+        report.failed.push({ op, error: body });
+      }
+    } catch (err) {
+      const e = err as { response?: { status?: number; data?: { code?: number; message?: string } } };
+      const status = e.response?.status;
+      if (status === 409) {
+        report.conflicts.push({ op, serverError: { ...(e.response?.data ?? {}), status } });
+      } else {
+        report.failed.push({ op, error: err });
+      }
+    }
+  }
+  return report;
+}
+
+/** [测试连接] 按钮 — 不走 axios 实例（避免 baseURL 抖动），直接 fetch /diag/version。 */
+export async function testLanConnection(
+  addr: string,
+  token: string,
+): Promise<{ ok: true; version: string } | { ok: false; error: string }> {
+  try {
+    const url = `${addr.replace(/\/+$/, '')}/diag/version`;
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 4000);
+    const r = await fetch(url, {
+      headers: { 'X-Diag-Token': token, Accept: 'application/json' },
+      signal: ctrl.signal,
+    });
+    clearTimeout(t);
+    if (!r.ok) return { ok: false, error: `HTTP ${r.status}` };
+    const j = (await r.json().catch(() => null)) as { version?: string; data?: { version?: string } } | null;
+    const version = j?.version ?? j?.data?.version ?? 'unknown';
+    return { ok: true, version };
+  } catch (err) {
+    const e = err as { name?: string; message?: string };
+    if (e.name === 'AbortError') return { ok: false, error: '连接超时（4s）' };
+    return { ok: false, error: e.message || '网络错误' };
+  }
 }
 
 export default request;

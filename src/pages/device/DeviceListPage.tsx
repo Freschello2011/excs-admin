@@ -56,6 +56,8 @@ import {
 } from '@/lib/deviceConnectorLabels';
 import ConnectorKindCards from '@/components/device/ConnectorKindCards';
 import TransportBindEditor from '@/components/device/TransportBindEditor';
+import DiscoveryStep, { type DiscoveryPrefill } from '@/components/device/DiscoveryStep';
+import { useDirectConnect } from '@/stores/directConnectStore';
 
 interface DeviceListItemV2 extends DeviceListItem {
   connector_kind?: ConnectorKind;
@@ -327,10 +329,15 @@ interface DrawerProps {
 
 function DeviceDrawer({ open, editing, hallId, exhibits, onClose, onSaved }: DrawerProps) {
   const { message } = useMessage();
+  const directConnectMode = useDirectConnect((s) => s.mode);
 
   // step state
   const [kind, setKind] = useState<ConnectorKind | undefined>(undefined);
   const [step, setStep] = useState(0);
+
+  // P9-E.2: step 0 sub-tab — 'scan' (default) | 'manual'
+  // disconnected 模式下扫描发现按钮无意义 → 强制 manual
+  const [step0Tab, setStep0Tab] = useState<'scan' | 'manual'>('scan');
 
   // step 2 state
   const [presetKey, setPresetKey] = useState<string | undefined>(undefined);
@@ -348,6 +355,21 @@ function DeviceDrawer({ open, editing, hallId, exhibits, onClose, onSaved }: Dra
     serial_no?: string;
     poll_interval_seconds?: number;
   }>();
+
+  const applyPrefill = (p: DiscoveryPrefill) => {
+    setKind(p.kind);
+    setPresetKey(p.ref.preset_key);
+    setProtocol(p.ref.protocol);
+    setTransport(p.transport ?? p.ref.transport);
+    setPluginId(p.ref.plugin_id);
+    setPluginDeviceKey(p.ref.plugin_device_key);
+    setConnectionConfig(p.connectionConfig);
+    if (p.suggestedName) {
+      form.setFieldsValue({ name: p.suggestedName });
+    }
+    setStep(1);
+    message.success(`已预填 ${p.sourceEndpoint} 进入步骤 2 — 校核连接参数`);
+  };
 
   // resetting on open
   useMemo(() => {
@@ -371,6 +393,7 @@ function DeviceDrawer({ open, editing, hallId, exhibits, onClose, onSaved }: Dra
     } else {
       setKind(undefined);
       setStep(0);
+      setStep0Tab(directConnectMode === 'disconnected' ? 'manual' : 'scan');
       setPresetKey(undefined);
       setProtocol(undefined);
       setTransport(undefined);
@@ -493,21 +516,65 @@ function DeviceDrawer({ open, editing, hallId, exhibits, onClose, onSaved }: Dra
 
       {step === 0 && (
         <div>
-          <p style={{ fontSize: 13, color: 'var(--ant-color-text-secondary)', marginBottom: 16 }}>
-            根据设备类型选一种接入方式：
-          </p>
-          <ConnectorKindCards
-            value={kind}
-            onChange={(k) => {
-              setKind(k);
-            }}
-            disabled={!!editing} // 编辑时不允许切换 connector_kind
-          />
-          <div style={{ marginTop: 24, textAlign: 'right' }}>
-            <Button type="primary" disabled={!kind} onClick={() => setStep(1)}>
-              下一步
-            </Button>
-          </div>
+          {!editing && (
+            <div
+              style={{
+                display: 'inline-flex',
+                marginBottom: 16,
+                background: 'var(--ant-color-fill-tertiary)',
+                borderRadius: 8,
+                padding: 3,
+                gap: 0,
+              }}
+            >
+              <Button
+                type={step0Tab === 'scan' ? 'primary' : 'text'}
+                size="small"
+                disabled={directConnectMode === 'disconnected'}
+                onClick={() => setStep0Tab('scan')}
+                style={{ minWidth: 130 }}
+              >
+                🔍 扫描发现{' '}
+                {step0Tab === 'scan' && (
+                  <Tag color="success" style={{ marginLeft: 4, fontSize: 10 }}>
+                    推荐
+                  </Tag>
+                )}
+              </Button>
+              <Button
+                type={step0Tab === 'manual' ? 'primary' : 'text'}
+                size="small"
+                onClick={() => setStep0Tab('manual')}
+                style={{ minWidth: 150 }}
+              >
+                ✋ 手动选 connector
+              </Button>
+            </div>
+          )}
+
+          {(step0Tab === 'manual' || editing) && (
+            <>
+              <p style={{ fontSize: 13, color: 'var(--ant-color-text-secondary)', marginBottom: 16 }}>
+                根据设备类型选一种接入方式：
+              </p>
+              <ConnectorKindCards
+                value={kind}
+                onChange={(k) => {
+                  setKind(k);
+                }}
+                disabled={!!editing} // 编辑时不允许切换 connector_kind
+              />
+              <div style={{ marginTop: 24, textAlign: 'right' }}>
+                <Button type="primary" disabled={!kind} onClick={() => setStep(1)}>
+                  下一步
+                </Button>
+              </div>
+            </>
+          )}
+
+          {step0Tab === 'scan' && !editing && (
+            <DiscoveryStep hallId={hallId} onPrefill={applyPrefill} />
+          )}
         </div>
       )}
 

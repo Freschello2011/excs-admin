@@ -17,6 +17,7 @@ import type { HallListItem, ExhibitListItem } from '@/api/gen/client';
 import CreateHallModal from '@/components/common/CreateHallModal';
 import CreateExhibitModal from '@/components/common/CreateExhibitModal';
 import NotificationBell from '@/components/notification/NotificationBell';
+import ConnectStatusPill from '@/components/AppHeader/ConnectStatusPill';
 import styles from './AdminLayout.module.scss';
 
 const SIDEBAR_WIDTH = 256;
@@ -758,6 +759,7 @@ export default function AdminLayout() {
             </div>
           </div>
           <div className={styles['admin-layout__topbar-right']}>
+            <ConnectStatusPill />
             <Tooltip title={fieldModeEnabled ? '关闭现场模式（恢复办公室密度）' : '开启现场模式（大字号 / 高按钮 / 屏幕常亮 / 危险操作冷却）'}>
               <button
                 type="button"

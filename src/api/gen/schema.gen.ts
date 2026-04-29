@@ -4600,6 +4600,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v2/halls/{hallId}/discovery/scan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hallId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 触发现场扫描发现（透传到 hall_master 9900 /diag/discover）
+         * @description 不变量（DDD-field-deployment §5.4）：
+         *       - 仅 hall_master 接受；非 master 节点的展厅 App 返 403
+         *       - protocols 含 smyoo 时 vendor_credential_id 必填，且必须存在 vendor_key=smyoo 凭据
+         *         否则展厅 App 返 412，云端透传 412
+         *       - 探测期间不阻塞 control / query 命令（独立 thread pool）
+         *       - 结果不持久化，仅在 task 内存中保留 5 分钟供轮询
+         *     返回 task_id；调用 GET /v2/halls/{hallId}/discovery/results?task_id= 拉结果。
+         */
+        post: operations["startHallDiscoveryScan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/halls/{hallId}/discovery/results": {
+        parameters: {
+            query: {
+                /** @description POST scan 返回的 task_id */
+                task_id: string;
+            };
+            header?: never;
+            path: {
+                hallId: number;
+            };
+            cookie?: never;
+        };
+        /**
+         * 拉取扫描发现结果（轮询；partial=true 表示仍在进行）
+         * @description 透传到 hall_master 9900 /diag/discover/results?task_id=...。
+         *     task_id 不存在 → 404；超过 5 分钟保留期被清理 → 也是 404。
+         */
+        get: operations["getHallDiscoveryResults"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -9040,6 +9094,76 @@ export interface components {
             label?: string;
             /** Format: date-time */
             last_rotated_at?: string | null;
+        };
+        DiscoveryScanRequest: {
+            /**
+             * @description 要扫描的协议。`smyoo` 必须配合 `vendor_credential_id` 否则 412。
+             * @example [
+             *       "pjlink",
+             *       "artnet",
+             *       "smyoo"
+             *     ]
+             */
+            protocols: ("pjlink" | "artnet" | "modbus" | "smyoo" | "wol" | "serial")[];
+            /**
+             * Format: int64
+             * @description Smyoo 探测必填——指向 excs_vendor_credentials.id 中 vendor_key='smyoo' 的凭据。
+             *     云端 handler 解密后透传给展厅 App（不入参 vendor_credentials 明文）。
+             */
+            vendor_credential_id?: number;
+            /** @description 扫描限制网段；不填 → hall_master 用接到的 RFC1918 /24 自动检测。 */
+            cidrs?: string[];
+        };
+        DiscoveryScanResponse: {
+            /**
+             * @description 探测任务 ID；用于 GET /v2/halls/{hallId}/discovery/results?task_id= 拉结果
+             * @example scan-1f2a3b4c5d6e7f8091a2b3c4d5e6f7a89
+             */
+            task_id: string;
+            /**
+             * @description 预估总耗时（秒）
+             * @example 10
+             */
+            eta_seconds: number;
+            /** @description 实际被接受的 protocols（不识别的会被静默丢弃） */
+            accepted_protocols?: string[];
+        };
+        DiscoveryResultItem: {
+            /** @enum {string} */
+            protocol: "pjlink" | "artnet" | "modbus" | "smyoo" | "wol" | "serial";
+            /**
+             * @description 协议特定的端点字符串。
+             *       - PJLink / ArtNet / ModbusTcp / Wol：IPv4
+             *       - Smyoo：mcuid
+             *       - Serial：COM 名 / /dev/tty.*
+             * @example 192.168.50.41
+             */
+            endpoint: string;
+            /** @example TestNode */
+            display_name: string;
+            /** @enum {string} */
+            confidence: "low" | "medium" | "high";
+            /** @description 协议特定字段；如 PJLink 的 class / Smyoo 的 mac+mcuname / Modbus 的 unit_id 等 */
+            hints: {
+                [key: string]: string;
+            };
+            /** Format: date-time */
+            discovered_at: string;
+        };
+        DiscoveryResultSnapshot: {
+            task_id: string;
+            /** @description true = 探测仍在进行；admin 应继续轮询 */
+            partial: boolean;
+            /** Format: date-time */
+            started_at?: string;
+            /** Format: date-time */
+            completed_at?: string | null;
+            protocols?: string[];
+            errors?: {
+                protocol: string;
+                message: string;
+            }[];
+            results: components["schemas"]["DiscoveryResultItem"][];
         };
     };
     responses: {
@@ -17989,6 +18113,107 @@ export interface operations {
             404: components["responses"]["NotFound"];
             /** @description 凭据被 device 引用，无法删除 */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
+                };
+            };
+        };
+    };
+    startHallDiscoveryScan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hallId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiscoveryScanRequest"];
+            };
+        };
+        responses: {
+            /** @description 已接受，返回 task_id */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["DiscoveryScanResponse"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description hall_master follower 不接受扫描；或权限不足 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
+                };
+            };
+            /** @description Smyoo 凭据缺失 / 凭据 ID 无效 */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
+                };
+            };
+            /** @description hall_master 不可达 / 不在线 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
+                };
+            };
+        };
+    };
+    getHallDiscoveryResults: {
+        parameters: {
+            query: {
+                /** @description POST scan 返回的 task_id */
+                task_id: string;
+            };
+            header?: never;
+            path: {
+                hallId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["DiscoveryResultSnapshot"];
+                    };
+                };
+            };
+            /** @description task_id 不存在或已过期 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
+                };
+            };
+            /** @description hall_master 不可达 */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
