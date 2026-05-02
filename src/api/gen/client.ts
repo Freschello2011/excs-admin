@@ -609,6 +609,7 @@ export type ScriptItem = components['schemas']['ScriptItem'];
 export type HallListItemDTO = components['schemas']['HallListItemDTO'];
 export type HallDetailDTO = components['schemas']['HallDetailDTO'];
 export type HallListPage = components['schemas']['HallListPage'];
+export type OperationMode = components['schemas']['OperationMode'];
 
 // ---- Hall 运行状态 ----
 export type SceneInfoDTO = components['schemas']['SceneInfoDTO'];
@@ -622,6 +623,7 @@ export type ExhibitDTO = components['schemas']['ExhibitDTO'];
 export type CreateExhibitRequest = components['schemas']['CreateExhibitRequest'];
 export type UpdateExhibitRequest = components['schemas']['UpdateExhibitRequest'];
 export type UpdateScriptsRequest = components['schemas']['UpdateScriptsRequest'];
+export type ReorderExhibitsRequest = components['schemas']['ReorderExhibitsRequest'];
 
 // ---- Device ----
 export type DeviceDTO = components['schemas']['DeviceDTO'];
@@ -810,6 +812,13 @@ export const hallClient = {
   deleteExhibit(hallId: number, exhibitId: number): Promise<void> {
     return unwrap(request.delete<ApiEnvelope<void>>(`/api/v1/halls/${hallId}/exhibits/${exhibitId}`));
   },
+  reorderExhibits(hallId: number, exhibitIds: number[]): Promise<void> {
+    return unwrap(
+      request.post<ApiEnvelope<void>>(`/api/v1/halls/${hallId}/exhibits/reorder`, {
+        exhibit_ids: exhibitIds,
+      } satisfies ReorderExhibitsRequest),
+    );
+  },
   getExhibitScripts(hallId: number, exhibitId: number): Promise<ScriptItem[]> {
     return unwrap(request.get<ApiEnvelope<ScriptItem[]>>(`/api/v1/halls/${hallId}/exhibits/${exhibitId}/scripts`));
   },
@@ -968,6 +977,24 @@ export const hallClient = {
       request.post<ApiEnvelope<ElectionResultDTO>>(
         `/api/v1/halls/${hallId}/elect-master`,
         mergeReasonBody(undefined, reason),
+      ),
+    );
+  },
+
+  /**
+   * 切换展厅运营模式（4 态 commissioning/production/maintenance/paused）。
+   * 切到 production 时 RequireReason=true（≥5 字），其余 3 态 reason 可空。
+   * 后端触发 OperationModeChanged event → MQTT retained excs/{hall_id}/state。
+   */
+  changeOperationMode(
+    hallId: number,
+    operationMode: OperationMode,
+    reason?: string,
+  ): Promise<void> {
+    return unwrap(
+      request.patch<ApiEnvelope<void>>(
+        `/api/v1/halls/${hallId}/operation-mode`,
+        mergeReasonBody({ operation_mode: operationMode }, reason),
       ),
     );
   },

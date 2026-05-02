@@ -1,0 +1,310 @@
+/**
+ * ReleasePublishModal — Phase 4 平台发布对话框样式（参考 mockup
+ * 07-ui/mockup/ux-overhaul-2026-04-30/05-release-publish.html）。
+ *
+ * 仅 token / layout；色板沿用 antd 5.x 默认。
+ */
+
+.section {
+  margin-bottom: 22px;
+}
+
+.sectionTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.88);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.num {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(106, 78, 232, 0.12);
+  color: #6a4ee8;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.formRow {
+  display: flex;
+  align-items: flex-start;
+}
+
+.helpText {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.45);
+}
+
+.errorText {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #d84c5e;
+}
+
+.fileMeta {
+  margin-top: 6px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.65);
+}
+
+/* ===== Markdown 编辑器 ===== */
+
+.mdEditor {
+  border: 1px solid #d9d9d9;
+  border-radius: 8px;
+  overflow: hidden;
+  background: white;
+}
+
+.mdHeader {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: #fafafe;
+  border-bottom: 1px solid rgba(220, 224, 236, 0.6);
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.55);
+  font-weight: 500;
+
+  & > span {
+    padding: 8px 14px;
+
+    &:first-child {
+      border-right: 1px solid rgba(220, 224, 236, 0.4);
+    }
+  }
+}
+
+.mdBody {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 240px;
+  max-height: 360px;
+}
+
+.mdEditorPane {
+  border: none;
+  outline: none;
+  resize: none;
+  padding: 12px 14px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  line-height: 1.65;
+  border-right: 1px solid rgba(220, 224, 236, 0.4);
+  background: white;
+  color: rgba(0, 0, 0, 0.85);
+}
+
+.mdPreviewPane {
+  padding: 14px 18px;
+  background: #fafafe;
+  font-size: 13px;
+  line-height: 1.65;
+  color: rgba(0, 0, 0, 0.88);
+  overflow-y: auto;
+
+  h1, h2, h3, h4 {
+    margin: 12px 0 6px;
+    font-weight: 600;
+  }
+
+  h1 { font-size: 16px; }
+  h2 { font-size: 14px; }
+  h3, h4 { font-size: 13px; }
+
+  ul, ol {
+    margin: 0;
+    padding-left: 20px;
+  }
+
+  li { margin-bottom: 3px; }
+
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: rgba(0, 0, 0, 0.04);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 11.5px;
+  }
+
+  pre {
+    background: rgba(0, 0, 0, 0.04);
+    padding: 8px 10px;
+    border-radius: 6px;
+    overflow-x: auto;
+  }
+
+  a {
+    color: #6a4ee8;
+    text-decoration: none;
+  }
+
+  table {
+    border-collapse: collapse;
+    margin: 6px 0;
+
+    th, td {
+      border: 1px solid rgba(220, 224, 236, 0.6);
+      padding: 4px 8px;
+      font-size: 12px;
+    }
+
+    th {
+      background: rgba(0, 0, 0, 0.03);
+    }
+  }
+}
+
+.mdEmpty {
+  color: rgba(0, 0, 0, 0.25);
+  font-style: italic;
+}
+
+.mdFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 14px;
+  font-size: 11.5px;
+  background: #fafafe;
+  border-top: 1px solid rgba(220, 224, 236, 0.4);
+}
+
+/* ===== is_critical 红框 ===== */
+
+.criticalRow {
+  background: #fff2f0;
+  border: 1px solid #ffccc7;
+  border-radius: 8px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  transition: all 0.2s;
+
+  &.criticalOn {
+    border-color: #d84c5e;
+    box-shadow: 0 0 0 2px rgba(216, 76, 94, 0.12);
+  }
+}
+
+.criticalIcon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(216, 76, 94, 0.12);
+  color: #d84c5e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.criticalInfo {
+  flex: 1;
+}
+
+.criticalTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: #d84c5e;
+}
+
+.criticalDesc {
+  font-size: 11.5px;
+  color: rgba(0, 0, 0, 0.65);
+  line-height: 1.55;
+  margin-top: 2px;
+}
+
+/* ===== 实时预览矩阵 ===== */
+
+.matrix {
+  background: white;
+  border: 1px solid rgba(220, 224, 236, 0.6);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-top: 10px;
+}
+
+.matrixHead {
+  padding: 10px 14px;
+  background: rgba(247, 248, 252, 0.6);
+  border-bottom: 1px solid rgba(220, 224, 236, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11.5px;
+  color: rgba(0, 0, 0, 0.55);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.matrixSummary {
+  color: #6a4ee8;
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.matrixGroup {
+  border-bottom: 1px solid rgba(220, 224, 236, 0.4);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.matrixGroupHead {
+  padding: 8px 14px;
+  background: rgba(247, 248, 252, 0.4);
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.matrixHalls {
+  padding: 8px 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.hallChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  background: white;
+  border: 1px solid rgba(220, 224, 236, 0.8);
+  border-radius: 12px;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.65);
+}
+
+.hallChipOn {
+  border-color: #6a4ee8;
+  background: rgba(106, 78, 232, 0.08);
+  color: #2a1a7a;
+  font-weight: 500;
+}
+
+.hallChipId {
+  color: rgba(0, 0, 0, 0.45);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+}

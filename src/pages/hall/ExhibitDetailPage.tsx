@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { Tabs, Button, Spin, Space, App } from 'antd';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Tabs, Button, Spin, Space, App, Input, Select, Switch, Typography, Tooltip } from 'antd';
 import {
   AppstoreOutlined,
   DesktopOutlined,
@@ -9,6 +9,8 @@ import {
   FileTextOutlined,
   UserOutlined,
   TagOutlined,
+  RightOutlined,
+  EditOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import StatusTag from '@/components/common/StatusTag';
@@ -40,11 +42,32 @@ interface KvCardProps {
   unit?: string;
   sub?: React.ReactNode;
   gradient?: boolean;
+  /** 提供 onClick 时变成可点击卡（hover 抬升 + 右上角箭头） */
+  onClick?: () => void;
+  /** 可点击时的 a11y 标签（默认 label） */
+  ariaLabel?: string;
 }
 
-function KvCard({ label, icon, value, unit, sub, gradient = true }: KvCardProps) {
+function KvCard({ label, icon, value, unit, sub, gradient = true, onClick, ariaLabel }: KvCardProps) {
+  const className = onClick ? `${styles.kv} ${styles.kvClickable}` : styles.kv;
   return (
-    <div className={styles.kv}>
+    <div
+      className={className}
+      onClick={onClick}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      aria-label={onClick ? ariaLabel || label : undefined}
+    >
       <div className={styles.kvLabel}>
         {icon}
         <span>{label}</span>
@@ -60,6 +83,7 @@ function KvCard({ label, icon, value, unit, sub, gradient = true }: KvCardProps)
         {unit && <span className={styles.kvUnit}>{unit}</span>}
       </div>
       {sub && <div className={styles.kvSub}>{sub}</div>}
+      {onClick && <RightOutlined className={styles.kvArrow} />}
     </div>
   );
 }
@@ -81,6 +105,22 @@ export default function ExhibitDetailPage() {
   // [展项设备] tab → [调试] 跳转时预填 deviceId（P9-A 占位，P9-C 转设备调试台后会替换）
   const [debugDeviceId, setDebugDeviceId] = useState<number | undefined>(undefined);
 
+  // 描述就地编辑
+  const [descEditing, setDescEditing] = useState(false);
+  const [descDraft, setDescDraft] = useState('');
+
+  const queryClient = useQueryClient();
+  const updateMutation = useMutation({
+    mutationFn: (data: Parameters<typeof hallApi.updateExhibit>[2]) =>
+      hallApi.updateExhibit(hallId, exhibitId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.exhibits(hallId) });
+    },
+    onError: (err) => {
+      message.error('保存失败：' + (err instanceof Error ? err.message : '未知错误'));
+    },
+  });
+
   const { data: _hall, isLoading: hallLoading } = useQuery({
     queryKey: queryKeys.hallDetail(hallId),
     queryFn: () => hallApi.getHall(hallId),
@@ -93,13 +133,6 @@ export default function ExhibitDetailPage() {
     queryFn: () => hallApi.getExhibits(hallId),
     select: (res) => res.data.data,
     enabled: hallId > 0,
-  });
-
-  const { data: pairingCodes = [] } = useQuery({
-    queryKey: queryKeys.pairingCodes(hallId),
-    queryFn: () => hallApi.listPairingCodes(hallId),
-    select: (res) => res.data.data,
-    enabled: hallId > 0 && isAdmin(),
   });
 
   const exhibit = exhibits.find((e) => e.id === exhibitId);
@@ -125,16 +158,9 @@ export default function ExhibitDetailPage() {
     }
   }, [selectedExhibitId, exhibitId, hallId, navigate]);
 
-  const currentCode = useMemo(() => {
-    if (!exhibit) return undefined;
-    return pairingCodes.find(
-      (c) =>
-        c.target_type === 'exhibit' &&
-        c.target_id === exhibitId &&
-        c.status === 'active' &&
-        dayjs(c.expires_at).isAfter(dayjs()),
-    );
-  }, [pairingCodes, exhibitId, exhibit]);
+  // 后端 listExhibits 已 inline active 配对码（仅当 caller 持有 pairing.view 时填充）
+  // 出口已用 effectivePairingStatus 修正过期，此处不需要再过滤 expires_at
+  const currentCode = exhibit?.active_pairing_code ?? undefined;
 
   if (isLoading) {
     return <Spin style={{ display: 'flex', justifyContent: 'center', marginTop: 120 }} />;
@@ -157,28 +183,40 @@ export default function ExhibitDetailPage() {
     }
   };
 
+  // KV 卡点击：切到对应 tab
+  const jumpToTab = (key: string) => {
+    setOuterTab('devContent');
+    setInnerTab(key);
+  };
+
   // ========== 基本信息 Tab 内容 ==========
   const renderInfoTab = () => (
     <div style={{ marginTop: 8 }}>
-      {/* 4 格 KV */}
+      {/* 4 格 KV（点击跳到对应 tab） */}
       <div className={styles.kvGrid}>
         <KvCard
           label="绑定设备"
           icon={<DesktopOutlined />}
           value={exhibit.device_count}
           unit="台"
+          onClick={() => jumpToTab('devices')}
+          ariaLabel="跳到展项设备 tab"
         />
         <KvCard
           label="内容文件"
           icon={<FileImageOutlined />}
           value={exhibit.content_count}
           unit="项"
+          onClick={() => jumpToTab('content')}
+          ariaLabel="跳到内容文件 tab"
         />
         <KvCard
           label="讲解词"
           icon={<FileTextOutlined />}
           value={exhibit.script_count}
           unit="段"
+          onClick={() => jumpToTab('scripts')}
+          ariaLabel="跳到讲解词 tab"
         />
         <KvCard
           label="数字人"
@@ -191,6 +229,8 @@ export default function ExhibitDetailPage() {
             )
           }
           gradient={false}
+          onClick={() => navigate(`/halls/${hallId}/ai/avatars`)}
+          ariaLabel="去 AI 数字人配置"
         />
       </div>
 
@@ -232,34 +272,163 @@ export default function ExhibitDetailPage() {
         </div>
       )}
 
-      {/* 描述 + 元数据 */}
+      {/* 描述 + 展项设置 */}
       <div className={styles.sectionRow}>
         <div className={styles.sectionCard}>
-          <div className={styles.sectionCardTitle}>展项描述</div>
-          {exhibit.description ? (
-            <p className={styles.descText}>{exhibit.description}</p>
+          <div className={styles.sectionCardTitle}>
+            <span>展项描述</span>
+            {canManage && !descEditing && (
+              <Tooltip title="编辑描述">
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<EditOutlined />}
+                  onClick={() => {
+                    setDescDraft(exhibit.description || '');
+                    setDescEditing(true);
+                  }}
+                />
+              </Tooltip>
+            )}
+          </div>
+          {descEditing ? (
+            <div className={styles.descEditWrap}>
+              <Input.TextArea
+                rows={4}
+                value={descDraft}
+                maxLength={500}
+                onChange={(e) => setDescDraft(e.target.value)}
+                placeholder="输入展项描述..."
+                autoFocus
+              />
+              <div className={styles.descActions}>
+                <Button size="small" onClick={() => setDescEditing(false)}>
+                  取消
+                </Button>
+                <Button
+                  size="small"
+                  type="primary"
+                  loading={updateMutation.isPending}
+                  onClick={() => {
+                    updateMutation.mutate(
+                      { description: descDraft },
+                      {
+                        onSuccess: () => {
+                          message.success('描述已保存');
+                          setDescEditing(false);
+                        },
+                      },
+                    );
+                  }}
+                >
+                  保存
+                </Button>
+              </div>
+            </div>
+          ) : exhibit.description ? (
+            <p
+              className={`${styles.descText} ${canManage ? styles.descTextHover : ''}`}
+              onClick={
+                canManage
+                  ? () => {
+                      setDescDraft(exhibit.description || '');
+                      setDescEditing(true);
+                    }
+                  : undefined
+              }
+              title={canManage ? '点击编辑' : undefined}
+            >
+              {exhibit.description}
+            </p>
           ) : (
-            <p className={`${styles.descText} ${styles.descEmpty}`}>暂未填写描述</p>
+            <p
+              className={`${styles.descText} ${styles.descEmpty} ${canManage ? styles.descTextHover : ''}`}
+              onClick={
+                canManage
+                  ? () => {
+                      setDescDraft('');
+                      setDescEditing(true);
+                    }
+                  : undefined
+              }
+            >
+              暂未填写描述{canManage && '，点击添加'}
+            </p>
           )}
         </div>
-        <div className={styles.sectionCard}>
-          <div className={styles.sectionCardTitle}>元数据</div>
+        <div className={`${styles.sectionCard} ${styles.metaRowEditable}`}>
+          <div className={styles.sectionCardTitle}>展项设置</div>
           <div className={styles.metaRow}>
-            <span className={styles.metaKey}>展示模式</span>
+            <span className={styles.metaKey}>
+              <AppstoreOutlined /> 名称
+            </span>
             <span className={styles.metaVal}>
-              <span className={styles.tagMode}>{modeLabel}</span>
+              {canManage ? (
+                <Typography.Text
+                  editable={{
+                    onChange: (next) => {
+                      const v = (next || '').trim();
+                      if (!v || v === exhibit.name) return;
+                      updateMutation.mutate(
+                        { name: v },
+                        { onSuccess: () => message.success('名称已保存') },
+                      );
+                    },
+                    triggerType: ['icon', 'text'],
+                    maxLength: 100,
+                  }}
+                >
+                  {exhibit.name}
+                </Typography.Text>
+              ) : (
+                exhibit.name
+              )}
             </span>
           </div>
           <div className={styles.metaRow}>
-            <span className={styles.metaKey}>排序</span>
-            <span className={styles.metaVal}>{exhibit.sort_order}</span>
+            <span className={styles.metaKey}>展示模式</span>
+            <span className={styles.metaVal}>
+              {canManage ? (
+                <Select
+                  size="small"
+                  value={exhibit.display_mode}
+                  options={[
+                    { value: 'normal', label: '普通' },
+                    { value: 'simple_fusion', label: '简易融合' },
+                    { value: 'touch_interactive', label: '触摸互动' },
+                  ]}
+                  onChange={(v) => {
+                    if (v === exhibit.display_mode) return;
+                    updateMutation.mutate(
+                      { display_mode: v },
+                      { onSuccess: () => message.success('显示模式已切换') },
+                    );
+                  }}
+                  disabled={updateMutation.isPending}
+                />
+              ) : (
+                <span className={styles.tagMode}>{modeLabel}</span>
+              )}
+            </span>
           </div>
           <div className={styles.metaRow}>
             <span className={styles.metaKey}>
               <TagOutlined /> AI 标签
             </span>
             <span className={styles.metaVal}>
-              {exhibit.enable_ai_tag ? (
+              {canManage ? (
+                <Switch
+                  size="small"
+                  checked={exhibit.enable_ai_tag}
+                  loading={updateMutation.isPending}
+                  onChange={(v) => {
+                    updateMutation.mutate(
+                      { enable_ai_tag: v },
+                      { onSuccess: () => message.success(v ? 'AI 标签已启用' : 'AI 标签已关闭') },
+                    );
+                  }}
+                />
+              ) : exhibit.enable_ai_tag ? (
                 <StatusTag status="active" label="启用" />
               ) : (
                 <StatusTag status="off" label="关闭" />
@@ -267,10 +436,14 @@ export default function ExhibitDetailPage() {
             </span>
           </div>
           <div className={styles.metaRow}>
-            <span className={styles.metaKey}>
-              <AppstoreOutlined /> 名称
+            <span className={styles.metaKey}>排序</span>
+            <span className={styles.metaVal}>
+              <Tooltip title="在展项列表页拖拽行首「⋮⋮」手柄调整顺序">
+                <span style={{ color: 'var(--color-outline)', cursor: 'help' }}>
+                  {exhibit.sort_order}
+                </span>
+              </Tooltip>
             </span>
-            <span className={styles.metaVal}>{exhibit.name}</span>
           </div>
         </div>
       </div>

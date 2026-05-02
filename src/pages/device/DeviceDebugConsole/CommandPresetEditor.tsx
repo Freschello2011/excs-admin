@@ -57,8 +57,32 @@ export default function CommandPresetEditor({
     if (!open) return;
     setName(initial?.name ?? '');
     setDescription(initial?.description ?? '');
-    setCommandCode(initial?.command_code ?? effectiveCommands[0]?.code);
-    setParamsText(initial?.params ? JSON.stringify(initial.params, null, 2) : '');
+
+    // P9-C.2 follow-up：admin 拖选多通道存指令组时，自动选 K32 多通道命令 channels_on
+    // （避免落进单通道 channel_on 模板 → render 失败 → 物理设备无反应）。
+    // 优先级：initial.command_code（编辑现有 preset）> 拖选 N≥1 通道 → channels_on > 第一个 control 命令
+    const dragged = defaultExpectedChannels && defaultExpectedChannels.length > 0;
+    const preferChannelsOn = dragged
+      ? effectiveCommands.find((c) => c.code === 'channels_on')?.code
+      : undefined;
+    const defaultCode =
+      initial?.command_code ?? preferChannelsOn ?? effectiveCommands[0]?.code;
+    setCommandCode(defaultCode);
+
+    // params 自动填：拖选通道情况下，channels_on/off/blink 命令把 channels 数组塞进 params；
+    // 编辑既有 preset 时显示 initial.params。
+    let initialParams: Record<string, unknown> | undefined;
+    if (initial?.params) {
+      initialParams = initial.params;
+    } else if (
+      dragged &&
+      defaultCode &&
+      ['channels_on', 'channels_off', 'channels_blink'].includes(defaultCode)
+    ) {
+      initialParams = { channels: defaultExpectedChannels };
+    }
+    setParamsText(initialParams ? JSON.stringify(initialParams, null, 2) : '');
+
     setExpectedChannelsText(
       (initial?.expected_channels ?? defaultExpectedChannels ?? []).join(','),
     );

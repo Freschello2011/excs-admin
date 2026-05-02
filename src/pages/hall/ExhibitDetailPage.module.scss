@@ -238,6 +238,78 @@
   color: var(--color-on-surface-variant);
 }
 
+// 可点击 KV 卡：hover 抬升 + 右上角箭头 affordance
+.kvClickable {
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+
+  &:hover {
+    transform: translateY(-1px);
+    border-color: rgba(106, 78, 232, 0.35);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.9),
+      0 2px 4px rgba(24, 28, 60, 0.06),
+      0 8px 18px -4px rgba(80, 60, 170, 0.18);
+
+    .kvArrow {
+      opacity: 1;
+      transform: translate(0, 0);
+    }
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+}
+
+.kvArrow {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  font-size: 12px;
+  color: var(--color-primary);
+  opacity: 0;
+  transform: translate(-2px, 2px);
+  transition: opacity 0.15s, transform 0.15s;
+  pointer-events: none;
+}
+
+// 描述就地编辑
+.descEditWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.descActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.descTextHover {
+  cursor: text;
+  border-radius: 6px;
+  padding: 4px 6px;
+  margin: -4px -6px;
+  transition: background 0.15s;
+
+  &:hover {
+    background: rgba(106, 78, 232, 0.06);
+  }
+}
+
+// 展项设置（旧"元数据"）：行内字段控件
+.metaRowEditable {
+  // 让 .metaRow 内 antd 控件靠右、宽度合适
+  .ant-select,
+  .ant-input,
+  .ant-input-number {
+    min-width: 140px;
+  }
+}
+
 // ========== 配对码强调卡（紫蓝渐变） ==========
 .pairCard {
   background: linear-gradient(
@@ -351,6 +423,10 @@
   color: var(--color-on-surface);
   letter-spacing: -0.01em;
   margin: 0 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .descText {

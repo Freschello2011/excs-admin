@@ -22,20 +22,22 @@ import { commandPresetApi, type CommandPreset } from '@/api/commandPreset';
 import { deviceCommandApi } from '@/api/deviceCommand';
 import { deviceV2Api } from '@/api/deviceConnector';
 import { hallApi } from '@/api/hall';
+import { startEventStream, type SSEClient } from '@/api/diag';
+import type { DebugEvent, DeviceCommand as DeviceCommandView } from '@/types/deviceConnector';
 import ChannelMatrix, { type MatrixVariant } from './ChannelMatrix';
 import CascadeSelector from './CascadeSelector';
 import ChannelLabelPopover from './ChannelLabelPopover';
 import CommandPresetEditor from './CommandPresetEditor';
 import CommandPresetList from './CommandPresetList';
-import { verifyPreset, type PresetVerifyResult } from './state';
+import { fromRetainedState, verifyPreset, type PresetVerifyResult } from './state';
 import RawStream from './RawStream';
 import ResponseParser from './ResponseParser';
-import DangerConfirm from '@/components/common/DangerConfirm';
+import InlineCommandsTab from './InlineCommandsTab';
 import styles from './DeviceDebugConsole.module.scss';
 
 const { Text } = Typography;
 
-type TabKey = 'matrix' | 'presets' | 'raw' | 'parser';
+type TabKey = 'matrix' | 'commands' | 'presets' | 'raw' | 'parser';
 
 export default function DeviceDebugConsolePage() {
   const { deviceId: deviceIdStr } = useParams<{ deviceId: string }>();
@@ -45,6 +47,9 @@ export default function DeviceDebugConsolePage() {
   const queryClient = useQueryClient();
 
   const [activeTab, setActiveTab] = useState<TabKey>('matrix');
+  const [inlineCmdCount, setInlineCmdCount] = useState<number>(0);
+  // bundle 加载后，raw_transport 设备默认落到「命令清单」tab（无通道矩阵）
+  const [didDefaultTab, setDidDefaultTab] = useState(false);
   const [selectedIndexes, setSelectedIndexes] = useState<Set<number>>(new Set());
   const [labelPopoverIndexes, setLabelPopoverIndexes] = useState<number[] | null>(null);
   const [presetEditor, setPresetEditor] = useState<{
@@ -76,6 +81,70 @@ export default function DeviceDebugConsolePage() {
     enabled: deviceId > 0,
     refetchInterval: 5000,
   });
+
+  // P9-B 前端补齐：tab bar 右侧统计（最近响应平均 ms / 控制丢包率 60s 滑窗）。
+  // 复用 RawStream 同一份 SSE 形态——这里独立订阅一份只用于算 stats，不渲染 events。
+  // 简单实现：保存最近 60s 的 outbound / inbound 序列 + 最近 10 个带 latency_ms 的 inbound。
+  const exhibitIdForSse = bundle?.device?.exhibit_id ?? 0;
+  const hallIdForSse = bundle?.device?.hall_id ?? 0;
+  const [statsAvgMs, setStatsAvgMs] = useState<number | null>(null);
+  const [statsDropRate, setStatsDropRate] = useState<number>(0);
+  const recentLatenciesRef = useRef<number[]>([]);
+  const windowEventsRef = useRef<{ ts: number; kind: 'out' | 'in' }[]>([]);
+  const sseStatsRef = useRef<SSEClient | null>(null);
+
+  useEffect(() => {
+    if (hallIdForSse <= 0 || exhibitIdForSse <= 0 || deviceId <= 0) return;
+    const trim = () => {
+      const cutoff = Date.now() - 60_000;
+      while (windowEventsRef.current.length > 0 && windowEventsRef.current[0].ts < cutoff) {
+        windowEventsRef.current.shift();
+      }
+    };
+    const recompute = () => {
+      const lat = recentLatenciesRef.current;
+      setStatsAvgMs(
+        lat.length > 0 ? Math.round(lat.reduce((a, b) => a + b, 0) / lat.length) : null,
+      );
+      const win = windowEventsRef.current;
+      const sent = win.filter((e) => e.kind === 'out').length;
+      const recv = win.filter((e) => e.kind === 'in').length;
+      const dropped = Math.max(0, sent - recv);
+      setStatsDropRate(sent > 0 ? Math.round((dropped / sent) * 100) : 0);
+    };
+    sseStatsRef.current = startEventStream({
+      hallId: hallIdForSse,
+      exhibitId: exhibitIdForSse,
+      onEvent: (e: DebugEvent) => {
+        if (e.device_id != null && e.device_id !== deviceId) return;
+        const now = Date.now();
+        if (e.kind === 'outbound') {
+          windowEventsRef.current.push({ ts: now, kind: 'out' });
+        } else if (e.kind === 'inbound') {
+          windowEventsRef.current.push({ ts: now, kind: 'in' });
+          if (typeof e.latency_ms === 'number' && e.latency_ms > 0) {
+            recentLatenciesRef.current.push(e.latency_ms);
+            if (recentLatenciesRef.current.length > 10) {
+              recentLatenciesRef.current.shift();
+            }
+          }
+        } else {
+          return;
+        }
+        trim();
+        recompute();
+      },
+    });
+    const tick = setInterval(() => {
+      trim();
+      recompute();
+    }, 5000);
+    return () => {
+      sseStatsRef.current?.close();
+      sseStatsRef.current = null;
+      clearInterval(tick);
+    };
+  }, [hallIdForSse, exhibitIdForSse, deviceId]);
 
   // Variant 推断：preset.transport_kind = http → smyoo 风格；其他默认 K32 风格
   const variant: MatrixVariant = useMemo(() => {
@@ -149,6 +218,17 @@ export default function DeviceDebugConsolePage() {
     },
   });
 
+  // ADR-0017 P-C：raw_transport 设备首次 bundle 加载后默认落到「命令清单」tab
+  // （无通道矩阵；admin 进调试台主要就是为了改命令）。
+  useEffect(() => {
+    if (didDefaultTab) return;
+    if (!bundle) return;
+    if (bundle.device.connector_kind === 'raw_transport' && activeTab === 'matrix') {
+      setActiveTab('commands');
+    }
+    setDidDefaultTab(true);
+  }, [bundle, didDefaultTab, activeTab]);
+
   // 监听 retained 变化，跑 verifyPreset 对比
   useEffect(() => {
     const pending = pendingVerifyRef.current;
@@ -187,15 +267,26 @@ export default function DeviceDebugConsolePage() {
   const groupSuggestions = Array.from(
     new Set(channelMap.map((e) => e.group).filter((g): g is string => !!g)),
   );
-  const onlineCount = (() => {
-    const states = retainedState
-      ? (retainedState as { fields?: { channels?: string } }).fields?.channels
+  // command_code → yaml `request` 模板，给 CommandPresetList mono 行 render raw bytes 预览用
+  const commandRequestByCode: Record<string, string> = {};
+  for (const c of bundle.effective_commands ?? []) {
+    if (c.code && c.request) commandRequestByCode[c.code] = c.request;
+  }
+  const channelsRaw = (() => {
+    const fields = retainedState
+      ? (retainedState as { fields?: { channels?: string } }).fields
       : undefined;
-    if (typeof states === 'string') {
-      return states.split('').filter((c) => c === 'A' || c === 'a').length;
-    }
-    return 0;
+    return typeof fields?.channels === 'string' ? fields.channels : '';
   })();
+  // PRD 附录 G.5：复用 fromRetainedState 统一计 onlineCount / unknownCount，
+  // 同时支持 K32 字符串（"AABB..."）+ 闪优 poweron 位图（int）+ 通用数组三种形式。
+  // 旧版只解析 K32 字符串 → 闪优设备 onlineCount 永远 0、unknownCount=total，与矩阵实际渲染脱节。
+  const channelStates = fromRetainedState(
+    retainedState as Record<string, unknown> | null,
+    total,
+  );
+  const onlineCount = channelStates.filter((s) => s === 'on').length;
+  const unknownCount = channelStates.filter((s) => s === 'unknown').length;
 
   const handleClose = () => {
     if (window.history.length > 1) {
@@ -206,18 +297,29 @@ export default function DeviceDebugConsolePage() {
   };
 
   // ─── Cell action handlers ───
+  // P9-C.2 follow-up（PRD 附录 D.10）：单格 / 全开 / 全关 / 批量统一走 channels_on/off/blink，
+  // server 端用 K32 yaml `<channels_fold>` token 折成单条 ":::DMSZ1-32A." 之类的 raw 命令；
+  // 不再循环 N 次 channel_on（cmd-ack 串行 + 串口阻塞会卡）。
   const handleCellClick = async (index: number, currentState: 'on' | 'off' | 'unknown') => {
-    const next = currentState === 'on' ? 'channel_off' : 'channel_on';
+    const next = currentState === 'on' ? 'channels_off' : 'channels_on';
     try {
-      await deviceCommandApi.control({
+      const res = await deviceCommandApi.control({
         device_id: deviceId,
         command: next,
         params: { channels: [index] },
       });
-      // 触发后 5s 内 refetch retained
+      // 后端 cloud-dispatch 路径返 status=executed；MQTT 路径返 status=pending/sent。
+      // status=failed 时把错误显式抛出（cloud-dispatch / cmd-ack 任一阶段失败都用同一字段）。
+      if (res?.status === 'failed') {
+        message.error(`通道 ${index} 控制失败（status=failed）`);
+        return;
+      }
+      message.success(`通道 ${index} ${next === 'channels_on' ? '开' : '关'} 已发送`);
+      // cloud-dispatch 在闪优 setmultichannels 落到设备后约 1.5s 自动触发 get_status 回灌 retained；
+      // 这里 2.5s 后 invalidate 让 admin 看到通道翻色（多 1s 余量给闪优 4G 抖动）。
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ['device-state', deviceId] });
-      }, 800);
+      }, 2500);
     } catch (err) {
       message.error(`通道 ${index} 控制失败：${err instanceof Error ? err.message : String(err)}`);
     }
@@ -240,16 +342,24 @@ export default function DeviceDebugConsolePage() {
       });
       return;
     }
-    const cmd = action === 'on' ? 'channel_on' : action === 'off' ? 'channel_off' : 'channel_blink';
+    const cmd =
+      action === 'on' ? 'channels_on' : action === 'off' ? 'channels_off' : 'channels_blink';
     try {
-      await deviceCommandApi.control({
+      const res = await deviceCommandApi.control({
         device_id: deviceId,
         command: cmd,
         params: { channels: indexes },
       });
+      if (res?.status === 'failed') {
+        message.error(`批量控制失败（status=failed）`);
+        return;
+      }
+      message.success(
+        `已发送 ${indexes.length} 路 ${action === 'on' ? '开' : action === 'off' ? '关' : '闪烁'}`,
+      );
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ['device-state', deviceId] });
-      }, 800);
+      }, 2500);
     } catch (err) {
       message.error(`批量控制失败：${err instanceof Error ? err.message : String(err)}`);
     }
@@ -257,12 +367,18 @@ export default function DeviceDebugConsolePage() {
 
   const handlePresetTrigger = async (p: CommandPreset) => {
     try {
-      await deviceCommandApi.control({
+      const res = await deviceCommandApi.control({
         device_id: deviceId,
         command: p.command_code,
         params: p.params ?? null,
       });
-      message.info(`已触发 ${p.name}，等下一帧 retained 验证…`);
+      if (res?.status === 'failed') {
+        message.error(
+          `触发 ${p.name} 失败（status=failed）—— 检查 command_code / params 是否匹配 device 的 effective_commands`,
+        );
+        return;
+      }
+      message.success(`已触发 ${p.name}，等下一帧 retained 验证…`);
       pendingVerifyRef.current = { name: p.name, preset: p };
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ['device-state', deviceId] });
@@ -279,29 +395,46 @@ export default function DeviceDebugConsolePage() {
   const exhibitId = device.exhibit_id ?? 0;
 
   // ─── tabs ───
-  const tabs: { key: TabKey; label: React.ReactNode }[] = [
-    {
+  const isRawTransport = device.connector_kind === 'raw_transport';
+  const inlineCommands = (device.inline_commands ?? []) as DeviceCommandView[];
+  const tabs: { key: TabKey; label: React.ReactNode }[] = [];
+  if (!isRawTransport) {
+    // 通道矩阵 tab：raw_transport 没有"通道"概念，隐去
+    tabs.push({
       key: 'matrix',
       label: (
         <>
           🔲 通道矩阵 <span className={styles.tabBadge}>{onlineCount}/{total}</span>
         </>
       ),
-    },
-    {
-      key: 'presets',
+    });
+  }
+  if (isRawTransport) {
+    // ADR-0017 P-C：仅 raw_transport 显示「命令清单」tab
+    tabs.push({
+      key: 'commands',
       label: (
         <>
-          📚 指令组 <span className={styles.tabBadge}>{presets.length}</span>
+          📝 命令清单{' '}
+          <span className={styles.tabBadge}>{inlineCmdCount || inlineCommands.length}</span>
         </>
       ),
-    },
-    {
-      key: 'raw',
-      label: variant === 'smyoo16' ? '⌨️ HTTP 终端' : '⌨️ Raw 终端',
-    },
-    { key: 'parser', label: '🔍 响应解析' },
-  ];
+    });
+  }
+  tabs.push({
+    key: 'presets',
+    label: (
+      <>
+        📚 指令组 <span className={styles.tabBadge}>{presets.length}</span>
+      </>
+    ),
+  });
+  tabs.push({
+    key: 'raw',
+    label: variant === 'smyoo16' ? '⌨️ HTTP 终端' : '⌨️ Raw 终端',
+  });
+  tabs.push({ key: 'parser', label: '🔍 响应解析' });
+
 
   return (
     <div className={styles.shell}>
@@ -326,8 +459,14 @@ export default function DeviceDebugConsolePage() {
         </span>
         <Tag>{device.connector_kind || 'v1'}</Tag>
         <span className={styles.flexSpacer} />
-        <Tooltip title="打印设备贴纸 — 后续 P9-D">
-          <Button size="small" icon={<PrinterOutlined />} disabled>
+        <Tooltip title="打印设备贴纸（A6 不干胶 · 含 QR 扫码跳本调试台）">
+          <Button
+            size="small"
+            icon={<PrinterOutlined />}
+            onClick={() =>
+              window.open(`/devices/${deviceId}/sticker?print=1`, '_blank')
+            }
+          >
             打印贴纸
           </Button>
         </Tooltip>
@@ -355,8 +494,29 @@ export default function DeviceDebugConsolePage() {
           </div>
         ))}
         <span className={styles.flexSpacer} />
+        {/* P9-B 前端补齐：右侧统计条（mockup 05 line 213 / mockup 06 line 106）。
+            K32 风格："最近响应：N ms · 丢包率 X%"
+            闪优风格："最近响应：N ms · ticket: 已缓存"（admin 看不到具体 TTL，由 plugin sessionManager 24h 缓存） */}
         <span style={{ fontSize: 11.5, color: 'var(--ant-color-text-secondary)', paddingRight: 12 }}>
-          base={bundle.base_channel || '?'} · cascade={bundle.cascade_units} · max={total}
+          {statsAvgMs != null ? (
+            <>
+              最近响应：{statsAvgMs} ms{' '}
+              {variant === 'smyoo16' ? (
+                <Tooltip title="BpeSessionId 由 SmyooPlugin 内部缓存（24h TTL）；admin 无 token 可见，可在右侧凭据卡 [立即刷新 ticket] 强制重登。">
+                  <span>· ticket: 已缓存</span>
+                </Tooltip>
+              ) : (
+                <>· 丢包率 {statsDropRate}%</>
+              )}
+              <span style={{ marginLeft: 12, color: 'var(--ant-color-text-tertiary)' }}>
+                base={bundle.base_channel || '?'} · max={total}
+              </span>
+            </>
+          ) : (
+            <span style={{ color: 'var(--ant-color-text-tertiary)' }}>
+              base={bundle.base_channel || '?'} · cascade={bundle.cascade_units} · max={total}
+            </span>
+          )}
         </span>
       </div>
 
@@ -409,20 +569,19 @@ export default function DeviceDebugConsolePage() {
                   >
                     ▶ 全开
                   </Button>
-                  <DangerConfirm
-                    title="确定全关所有通道？"
-                    description={`将向 ${total} 个通道发送关闭命令`}
-                    onConfirm={() =>
+                  {/* 全关：直接执行不弹确认（admin 高频操作；误点最坏后果是设备关，二次点 [全开] 即可恢复）。 */}
+                  <Button
+                    size="small"
+                    danger
+                    onClick={() =>
                       handleCellAction(
                         'off',
                         Array.from({ length: total }, (_, i) => i + 1),
                       )
                     }
                   >
-                    <Button size="small" danger>
-                      ■ 全关
-                    </Button>
-                  </DangerConfirm>
+                    ■ 全关
+                  </Button>
                 </div>
               )}
 
@@ -492,10 +651,19 @@ export default function DeviceDebugConsolePage() {
             </>
           )}
 
+          {activeTab === 'commands' && isRawTransport && (
+            <InlineCommandsTab
+              deviceId={deviceId}
+              initial={inlineCommands}
+              onCountChange={setInlineCmdCount}
+            />
+          )}
+
           {activeTab === 'presets' && (
             <CommandPresetList
               presets={presets}
               verifyResults={verifyResults}
+              commandRequestByCode={commandRequestByCode}
               total={total}
               retainedState={retainedState ?? null}
               onTrigger={handlePresetTrigger}
@@ -536,27 +704,60 @@ export default function DeviceDebugConsolePage() {
         <div className={styles.sidePanel}>
           <div className={styles.sideCard}>
             <div className={styles.sideCardTitle}>
-              <span>当前状态</span>
-              <small>{retainedState ? 'retained' : '未收到'}</small>
+              <span>{isRawTransport ? '设备信息' : '当前状态'}</span>
+              <small>{isRawTransport ? device.connector_kind : retainedState ? 'retained' : '未收到'}</small>
             </div>
-            <div className={styles.statRow}>
-              <span>开通道</span>
-              <strong>
-                {onlineCount} / {total}
-              </strong>
-            </div>
-            <div className={styles.statRow}>
-              <span>cascade_units</span>
-              <strong>{bundle.cascade_units}</strong>
-            </div>
-            <div className={styles.statRow}>
-              <span>max_channel</span>
-              <strong>{total}</strong>
-            </div>
-            <div className={styles.statRow}>
-              <span>connector</span>
-              <strong style={{ fontSize: 11 }}>{device.connector_kind || 'v1'}</strong>
-            </div>
+            {isRawTransport ? (
+              <RawTransportSideStats
+                device={device}
+                inlineCommands={inlineCommands}
+              />
+            ) : (
+              <>
+                <div className={styles.statRow}>
+                  <span>开通道</span>
+                  <strong>
+                    {onlineCount} / {total}
+                  </strong>
+                </div>
+                <div className={styles.statRow}>
+                  <span>未知通道</span>
+                  <strong>{unknownCount}</strong>
+                </div>
+                <div className={styles.statRow}>
+                  <span>cascade_units</span>
+                  <strong>{bundle.cascade_units}</strong>
+                </div>
+                <div className={styles.statRow}>
+                  <span>max_channel</span>
+                  <strong>{total}</strong>
+                </div>
+                <div className={styles.statRow}>
+                  <span>connector</span>
+                  <strong style={{ fontSize: 11 }}>{device.connector_kind || 'v1'}</strong>
+                </div>
+              </>
+            )}
+            {!isRawTransport && channelsRaw && (
+              <>
+                <hr style={{ margin: '8px 0', border: 'none', borderTop: '1px dashed var(--ant-color-border)' }} />
+                <div style={{ fontSize: 11.5, color: 'var(--ant-color-text-secondary)', marginBottom: 4 }}>
+                  最新 GET 返回（K32Buf）
+                </div>
+                <code style={{
+                  fontFamily: 'monospace',
+                  fontSize: 11,
+                  wordBreak: 'break-all',
+                  color: 'var(--ant-color-text)',
+                  display: 'block',
+                  background: 'var(--ant-color-fill-quaternary)',
+                  padding: '4px 6px',
+                  borderRadius: 4,
+                }}>
+                  K32Buf={channelsRaw}
+                </code>
+              </>
+            )}
           </div>
 
           {/* 闪优凭据卡 */}
@@ -570,6 +771,7 @@ export default function DeviceDebugConsolePage() {
             <CommandPresetList
               presets={presets}
               verifyResults={verifyResults}
+              commandRequestByCode={commandRequestByCode}
               total={total}
               retainedState={retainedState ?? null}
               onTrigger={handlePresetTrigger}
@@ -580,6 +782,17 @@ export default function DeviceDebugConsolePage() {
               onAdd={() => setPresetEditor({ open: true, initial: null, editingExisting: false })}
             />
           </div>
+
+          {/* sidePanel 常驻 Raw 流卡片（mockup 05 行 519-541），切到任意 tab 都能看到设备实时流 */}
+          {exhibitId > 0 && (
+            <RawStream
+              hallId={device.hall_id}
+              exhibitId={exhibitId}
+              deviceId={deviceId}
+              protocolStyle={variant === 'smyoo16' ? 'http' : 'raw'}
+              variant="mini"
+            />
+          )}
 
           <div className={styles.callout}>
             💡 <strong>实施小贴士</strong>：未标注的灯亮起后，
@@ -659,5 +872,80 @@ function SmyooCredsCard({ deviceId }: { deviceId: number }) {
         🔄 立即刷新 ticket
       </Button>
     </div>
+  );
+}
+
+/** ADR-0017 P-C：raw_transport 设备右侧 sidebar 信息卡（替代 K32 的"通道矩阵"统计）。
+ *  status=unknown 时显示"无 query 命令，状态走兜底"提示（mockup 10 Scene 2 右侧）。 */
+function RawTransportSideStats({
+  device,
+  inlineCommands,
+}: {
+  device: DeviceDebugBundle['device'];
+  inlineCommands: DeviceCommandView[];
+}) {
+  const cfg = device.connection_config ?? {};
+  const transport = device.connector_ref?.transport;
+  const host = (cfg as { host?: string }).host;
+  const port = (cfg as { port?: number }).port;
+  const com = (cfg as { com?: string }).com;
+  const localIface = (cfg as { local_interface?: string }).local_interface;
+  const broadcast = (cfg as { broadcast?: boolean }).broadcast;
+  const controlCount = inlineCommands.filter((c) => (c.kind ?? 'control') === 'control').length;
+  const queryCount = inlineCommands.filter((c) => c.kind === 'query').length;
+  return (
+    <>
+      <div className={styles.statRow}>
+        <span>connector</span>
+        <strong>raw_transport · {transport ?? '?'}</strong>
+      </div>
+      {(host || port) && (
+        <div className={styles.statRow}>
+          <span>目标</span>
+          <strong style={{ fontSize: 11 }}>
+            {host ?? '?'}
+            {port ? `:${port}` : ''}
+          </strong>
+        </div>
+      )}
+      {com && (
+        <div className={styles.statRow}>
+          <span>串口</span>
+          <strong style={{ fontSize: 11 }}>{com}</strong>
+        </div>
+      )}
+      {(transport === 'udp' || transport === 'tcp') && (
+        <>
+          <div className={styles.statRow}>
+            <span>本地网卡</span>
+            <strong style={{ fontSize: 11 }}>{localIface || 'OS 路由'}</strong>
+          </div>
+          {transport === 'udp' && (
+            <div className={styles.statRow}>
+              <span>广播</span>
+              <strong>{broadcast ? '✓ 启用' : '—'}</strong>
+            </div>
+          )}
+        </>
+      )}
+      <div className={styles.statRow}>
+        <span>命令数</span>
+        <strong>
+          {controlCount} control / {queryCount} query
+        </strong>
+      </div>
+      {device.status === 'unknown' && queryCount === 0 && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginTop: 10 }}
+          message={
+            <span style={{ fontSize: 11.5 }}>
+              无 query 命令，状态走兜底（&gt;5 分钟无操作 → unknown）
+            </span>
+          }
+        />
+      )}
+    </>
   );
 }

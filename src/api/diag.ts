@@ -114,6 +114,25 @@ export const diagApi = {
     request.post<ApiEnvelope<ConflictReport>>(base(exhibitId, 'check_conflict'), body, {
       params: { hall_id: hallId },
     }),
+
+  /** ADR-0017 D4：取展厅 App 本机网卡列表（admin 选 UDP/TCP local_interface 用） */
+  networkInterfaces: (hallId: number, exhibitId: number) =>
+    request.get<
+      ApiEnvelope<{
+        interfaces: Array<{
+          name: string;
+          description?: string;
+          mac?: string;
+          type?: string;
+          mtu?: number | null;
+          has_default_gateway?: boolean;
+          ipv4: Array<{ ip: string; prefix_length?: number; broadcast?: string | null }>;
+        }>;
+      }>
+    >(base(exhibitId, 'network/interfaces'), {
+      params: { hall_id: hallId },
+      skipErrorMessage: true,
+    }),
 };
 
 /* ==================== SSE long-connect client ==================== */

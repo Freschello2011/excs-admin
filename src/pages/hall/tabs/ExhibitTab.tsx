@@ -1,13 +1,30 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Card, Table, Button, Modal, Form, Input, InputNumber, Select, Space, Popconfirm } from 'antd';
+import { Card, Table, Button, Modal, Form, Input, InputNumber, Select, Space, Popconfirm, Tooltip } from 'antd';
 import { useMessage } from '@/hooks/useMessage';
 import type { TableColumnsType } from 'antd';
-import { PlusOutlined, ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
+import { PlusOutlined, HolderOutlined } from '@ant-design/icons';
+import {
+  DndContext,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+  sortableKeyboardCoordinates,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
-import type { ExhibitListItem, ExhibitScript } from '@/api/gen/client';
+import type { ExhibitListItem } from '@/api/gen/client';
 
 interface ExhibitTabProps {
   hallId: number;
@@ -16,26 +33,66 @@ interface ExhibitTabProps {
   highlightExhibitId?: number;
 }
 
+/* ─── DragHandle 单独一格的内容；整行可拖（DndContext 把整行包在 useSortable 里） ─── */
+function DragHandle({ id, disabled }: { id: number; disabled: boolean }) {
+  const { listeners, attributes, setActivatorNodeRef } = useSortable({ id });
+  if (disabled) {
+    return <HolderOutlined style={{ color: 'var(--color-outline-variant)', cursor: 'not-allowed' }} />;
+  }
+  return (
+    <Tooltip title="按住拖动调整顺序" mouseEnterDelay={0.5}>
+      <span
+        ref={setActivatorNodeRef}
+        {...listeners}
+        {...attributes}
+        style={{ cursor: 'grab', display: 'inline-flex', padding: 4, color: 'var(--color-outline)' }}
+        aria-label="拖动排序"
+      >
+        <HolderOutlined />
+      </span>
+    </Tooltip>
+  );
+}
+
+/* ─── Sortable Row：把 antd Table 的 <tr> 包起来 ─── */
+function SortableRow({ children, ...props }: React.HTMLAttributes<HTMLTableRowElement> & { 'data-row-key'?: string | number }) {
+  const id = Number(props['data-row-key']);
+  const { setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const style: React.CSSProperties = {
+    ...props.style,
+    transform: CSS.Transform.toString(transform),
+    transition,
+    ...(isDragging
+      ? {
+          background: 'var(--color-primary-container, rgba(106,78,232,0.08))',
+          zIndex: 1,
+          position: 'relative',
+        }
+      : {}),
+  };
+  return (
+    <tr ref={setNodeRef} {...props} style={style}>
+      {children}
+    </tr>
+  );
+}
+
 export default function ExhibitTab({ hallId, canConfig, highlightExhibitId }: ExhibitTabProps) {
   const { message } = useMessage();
   const queryClient = useQueryClient();
   const cardRef = useRef<HTMLDivElement>(null);
 
   const [modalOpen, setModalOpen] = useState(false);
-  const [editingExhibit, setEditingExhibit] = useState<ExhibitListItem | null>(null);
   const [form] = Form.useForm();
   const displayMode = Form.useWatch('display_mode', form);
-
-  const [scriptsModalOpen, setScriptsModalOpen] = useState(false);
-  const [scriptsExhibitId, setScriptsExhibitId] = useState<number | null>(null);
-  const [scriptsExhibitName, setScriptsExhibitName] = useState('');
-  const [scripts, setScripts] = useState<ExhibitScript[]>([]);
 
   const { data: exhibits = [], isLoading } = useQuery({
     queryKey: queryKeys.exhibits(hallId),
     queryFn: () => hallApi.getExhibits(hallId),
     select: (res) => res.data.data,
   });
+
+  const sortedExhibits = [...exhibits].sort((a, b) => a.sort_order - b.sort_order);
 
   const createMutation = useMutation({
     mutationFn: (data: Parameters<typeof hallApi.createExhibit>[1]) =>
@@ -44,16 +101,6 @@ export default function ExhibitTab({ hallId, canConfig, highlightExhibitId }: Ex
       message.success('展项创建成功');
       queryClient.invalidateQueries({ queryKey: queryKeys.exhibits(hallId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.hallDetail(hallId) });
-      closeModal();
-    },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof hallApi.updateExhibit>[2] }) =>
-      hallApi.updateExhibit(hallId, id, data),
-    onSuccess: () => {
-      message.success('展项更新成功');
-      queryClient.invalidateQueries({ queryKey: queryKeys.exhibits(hallId) });
       closeModal();
     },
   });
@@ -67,104 +114,109 @@ export default function ExhibitTab({ hallId, canConfig, highlightExhibitId }: Ex
     },
   });
 
-  const scriptsMutation = useMutation({
-    mutationFn: ({ exhibitId, data }: { exhibitId: number; data: ExhibitScript[] }) =>
-      hallApi.updateExhibitScripts(hallId, exhibitId, data),
+  const reorderMutation = useMutation({
+    mutationFn: (exhibitIds: number[]) => hallApi.reorderExhibits(hallId, exhibitIds),
+    onMutate: async (newIds) => {
+      // 乐观更新：先按目标顺序写本地缓存
+      await queryClient.cancelQueries({ queryKey: queryKeys.exhibits(hallId) });
+      const prev = queryClient.getQueryData(queryKeys.exhibits(hallId));
+      queryClient.setQueryData(queryKeys.exhibits(hallId), (old: unknown) => {
+        if (!old || typeof old !== 'object' || !('data' in old)) return old;
+        const o = old as { data: { data: ExhibitListItem[] } };
+        const map = new Map(o.data.data.map((e) => [e.id, e]));
+        const reordered = newIds
+          .map((id, idx) => {
+            const e = map.get(id);
+            return e ? { ...e, sort_order: (idx + 1) * 10 } : null;
+          })
+          .filter((e): e is ExhibitListItem => e !== null);
+        return { ...o, data: { ...o.data, data: reordered } };
+      });
+      return { prev };
+    },
+    onError: (err, _newIds, context) => {
+      if (context?.prev) {
+        queryClient.setQueryData(queryKeys.exhibits(hallId), context.prev);
+      }
+      message.error('排序保存失败：' + (err instanceof Error ? err.message : '未知错误'));
+    },
     onSuccess: () => {
-      message.success('讲解词更新成功');
+      message.success('排序已保存');
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.exhibits(hallId) });
-      setScriptsModalOpen(false);
     },
   });
 
-  // Sort mutation (update sort_order)
-  const sortMutation = useMutation({
-    mutationFn: ({ id, sort_order }: { id: number; sort_order: number }) =>
-      hallApi.updateExhibit(hallId, id, { sort_order }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.exhibits(hallId) });
-    },
-  });
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = sortedExhibits.findIndex((e) => e.id === Number(active.id));
+    const newIndex = sortedExhibits.findIndex((e) => e.id === Number(over.id));
+    if (oldIndex < 0 || newIndex < 0) return;
+    const next = arrayMove(sortedExhibits, oldIndex, newIndex);
+    reorderMutation.mutate(next.map((e) => e.id));
+  };
 
   const openCreate = () => {
-    setEditingExhibit(null);
     form.resetFields();
     form.setFieldsValue({ display_mode: 'normal', sort_order: (exhibits.length + 1) * 10 });
     setModalOpen(true);
   };
 
-  const openEdit = (record: ExhibitListItem) => {
-    setEditingExhibit(record);
-    form.setFieldsValue({
-      name: record.name,
-      description: record.description,
-      sort_order: record.sort_order,
-      display_mode: record.display_mode,
-    });
-    setModalOpen(true);
-  };
-
   const closeModal = () => {
     setModalOpen(false);
-    setEditingExhibit(null);
     form.resetFields();
   };
 
   const handleSubmit = () => {
     form.validateFields().then((values) => {
-      const data = {
+      createMutation.mutate({
         name: values.name,
         description: values.description || '',
         sort_order: values.sort_order,
         display_mode: values.display_mode,
-        ...(values.display_mode === 'simple_fusion' && values.projector_count ? {
-          simple_fusion_config: {
-            projector_count: values.projector_count,
-            overlap_pixels: values.overlap_pixels || 0,
-          },
-        } : {}),
-      };
-
-      if (editingExhibit) {
-        updateMutation.mutate({ id: editingExhibit.id, data });
-      } else {
-        createMutation.mutate(data);
-      }
+        ...(values.display_mode === 'simple_fusion' && values.projector_count
+          ? {
+              simple_fusion_config: {
+                projector_count: values.projector_count,
+                overlap_pixels: values.overlap_pixels || 0,
+              },
+            }
+          : {}),
+      });
     });
   };
 
-  const openScripts = (record: ExhibitListItem) => {
-    setScriptsExhibitId(record.id);
-    setScriptsExhibitName(record.name);
-    // Initialize with empty scripts if count is 0
-    setScripts(
-      record.script_count > 0
-        ? Array.from({ length: record.script_count }, (_, i) => ({ content: '', sort_order: i + 1 }))
-        : [{ content: '', sort_order: 1 }],
-    );
-    setScriptsModalOpen(true);
-  };
-
-  const handleScriptsSubmit = () => {
-    if (scriptsExhibitId === null) return;
-    const validScripts = scripts.filter((s) => s.content.trim());
-    scriptsMutation.mutate({ exhibitId: scriptsExhibitId, data: validScripts });
-  };
-
-  const moveExhibit = (record: ExhibitListItem, direction: 'up' | 'down') => {
-    const sorted = [...exhibits].sort((a, b) => a.sort_order - b.sort_order);
-    const idx = sorted.findIndex((e) => e.id === record.id);
-    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
-    if (swapIdx < 0 || swapIdx >= sorted.length) return;
-
-    const target = sorted[swapIdx];
-    // Swap sort_order values
-    sortMutation.mutate({ id: record.id, sort_order: target.sort_order });
-    sortMutation.mutate({ id: target.id, sort_order: record.sort_order });
-  };
-
   const columns: TableColumnsType<ExhibitListItem> = [
-    { title: '排序', dataIndex: 'sort_order', width: 70, align: 'center' },
+    ...(canConfig
+      ? [
+          {
+            title: '',
+            key: '_drag',
+            width: 36,
+            align: 'center' as const,
+            render: (_: unknown, record: ExhibitListItem) => (
+              <DragHandle id={record.id} disabled={reorderMutation.isPending} />
+            ),
+          },
+        ]
+      : []),
+    {
+      title: '#',
+      key: '_idx',
+      width: 48,
+      align: 'center',
+      render: (_: unknown, record: ExhibitListItem) => {
+        const idx = sortedExhibits.findIndex((e) => e.id === record.id);
+        return idx + 1;
+      },
+    },
     {
       title: '展项名称',
       dataIndex: 'name',
@@ -172,36 +224,41 @@ export default function ExhibitTab({ hallId, canConfig, highlightExhibitId }: Ex
         <Link to={`/halls/${hallId}/exhibit-management/${record.id}`}>{name}</Link>
       ),
     },
-    { title: '显示模式', dataIndex: 'display_mode', width: 110, render: (v: string) => ({ normal: '普通', simple_fusion: '简易融合', touch_interactive: '触摸互动' }[v] ?? v) },
+    {
+      title: '显示模式',
+      dataIndex: 'display_mode',
+      width: 110,
+      render: (v: string) =>
+        ({ normal: '普通', simple_fusion: '简易融合', touch_interactive: '触摸互动' }[v] ?? v),
+    },
     { title: '设备数', dataIndex: 'device_count', width: 80, align: 'center' },
-    { title: '内容数', dataIndex: 'content_count', width: 80, align: 'center' },
+    { title: '数字内容', dataIndex: 'content_count', width: 90, align: 'center' },
     { title: '讲解词', dataIndex: 'script_count', width: 80, align: 'center' },
     {
       title: 'AI 形象',
       dataIndex: 'has_ai_avatar',
       width: 80,
       align: 'center',
-      render: (v: boolean) => v ? '有' : '-',
+      render: (v: boolean) => (v ? '有' : '-'),
     },
-    ...(canConfig ? [{
-      title: '操作',
-      width: 220,
-      render: (_: unknown, record: ExhibitListItem) => (
-        <Space size="small">
-          <Button type="link" size="small" icon={<ArrowUpOutlined />} onClick={() => moveExhibit(record, 'up')} />
-          <Button type="link" size="small" icon={<ArrowDownOutlined />} onClick={() => moveExhibit(record, 'down')} />
-          <a onClick={() => openScripts(record)}>讲解词</a>
-          <a onClick={() => openEdit(record)}>编辑</a>
-          <Popconfirm
-            title="确定删除此展项？"
-            description="需要展项下无绑定的内容、设备和场景引用"
-            onConfirm={() => deleteMutation.mutate(record.id)}
-          >
-            <a style={{ color: 'var(--ant-color-error)' }}>删除</a>
-          </Popconfirm>
-        </Space>
-      ),
-    }] : []),
+    ...(canConfig
+      ? [
+          {
+            title: '操作',
+            key: '_ops',
+            width: 80,
+            render: (_: unknown, record: ExhibitListItem) => (
+              <Popconfirm
+                title="确定删除此展项？"
+                description="需要展项下无绑定的内容、设备和场景引用"
+                onConfirm={() => deleteMutation.mutate(record.id)}
+              >
+                <a style={{ color: 'var(--ant-color-error)' }}>删除</a>
+              </Popconfirm>
+            ),
+          },
+        ]
+      : []),
   ];
 
   useEffect(() => {
@@ -225,25 +282,49 @@ export default function ExhibitTab({ hallId, canConfig, highlightExhibitId }: Ex
             ) : undefined
           }
         >
-          <Table<ExhibitListItem>
-            columns={columns}
-            dataSource={[...exhibits].sort((a, b) => a.sort_order - b.sort_order)}
-            loading={isLoading}
-            pagination={false}
-            rowKey="id"
-            size="middle"
-            rowClassName={(record) => (record.id === highlightExhibitId ? 'excs-row-highlight' : '')}
-          />
+          {canConfig ? (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={sortedExhibits.map((e) => e.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <Table<ExhibitListItem>
+                  columns={columns}
+                  dataSource={sortedExhibits}
+                  loading={isLoading}
+                  pagination={false}
+                  rowKey="id"
+                  size="middle"
+                  rowClassName={(record) => (record.id === highlightExhibitId ? 'excs-row-highlight' : '')}
+                  components={{ body: { row: SortableRow } }}
+                />
+              </SortableContext>
+            </DndContext>
+          ) : (
+            <Table<ExhibitListItem>
+              columns={columns}
+              dataSource={sortedExhibits}
+              loading={isLoading}
+              pagination={false}
+              rowKey="id"
+              size="middle"
+              rowClassName={(record) => (record.id === highlightExhibitId ? 'excs-row-highlight' : '')}
+            />
+          )}
         </Card>
       </div>
 
-      {/* Create / Edit Modal */}
+      {/* Create Modal（编辑能力已迁移到详情页就地编辑） */}
       <Modal
-        title={editingExhibit ? '编辑展项' : '新建展项'}
+        title="新建展项"
         open={modalOpen}
         onOk={handleSubmit}
         onCancel={closeModal}
-        confirmLoading={createMutation.isPending || updateMutation.isPending}
+        confirmLoading={createMutation.isPending}
         destroyOnClose
       >
         <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
@@ -278,55 +359,6 @@ export default function ExhibitTab({ hallId, canConfig, highlightExhibitId }: Ex
             </Space>
           )}
         </Form>
-      </Modal>
-
-      {/* Scripts Modal */}
-      <Modal
-        title={`讲解词 - ${scriptsExhibitName}`}
-        open={scriptsModalOpen}
-        onOk={handleScriptsSubmit}
-        onCancel={() => setScriptsModalOpen(false)}
-        confirmLoading={scriptsMutation.isPending}
-        width={640}
-        destroyOnClose
-      >
-        <div style={{ marginTop: 16 }}>
-          {scripts.map((script, idx) => (
-            <div key={idx} style={{ marginBottom: 12 }}>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                <span style={{ minWidth: 28, lineHeight: '32px', color: 'var(--color-outline)' }}>
-                  {idx + 1}.
-                </span>
-                <Input.TextArea
-                  rows={3}
-                  value={script.content}
-                  onChange={(e) => {
-                    const next = [...scripts];
-                    next[idx] = { ...next[idx], content: e.target.value };
-                    setScripts(next);
-                  }}
-                  placeholder="输入讲解内容..."
-                />
-                <Button
-                  type="text"
-                  danger
-                  size="small"
-                  onClick={() => setScripts(scripts.filter((_, i) => i !== idx))}
-                  disabled={scripts.length <= 1}
-                >
-                  删除
-                </Button>
-              </div>
-            </div>
-          ))}
-          <Button
-            type="dashed"
-            block
-            onClick={() => setScripts([...scripts, { content: '', sort_order: scripts.length + 1 }])}
-          >
-            + 添加段落
-          </Button>
-        </div>
       </Modal>
     </>
   );

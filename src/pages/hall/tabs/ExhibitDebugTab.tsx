@@ -41,6 +41,7 @@ import { useMessage } from '@/hooks/useMessage';
 import { hallApi } from '@/api/hall';
 import { diagApi, startEventStream, type SSEClient } from '@/api/diag';
 import { queryKeys } from '@/api/queryKeys';
+import DiagChannelBanner from '@/components/DiagChannelBanner';
 import type {
   DebugEvent,
   EventKind,
@@ -76,7 +77,7 @@ interface DebugTabProps {
 }
 
 export default function ExhibitDebugTab({ hallId, exhibitId, defaultDeviceId }: DebugTabProps) {
-  const { message } = useMessage();
+  const { message, notification } = useMessage();
   const queryClient = useQueryClient();
   const [events, setEvents] = useState<DebugEvent[]>([]);
   const [paused, setPaused] = useState(false);
@@ -85,6 +86,8 @@ export default function ExhibitDebugTab({ hallId, exhibitId, defaultDeviceId }: 
   const [enabledKinds, setEnabledKinds] = useState<Set<EventKind>>(new Set(ALL_KINDS));
   const [deviceFilter, setDeviceFilter] = useState<number | undefined>(defaultDeviceId);
   const [reconnectBanner, setReconnectBanner] = useState(false);
+  // DRC-Phase 5：累计 SSE 重连失败次数；onOpen 时清零，≥5 触发 state 4 红 banner
+  const [reconnectFailCount, setReconnectFailCount] = useState(0);
   const [recordingDialogOpen, setRecordingDialogOpen] = useState(false);
   const [injectDialogOpen, setInjectDialogOpen] = useState(false);
   const [missForNewPattern, setMissForNewPattern] = useState<DebugEvent | null>(null);
@@ -118,8 +121,14 @@ export default function ExhibitDebugTab({ hallId, exhibitId, defaultDeviceId }: 
     sseRef.current = startEventStream({
       hallId,
       exhibitId,
-      onOpen: () => setReconnectBanner(false),
-      onReconnect: () => setReconnectBanner(true),
+      onOpen: () => {
+        setReconnectBanner(false);
+        setReconnectFailCount(0);
+      },
+      onReconnect: () => {
+        setReconnectBanner(true);
+        setReconnectFailCount((n) => n + 1);
+      },
       onEvent: (e) => {
         setEvents((prev) => {
           const next = [...prev, e];
@@ -202,10 +211,32 @@ export default function ExhibitDebugTab({ hallId, exhibitId, defaultDeviceId }: 
       message.success('已模拟接收一条数据');
       setInjectDialogOpen(false);
     },
+    // DRC-Phase 5：单次请求超时 → toast state 3「展厅电脑可能正忙着」
+    onError: (err: Error & { __diagKind?: string }) => {
+      if (err.__diagKind === 'invocation_timeout') {
+        notification.warning({
+          message: '刚才那次操作没收到回应',
+          description: '「模拟收一笔数据」等了 10 秒还没回。展厅电脑可能正忙着，可以再试一次。',
+        });
+      }
+    },
   });
 
   return (
     <div>
+      <DiagChannelBanner
+        hallId={hallId}
+        exhibitId={exhibitId}
+        sseReconnectCount={reconnectFailCount}
+        onForceReconnect={() => {
+          setReconnectFailCount(0);
+          setPaused(true);
+          setTimeout(() => setPaused(false), 0);
+        }}
+        onRetry={() =>
+          queryClient.invalidateQueries({ queryKey: ['diag', 'health', hallId, exhibitId] })
+        }
+      />
       {reconnectBanner && (
         <Alert
           type="success"

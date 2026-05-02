@@ -44,10 +44,13 @@ export function fromRetainedState(
     return out;
   }
 
-  const poweron = fields.poweron;
-  if (typeof poweron === 'number' && Number.isFinite(poweron)) {
+  // 闪优 4G preset：poll 命令 get_status 走 setmultichannels regex 抓出位图，
+  // 在 response_schema.fields 里 name="poweron_bitmap"。也兼容 plugin manifest 直拼
+  // fields.poweron / fields.poweron_bitmap 两种命名（前期写起来不一致，统一扁平接受）。
+  const poweronRaw = fields.poweron_bitmap ?? fields.poweron;
+  if (typeof poweronRaw === 'number' && Number.isFinite(poweronRaw)) {
     for (let i = 0; i < total; i++) {
-      out[i] = (poweron >> i) & 1 ? 'on' : 'off';
+      out[i] = (poweronRaw >> i) & 1 ? 'on' : 'off';
     }
     return out;
   }

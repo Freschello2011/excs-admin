@@ -25,6 +25,13 @@ const DeviceListPage = lazy(() => import('@/pages/device/DeviceListPage'));
 const DeviceDebugConsolePage = lazy(
   () => import('@/pages/device/DeviceDebugConsole/DeviceDebugConsolePage'),
 );
+// device-mgmt-v2 P9-F：设备贴纸打印（独立全屏 + @page A6 / A4）
+const DeviceStickerPage = lazy(
+  () => import('@/pages/device/DeviceSticker/DeviceStickerPage'),
+);
+const DeviceStickerBatchPage = lazy(
+  () => import('@/pages/device/DeviceSticker/DeviceStickerBatchPage'),
+);
 const AiAvatarListPage = lazy(() => import('@/pages/ai/AiAvatarListPage'));
 const AiAvatarLibraryPage = lazy(() => import('@/pages/ai/AiAvatarLibraryPage'));
 // device-mgmt-v2 P6：4 tab 合并页（预置型号 / 协议库 / 插件 / 触发器模板占位）
@@ -150,6 +157,34 @@ export const router = createBrowserRouter([
         <ErrorBoundary>
           <SuspenseWrap>
             <DeviceDebugConsolePage />
+          </SuspenseWrap>
+        </ErrorBoundary>
+      </RequireAuth>
+    ),
+  },
+
+  /* ─── device-mgmt-v2 P9-F：设备贴纸打印（独立全屏，不进 AdminLayout）
+     - /devices/:deviceId/sticker?print=1 单张 A6
+     - /devices/sticker/batch?ids=12,13,29 多张 A6 双拼成 A4 横向 */
+  {
+    path: '/devices/sticker/batch',
+    element: (
+      <RequireAuth>
+        <ErrorBoundary>
+          <SuspenseWrap>
+            <DeviceStickerBatchPage />
+          </SuspenseWrap>
+        </ErrorBoundary>
+      </RequireAuth>
+    ),
+  },
+  {
+    path: '/devices/:deviceId/sticker',
+    element: (
+      <RequireAuth>
+        <ErrorBoundary>
+          <SuspenseWrap>
+            <DeviceStickerPage />
           </SuspenseWrap>
         </ErrorBoundary>
       </RequireAuth>

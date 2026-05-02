@@ -1083,6 +1083,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/halls/{hallId}/operation-mode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hallId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * 切换展厅运营模式
+         * @description 切到 production 时必须 X-Action-Reason 头（≥ 5 字）；
+         *     其余转移不要求 reason。触发 retained MQTT excs/{hall_id}/state 重发。
+         */
+        patch: operations["changeOperationMode"];
+        trace?: never;
+    };
     "/halls/{hallId}/exhibits": {
         parameters: {
             query?: never;
@@ -1097,6 +1120,25 @@ export interface paths {
         put?: never;
         /** 创建展项 */
         post: operations["createExhibit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/halls/{hallId}/exhibits/reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hallId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 按数组顺序重写展项 sort_order */
+        post: operations["reorderExhibits"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2917,6 +2959,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/platform/releases/{id}/abort": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 终止 rolling release（清空 retained，已升级不回滚）
+         * @description 要求 `X-Action-Reason` 头（≥ 5 字）。
+         *     release 已是 done / aborted 终态时返回 409 conflict。
+         */
+        post: operations["abortReleaseRollout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/halls/{hallId}/app-version": {
         parameters: {
             query?: never;
@@ -4562,6 +4627,32 @@ export interface paths {
         patch: operations["upsertDeviceCommandPreset"];
         trace?: never;
     };
+    "/v2/devices/{id}/inline-commands/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * raw_transport 设备 inline_commands 临时测试（ADR-0017 P-A）
+         * @description 仅 raw_transport 设备适用；走云端转发到展厅 App MQTT cmd-ack 路径。
+         *     不持久化、不入 effective-commands cache、不入 audit。
+         *     body 二选一互斥：
+         *       - command_code：走 device.inline_commands 中已存命令（必须存在）
+         *       - payload + format：ad-hoc 原始包，未保存先单测；format=text|hex
+         */
+        post: operations["testDeviceInlineCommand"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v2/vendor-credentials": {
         parameters: {
             query?: never;
@@ -5437,6 +5528,16 @@ export interface components {
         };
         /** @enum {string} */
         HallMasterElectionReason: "bootstrap" | "master_offline" | "priority_promote" | "manual_override" | "no_candidate";
+        /**
+         * @description 展厅运营模式 4 态：
+         *       commissioning  调试期（立即升级）
+         *       production     正式运营（用户确认 + 时段规避）
+         *       maintenance    检修期（同调试期）
+         *       paused         暂停（不升级、不告警、不上报心跳；绝对边界）
+         *     is_critical 越权矩阵：仅对 production 生效；不能越权 paused。
+         * @enum {string}
+         */
+        OperationMode: "commissioning" | "production" | "maintenance" | "paused";
         HallDetailDTO: {
             /** Format: int64 */
             id: number;
@@ -5469,6 +5570,7 @@ export interface components {
             master_auto_failback: boolean;
             ai_knowledge_text: string;
             status: components["schemas"]["HallStatus"];
+            operation_mode?: components["schemas"]["OperationMode"];
             /** Format: int64 */
             exhibit_count: number;
             /** Format: int64 */
@@ -5523,6 +5625,7 @@ export interface components {
             current_master_exhibit_name?: string;
             last_election_reason?: (string & components["schemas"]["HallMasterElectionReason"]) | null;
             master_auto_failback: boolean;
+            operation_mode?: components["schemas"]["OperationMode"];
         };
         HallListPage: components["schemas"]["PaginatedData"] & {
             list?: components["schemas"]["HallListItemDTO"][];
@@ -5575,8 +5678,38 @@ export interface components {
             /** Format: int64 */
             offline_device_count: number;
         };
+        /**
+         * @description 切换展厅运营模式。切到 production 时 X-Action-Reason 头必填（≥ 5 字）。
+         *     切换会触发 OperationModeChanged event → MQTT retained excs/{hall_id}/state。
+         */
+        ChangeOperationModeRequest: {
+            operation_mode: components["schemas"]["OperationMode"];
+        };
         /** @enum {string} */
         DisplayMode: "normal" | "simple_fusion" | "touch_interactive";
+        /** @enum {string} */
+        PairingTargetType: "exhibit" | "exhibit_debug" | "hall";
+        /** @enum {string} */
+        PairingCodeStatus: "active" | "used" | "expired" | "locked";
+        PairingCodeDTO: {
+            /** Format: int64 */
+            id: number;
+            code: string;
+            target_type: components["schemas"]["PairingTargetType"];
+            /** Format: int64 */
+            target_id: number;
+            target_name: string;
+            status: components["schemas"]["PairingCodeStatus"];
+            failed_attempts: number;
+            /** Format: int64 */
+            used_by_instance_id?: number | null;
+            /** Format: date-time */
+            expires_at: string;
+            /** Format: date-time */
+            locked_until?: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
         ExhibitListItemDTO: {
             /** Format: int64 */
             id: number;
@@ -5592,6 +5725,7 @@ export interface components {
             has_ai_avatar: boolean;
             /** Format: int64 */
             script_count: number;
+            active_pairing_code?: components["schemas"]["PairingCodeDTO"] | null;
         };
         /**
          * @description 融合演示展项的特殊配置；DTO 用 json.RawMessage 透传。
@@ -5630,6 +5764,14 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        /**
+         * @description 按数组顺序重写本展厅所有展项的 sort_order = (index+1) * 10。
+         *     数组必须包含本展厅当前所有展项 id（多/缺/外厅 id 都返 400）；
+         *     用整组替换语义代替 swap 两两交换，避免间隙耗尽。
+         */
+        ReorderExhibitsRequest: {
+            exhibit_ids: number[];
+        };
         /** @description 全字段可选；PATCH 语义但路由用 PUT */
         UpdateExhibitRequest: {
             name?: string | null;
@@ -5648,6 +5790,30 @@ export interface components {
         };
         /** @enum {string} */
         DeviceStatus: "online" | "offline";
+        /**
+         * @description 设备接入方式（DDD-v2 §二）
+         * @enum {string}
+         */
+        ConnectorKind: "preset" | "protocol" | "raw_transport" | "plugin";
+        /**
+         * @description 物理传输类型；smyoo 为闪优 Smyoo 云 HTTPS 网关（P7-SmyooPlugin）
+         * @enum {string}
+         */
+        TransportKind: "tcp" | "udp" | "serial" | "osc" | "artnet" | "modbus" | "http" | "smyoo";
+        /**
+         * @description 多态引用，内容因 ConnectorKind 而异：
+         *       - preset:        { preset_key }
+         *       - protocol:      { protocol }
+         *       - raw_transport: { transport }
+         *       - plugin:        { plugin_id, plugin_device_key }
+         */
+        ConnectorRef: {
+            preset_key?: string;
+            protocol?: string;
+            transport?: components["schemas"]["TransportKind"];
+            plugin_id?: string;
+            plugin_device_key?: string;
+        };
         /**
          * @description 设备 DTO（device-mgmt-v2 P7-Cleanup 后简化版）。
          *     v1 时代的型号 / 品牌 / 分类冗余字段（model_id、model_code、brand_name、subcategory_code、
@@ -5670,10 +5836,74 @@ export interface components {
             status: components["schemas"]["DeviceStatus"];
             /** Format: date-time */
             last_heartbeat_at?: string | null;
+            /** @description v1 老设备为空字符串 */
+            connector_kind?: components["schemas"]["ConnectorKind"];
+            connector_ref?: components["schemas"]["ConnectorRef"];
+            /**
+             * @description ExCS 主动周期问设备的间隔（秒），0=禁用周期轮询
+             * @example 120
+             */
+            poll_interval_seconds?: number;
+        };
+        /** @enum {string} */
+        CommandKind: "control" | "query";
+        /** @enum {string} */
+        PatternKind: "exact" | "regex" | "bytes";
+        /** @enum {string} */
+        FieldType: "bool" | "int" | "float" | "string" | "enum";
+        /**
+         * @description bytes 模式字节序，省略 = big
+         * @enum {string}
+         */
+        Endianness: "" | "big" | "little";
+        ResponseField: {
+            name: string;
+            type: components["schemas"]["FieldType"];
+            from: string;
+            endianness?: components["schemas"]["Endianness"];
+            map?: {
+                [key: string]: unknown;
+            };
+            /** @description 默认值（任意 JSON 标量） */
+            default?: unknown;
+        };
+        ResponseSchema: {
+            pattern_kind: components["schemas"]["PatternKind"];
+            pattern: string;
+            fields: components["schemas"]["ResponseField"][];
+            timeout_ms: number;
+        };
+        DeviceCommand: {
+            code: string;
+            name: string;
+            kind: components["schemas"]["CommandKind"];
+            category?: string;
+            icon?: string;
+            description?: string;
+            /** @description control 命令参数 JSON Schema 子集（透传） */
+            params_schema?: {
+                [key: string]: unknown;
+            };
+            /** @description 下发模板（如 PJLink "%1POWR 1\r"） */
+            request?: string;
+            /**
+             * @description ADR-0017 D1：Request 模板的字节编码方式。
+             *     text（默认）= UTF-8 编码 + 转义（\r \n \t \\ \xNN）；
+             *     hex = 容忍空白和大小写按字节解码（如 "01 02 ff"）。
+             *     缺省视为 text，向后兼容既有 preset / protocol yaml。
+             *     raw_transport TCP 二进制协议常用 hex；ASCII 文本 / 受控 app 字符串协议用 text。
+             * @enum {string}
+             */
+            request_format?: "text" | "hex";
+            /** @description query 命令响应模式（kind=query 必填） */
+            response_schema?: components["schemas"]["ResponseSchema"];
         };
         /**
          * @description 更新设备请求（device-mgmt-v2 P7-Cleanup 后只支持 connection_config / 元数据更新）。
          *     创建走 v2 端点（/v2/devices），不再走 hall yaml 的 createDevice。
+         *
+         *     ADR-0017 P-C：新增 raw_transport 设备的 inline_commands 全量替换路径（保存调试台
+         *     「命令清单」tab）。仅 raw_transport 接受；其他 connector_kind 必须为空 / 缺省，否则 422。
          */
         UpdateDeviceRequest: {
             /** Format: int64 */
@@ -5682,45 +5912,47 @@ export interface components {
             connection_config?: components["schemas"]["ConnectionConfig"] | null;
             notes?: string | null;
             serial_no?: string | null;
+            /**
+             * @description ADR-0017 P-C：raw_transport 设备的 inline_commands 全量替换。
+             *     非 raw_transport 设备传值返 422。空数组等价于"不修改"（后端拒绝清空，因 raw_transport
+             *     要求 ≥1 条；如确需修改命令，传新列表）。
+             */
+            inline_commands?: components["schemas"]["DeviceCommand"][] | null;
+            /** @description ADR-0017 P-C：raw_transport 设备的心跳 query code（可空） */
+            inline_heartbeat_command_code?: string | null;
         };
         /**
-         * @description EffectiveCommandDTO.source —— 三层合并结果。"override" 是历史 admin UI 用值。
+         * @description EffectiveCommandDTO.source ——
+         *     v1: baseline / model / instance / override（三层合并结果，"override" 是历史 admin UI 用值）
+         *     v2: preset / protocol / plugin / inline（按 device.connector_kind 直接分类，DDD-v2 §八）
          * @enum {string}
          */
-        EffectiveCommandSource: "baseline" | "model" | "instance" | "override";
+        EffectiveCommandSource: "baseline" | "model" | "instance" | "override" | "preset" | "protocol" | "plugin" | "inline";
         EffectiveCommandDTO: {
             code: string;
             name: string;
+            /**
+             * @description v2 加：control = 写命令 / query = 读命令
+             * @enum {string}
+             */
+            kind?: "control" | "query";
             category?: string;
             icon?: string;
             description?: string;
             params_schema?: {
                 [key: string]: unknown;
             } | null;
+            /**
+             * @description v2 加：yaml `request` 模板（如 K32 ":::DMSZ<channels_fold>A."）。
+             *     admin 调试台前端用 rawPreview 把 token 替换为实际 raw bytes 显示给 admin 一眼可读
+             *     （PRD-field-deployment §3.3.2 / mockup 05）。
+             */
+            request?: string;
+            /** @description v2 加：query 命令的响应解析模式（pattern / fields） */
+            response_schema?: {
+                [key: string]: unknown;
+            } | null;
             source: components["schemas"]["EffectiveCommandSource"];
-        };
-        /** @enum {string} */
-        PairingTargetType: "exhibit" | "exhibit_debug" | "hall";
-        /** @enum {string} */
-        PairingCodeStatus: "active" | "used" | "expired" | "locked";
-        PairingCodeDTO: {
-            /** Format: int64 */
-            id: number;
-            code: string;
-            target_type: components["schemas"]["PairingTargetType"];
-            /** Format: int64 */
-            target_id: number;
-            target_name: string;
-            status: components["schemas"]["PairingCodeStatus"];
-            failed_attempts: number;
-            /** Format: int64 */
-            used_by_instance_id?: number | null;
-            /** Format: date-time */
-            expires_at: string;
-            /** Format: date-time */
-            locked_until?: string | null;
-            /** Format: date-time */
-            created_at: string;
         };
         GeneratePairingCodeRequest: {
             target_type: components["schemas"]["PairingTargetType"];
@@ -6960,13 +7192,21 @@ export interface components {
         };
         /**
          * @description 设备同步 DTO（device-mgmt-v2 P7-Cleanup 后简化）。v1 时代的 model_id / device_type /
-         *     protocol / command_template 字段已随型号库下线一并拆除。命令通过 effective-commands
-         *     端点取，不再走 sync。
+         *     command_template 字段已随型号库下线一并拆除；命令通过 effective-commands 端点取。
+         *     protocol 字段于 P9-C.2 follow-up（PRD 附录 D.10 / 2026-04-30）补回——展厅 App 的
+         *     DriverFactory 仍按此字符串 switch 创建 SerialDriver/TcpDriver 等。server 端按 v2
+         *     connector_spec.transport_kind 推导（serial→rs232 / tcp→tcp / artnet→artnet 等），
+         *     cloud-only（http/smyoo）留空让展厅 App 跳过 driver 创建（cloud-dispatch path 接管）。
          */
         AppSyncDevice: {
             /** Format: int64 */
             id: number;
             name: string;
+            /**
+             * @description v1 driver 路由用字符串。v2 设备由 server 按 connector_spec.transport_kind 推导映射；
+             *     cloud-only 留空让展厅 App 跳过 driver 创建。详见 PRD-field-deployment §3.4.
+             */
+            protocol?: string;
             /** @description service 层 json.RawMessage 透传 */
             connection_config?: {
                 [key: string]: unknown;
@@ -7324,6 +7564,28 @@ export interface components {
             file_size: number;
             sha256: string;
             release_notes: string;
+            /** @description Markdown release notes，限长 50KB（admin 编辑器 + handler 双闸） */
+            release_notes_md?: string;
+            /** @description 紧急补丁；越权 production 模式的用户确认与时段限制；不能越权 paused（绝对边界） */
+            is_critical?: boolean;
+            /**
+             * @description 灰度策略：all=全量 / percent=按比例 / custom=按 hall_id 列表
+             * @enum {string}
+             */
+            rollout_policy?: "all" | "percent" | "custom";
+            /** @description policy=percent 时使用：10/50/100 */
+            rollout_percent?: number;
+            /** @description policy=custom 时使用：显式 hall id 列表 */
+            rollout_hall_ids?: number[];
+            /**
+             * @description 发布单整体灰度状态
+             * @enum {string}
+             */
+            rollout_status?: "rolling" | "done" | "aborted";
+            /** Format: int64 */
+            published_by?: number;
+            /** Format: date-time */
+            published_at?: string;
             /** Format: date-time */
             created_at: string;
         };
@@ -7336,6 +7598,19 @@ export interface components {
             file_size: number;
             sha256: string;
             release_notes?: string;
+            /** @description Markdown release notes，限长 50KB；超长返 400 */
+            release_notes_md?: string;
+            /** @description 紧急补丁；服务端校验 super_admin 才能 publish_critical */
+            is_critical?: boolean;
+            /**
+             * @description 灰度策略，默认 all
+             * @enum {string}
+             */
+            rollout_policy?: "all" | "percent" | "custom";
+            /** @description policy=percent 时使用：10/50/100；默认 100 */
+            rollout_percent?: number;
+            /** @description policy=custom 时使用 */
+            rollout_hall_ids?: number[];
         };
         /**
          * @description 展厅目标版本 DTO（service 层 release.HallAppVersionDTO，updated_at 已 .Format(time.RFC3339)
@@ -8535,50 +8810,6 @@ export interface components {
             query_count: number;
         };
         PresetCatalogList: components["schemas"]["PresetCatalogDTO"][];
-        /** @enum {string} */
-        CommandKind: "control" | "query";
-        /** @enum {string} */
-        PatternKind: "exact" | "regex" | "bytes";
-        /** @enum {string} */
-        FieldType: "bool" | "int" | "float" | "string" | "enum";
-        /**
-         * @description bytes 模式字节序，省略 = big
-         * @enum {string}
-         */
-        Endianness: "" | "big" | "little";
-        ResponseField: {
-            name: string;
-            type: components["schemas"]["FieldType"];
-            from: string;
-            endianness?: components["schemas"]["Endianness"];
-            map?: {
-                [key: string]: unknown;
-            };
-            /** @description 默认值（任意 JSON 标量） */
-            default?: unknown;
-        };
-        ResponseSchema: {
-            pattern_kind: components["schemas"]["PatternKind"];
-            pattern: string;
-            fields: components["schemas"]["ResponseField"][];
-            timeout_ms: number;
-        };
-        DeviceCommand: {
-            code: string;
-            name: string;
-            kind: components["schemas"]["CommandKind"];
-            category?: string;
-            icon?: string;
-            description?: string;
-            /** @description control 命令参数 JSON Schema 子集（透传） */
-            params_schema?: {
-                [key: string]: unknown;
-            };
-            /** @description 下发模板（如 PJLink "%1POWR 1\r"） */
-            request?: string;
-            /** @description query 命令响应模式（kind=query 必填） */
-            response_schema?: components["schemas"]["ResponseSchema"];
-        };
         HeartbeatPattern: {
             kind: components["schemas"]["PatternKind"];
             pattern: string;
@@ -8614,11 +8845,6 @@ export interface components {
             updated_at: string;
         };
         ProtocolProfileList: components["schemas"]["ProtocolProfileListItem"][];
-        /**
-         * @description 物理传输类型；smyoo 为闪优 Smyoo 云 HTTPS 网关（P7-SmyooPlugin）
-         * @enum {string}
-         */
-        TransportKind: "tcp" | "udp" | "serial" | "osc" | "artnet" | "modbus" | "http" | "smyoo";
         CreateProtocolProfileRequest: {
             protocol: string;
             name: string;
@@ -8892,25 +9118,6 @@ export interface components {
             state: components["schemas"]["DeviceState"];
             error: string;
         };
-        /**
-         * @description 设备接入方式（DDD-v2 §二）
-         * @enum {string}
-         */
-        ConnectorKind: "preset" | "protocol" | "raw_transport" | "plugin";
-        /**
-         * @description 多态引用，内容因 ConnectorKind 而异：
-         *       - preset:        { preset_key }
-         *       - protocol:      { protocol }
-         *       - raw_transport: { transport }
-         *       - plugin:        { plugin_id, plugin_device_key }
-         */
-        ConnectorRef: {
-            preset_key?: string;
-            protocol?: string;
-            transport?: components["schemas"]["TransportKind"];
-            plugin_id?: string;
-            plugin_device_key?: string;
-        };
         CreateDeviceV2Request: {
             /** Format: int64 */
             hall_id: number;
@@ -9128,6 +9335,42 @@ export interface components {
             /** @description 实际被接受的 protocols（不识别的会被静默丢弃） */
             accepted_protocols?: string[];
         };
+        /**
+         * @description 带 error.kind 的扩展错误信封（ApiResponse + error 字段）。
+         *     admin 渲染逻辑：先看 error.kind → switch 渲染；缺省 fallback 到 message。
+         */
+        ErrorEnvelope: {
+            /**
+             * @description 业务码（与 ApiResponse 一致；保留兼容）
+             * @example 5000
+             */
+            code: number;
+            /**
+             * @description 人类可读错误消息（fallback 渲染依据）
+             * @example 展厅电脑没连上
+             */
+            message: string;
+            /** @description 类型化错误详情；admin 据 kind switch UI */
+            error?: {
+                /**
+                 * @description 机器可读错误分类。Diag 反向通道引入前 4 项（app_offline / cloud_unavailable /
+                 *     invocation_timeout / app_error）；其余为既有错误的渐进迁移目标。
+                 * @enum {string}
+                 */
+                kind: "app_offline" | "cloud_unavailable" | "invocation_timeout" | "app_error" | "bad_request" | "unauthorized" | "forbidden" | "not_found" | "internal_error";
+                /**
+                 * @description kind-specific 字段，schema 由 kind 决定：
+                 *       - app_offline:        { local_ip, mac_address, last_heartbeat_at, interface_name?, machine_code? }
+                 *       - cloud_unavailable:  { since: ISO8601 }
+                 *       - invocation_timeout: { method, path, timeout_ms }
+                 *       - app_error:          { app_status_code, trace_id }
+                 *     admin 仅渲染 local_ip + mac_address + last_heartbeat_at；machine_code 仅日志/审计。
+                 */
+                details?: {
+                    [key: string]: unknown;
+                };
+            };
+        };
         DiscoveryResultItem: {
             /** @enum {string} */
             protocol: "pjlink" | "artnet" | "modbus" | "smyoo" | "wol" | "serial";
@@ -9256,6 +9499,57 @@ export interface components {
                  *     }
                  */
                 "application/json": components["schemas"]["PermissionDenied"];
+            };
+        };
+        /**
+         * @description 展厅 App 收到请求但 /diag handler 返回 5xx。
+         *     admin 据 error.kind=app_error 渲染 toast（橙 · 展厅电脑出错了）。
+         */
+        DiagAppError: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "code": 5000,
+                 *       "message": "展厅电脑出错了",
+                 *       "error": {
+                 *         "kind": "app_error",
+                 *         "details": {
+                 *           "app_status_code": 500,
+                 *           "trace_id": "abc123"
+                 *         }
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["ErrorEnvelope"];
+            };
+        };
+        /**
+         * @description 展厅 App 在配置超时内未回响应。
+         *     admin 据 error.kind=invocation_timeout 渲染 toast state 3（橙浮层）。
+         */
+        DiagInvocationTimeout: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "code": 5000,
+                 *       "message": "展厅电脑无响应",
+                 *       "error": {
+                 *         "kind": "invocation_timeout",
+                 *         "details": {
+                 *           "method": "POST",
+                 *           "path": "/diag/events/inject",
+                 *           "timeout_ms": 10000
+                 *         }
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["ErrorEnvelope"];
             };
         };
     };
@@ -11249,6 +11543,36 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    changeOperationMode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hallId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeOperationModeRequest"];
+            };
+        };
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     listExhibits: {
         parameters: {
             query?: never;
@@ -11299,6 +11623,35 @@ export interface operations {
                     "application/json": components["schemas"]["ApiResponse"] & {
                         data?: components["schemas"]["ExhibitDTO"];
                     };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    reorderExhibits: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hallId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReorderExhibitsRequest"];
+            };
+        };
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -14764,6 +15117,33 @@ export interface operations {
             403: components["responses"]["Forbidden"];
         };
     };
+    abortReleaseRollout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
     getHallAppVersion: {
         parameters: {
             query?: never;
@@ -18001,6 +18381,59 @@ export interface operations {
             };
         };
     };
+    testDeviceInlineCommand: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description 走 device.inline_commands 已存命令（与 payload 互斥） */
+                    command_code?: string;
+                    /** @description ad-hoc 原始包内容（与 command_code 互斥） */
+                    payload?: string;
+                    /**
+                     * @description payload 编码方式；空视为 text
+                     * @enum {string}
+                     */
+                    format?: "text" | "hex";
+                };
+            };
+        };
+        responses: {
+            /** @description 成功（status=executed/sent/pending/failed） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: {
+                            msg_id?: string;
+                            /** Format: int64 */
+                            device_id?: number;
+                            status?: string;
+                        };
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description 设备不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
+                };
+            };
+        };
+    };
     listVendorCredentials: {
         parameters: {
             query?: {
@@ -18167,15 +18600,22 @@ export interface operations {
                     "application/json": components["schemas"]["ApiResponse"];
                 };
             };
-            /** @description hall_master 不可达 / 不在线 */
+            502: components["responses"]["DiagAppError"];
+            /**
+             * @description hall_master 不可达 / 不在线。
+             *     反向通道开启的 hall（feature flag enabled_halls 含本 hall）走 ErrorEnvelope，
+             *     error.kind ∈ {app_offline, cloud_unavailable}（DRC ADR-0001）；
+             *     flag 全关时仍是历史 ApiResponse 字符串语义。
+             */
             503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse"];
+                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
+            504: components["responses"]["DiagInvocationTimeout"];
         };
     };
     getHallDiscoveryResults: {
@@ -18212,15 +18652,20 @@ export interface operations {
                     "application/json": components["schemas"]["ApiResponse"];
                 };
             };
-            /** @description hall_master 不可达 */
+            502: components["responses"]["DiagAppError"];
+            /**
+             * @description hall_master 不可达 / 不在线。详见同 path POST 的 503 描述
+             *     （DRC ADR-0001：feature flag 开启时 ErrorEnvelope，关闭时 ApiResponse 兼容）。
+             */
             503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse"];
+                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
+            504: components["responses"]["DiagInvocationTimeout"];
         };
     };
 }

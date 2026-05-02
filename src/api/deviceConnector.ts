@@ -84,4 +84,26 @@ export const deviceV2Api = {
     request.get<ApiEnvelope<EffectiveCommandsResponse>>(
       `/api/v1/devices/${id}/effective-commands`,
     ),
+  /**
+   * raw_transport inline_commands 临时测试（ADR-0017 P-A）。
+   * 仅云端转发到展厅 App，不持久化、不入 audit。
+   * body 二选一互斥：command_code（已存命令）/ payload+format（ad-hoc 单测）。
+   */
+  testInlineCommand: (
+    id: number,
+    body:
+      | { command_code: string }
+      | { payload: string; format?: 'text' | 'hex' },
+  ) =>
+    request.post<
+      ApiEnvelope<{
+        msg_id?: string;
+        device_id?: number;
+        status?: string;
+        detail?: string;
+        latency_ms?: number;
+      }>
+    >(`/api/v1/v2/devices/${id}/inline-commands/test`, body, {
+      skipErrorMessage: true,
+    }),
 };

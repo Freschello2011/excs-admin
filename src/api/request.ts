@@ -119,6 +119,17 @@ const ERROR_MESSAGES: Record<number, string> = {
   2002: '账户已禁用，请联系管理员',
 };
 
+/* ==================== DRC-Phase 5：反向通道错误 kind 跳过全局 toast ==================== *
+ * 这些错误由 DiagChannelBanner / 局部 notification 接管渲染（避免重复弹窗）。
+ * 命中后仍 reject，并把 kind / details 挂到 error 对象上，调用方可 switch 处理。
+ */
+const DIAG_REVERSE_CHANNEL_KINDS = new Set([
+  'app_offline',
+  'cloud_unavailable',
+  'invocation_timeout',
+  'app_error',
+]);
+
 /* ==================== 403 permission_denied 文案 ==================== */
 const PERMISSION_DENIED_FALLBACK: Record<string, string> = {
   no_grants: '您尚未获得任何授权，请联系管理员',
@@ -344,6 +355,17 @@ request.interceptors.response.use(
 
       // If the backend returned a structured JSON error, prefer its message
       if (resData && typeof resData === 'object' && resData.code && resData.message) {
+        // DRC-Phase 5：反向通道 ErrorEnvelope（带 error.kind）→ 跳过全局 toast，
+        // 由 DiagChannelBanner / 局部 notification 接管；同时把 kind / details 挂到
+        // rejected error，调用方可 (err as any).__diagKind 分流。
+        const diagKind = resData.error?.kind as string | undefined;
+        if (diagKind && DIAG_REVERSE_CHANNEL_KINDS.has(diagKind)) {
+          (error as Error & { __diagKind?: string; __diagDetails?: unknown }).__diagKind =
+            diagKind;
+          (error as Error & { __diagKind?: string; __diagDetails?: unknown }).__diagDetails =
+            resData.error?.details;
+          return Promise.reject(error);
+        }
         if (status === 401 && resData.code === 1002) {
           handleLogout();
         } else if (!silent) {

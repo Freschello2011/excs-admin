@@ -32,6 +32,7 @@ import { TRANSPORT_LABEL, PATTERN_KIND_LABEL } from '@/lib/deviceConnectorLabels
 import HeartbeatPatternList from '@/components/device-catalog/HeartbeatPatternList';
 import DocumentedListenerPatternList from '@/components/device-catalog/DocumentedListenerPatternList';
 import ProtocolProfileEditor from '@/components/device-catalog/ProtocolProfileEditor';
+import VendorCredentialsTab from './VendorCredentialsTab';
 
 const DEPRECATED_PRESETS = new Set(['shanyou_switch']);
 
@@ -51,6 +52,7 @@ export default function DeviceCatalogPage() {
           { key: 'preset', label: '已支持型号', children: <PresetCatalogTab /> },
           { key: 'protocol', label: '标准协议', children: <ProtocolProfileTab /> },
           { key: 'plugin', label: '插件', children: <PluginTab /> },
+          { key: 'vendor-credentials', label: '厂家凭据', children: <VendorCredentialsTab /> },
           {
             key: 'trigger-template',
             label: '触发器模板',

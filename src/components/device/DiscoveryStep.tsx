@@ -19,9 +19,11 @@
  * 不展示扫描发现按钮的状态：mode='disconnected'（点了无意义）—— 上层 drawer 据 store 灰掉 tab。
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Button, Checkbox, Empty, Space, Spin, Tag, Typography } from 'antd';
+import { useQuery } from '@tanstack/react-query';
+import { Alert, Button, Checkbox, Empty, Input, Select, Space, Spin, Tag, Typography } from 'antd';
 import { useMessage } from '@/hooks/useMessage';
 import { discoveryApi, pollDiscoveryResults, type PollHandle } from '@/api/discovery';
+import { vendorCredentialApi } from '@/api/vendorCredential';
 import {
   PROTOCOL_LABEL,
   PROTOCOL_ICON,
@@ -63,10 +65,28 @@ export default function DiscoveryStep({ hallId, smyooCredentialId, onPrefill }: 
   const { message } = useMessage();
   const [protocols, setProtocols] = useState<ProbeProtocol[]>(DEFAULT_SELECTED);
   const [scanning, setScanning] = useState(false);
+  const [paused, setPaused] = useState(false);
   const [snapshot, setSnapshot] = useState<DiscoveryResultSnapshot | null>(null);
   const [addedEndpoints, setAddedEndpoints] = useState<Set<string>>(new Set());
   const [taskId, setTaskId] = useState<string | null>(null);
+  // 网段输入：默认空 = hall_master 自动检测；接受 "192.168.50.0/24, 192.168.20.0/24" 逗号分隔
+  const [cidrsInput, setCidrsInput] = useState('');
+  // 当 protocols 含 smyoo 时让 admin 在抽屉内直接选凭据；优先级：prop > admin 主动选 > 默认第一条
+  const [internalCredId, setInternalCredId] = useState<number | undefined>(undefined);
+
   const pollRef = useRef<PollHandle | null>(null);
+
+  // smyoo 凭据下拉数据
+  const { data: smyooCreds = [] } = useQuery({
+    queryKey: ['vendor-credentials', 'smyoo'],
+    queryFn: () => vendorCredentialApi.list('smyoo'),
+    select: (res) => res.data.data ?? [],
+    enabled: protocols.includes('smyoo'),
+  });
+
+  // 默认凭据（首条）— 推导而非 effect+setState
+  const defaultCredId = smyooCreds.length > 0 ? smyooCreds[0].id : undefined;
+  const effectiveCredId = smyooCredentialId ?? internalCredId ?? defaultCredId;
 
   useEffect(() => {
     return () => {
@@ -74,23 +94,35 @@ export default function DiscoveryStep({ hallId, smyooCredentialId, onPrefill }: 
     };
   }, []);
 
+  /** 解析 cidrs 输入（逗号 / 空白 / 中文逗号分隔，去重）。空 → undefined（hall_master 自检）。 */
+  const parseCidrs = (raw: string): string[] | undefined => {
+    const items = raw
+      .split(/[,\s，]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    return items.length > 0 ? Array.from(new Set(items)) : undefined;
+  };
+
   const startScan = async () => {
     if (protocols.length === 0) {
       message.warning('至少选一个协议');
       return;
     }
-    if (protocols.includes('smyoo') && !smyooCredentialId) {
+    if (protocols.includes('smyoo') && !effectiveCredId) {
       message.warning('扫描闪优需要先配好厂家凭据（平台数据配置 → 厂家凭据），或取消勾选闪优');
       return;
     }
     pollRef.current?.cancel();
     setSnapshot(null);
     setScanning(true);
+    setPaused(false);
     setAddedEndpoints(new Set());
+    const cidrs = parseCidrs(cidrsInput);
     try {
       const res = await discoveryApi.scan(hallId, {
         protocols,
-        ...(smyooCredentialId ? { vendor_credential_id: smyooCredentialId } : {}),
+        ...(effectiveCredId ? { vendor_credential_id: effectiveCredId } : {}),
+        ...(cidrs ? { cidrs } : {}),
       });
       const data = res.data.data;
       if (res.data.code !== 0 || !data) {
@@ -134,6 +166,18 @@ export default function DiscoveryStep({ hallId, smyooCredentialId, onPrefill }: 
   const stopScan = () => {
     pollRef.current?.cancel();
     setScanning(false);
+    setPaused(false);
+  };
+
+  const togglePause = () => {
+    if (!pollRef.current) return;
+    if (paused) {
+      pollRef.current.resume();
+      setPaused(false);
+    } else {
+      pollRef.current.pause();
+      setPaused(true);
+    }
   };
 
   const results = snapshot?.results ?? [];
@@ -217,15 +261,71 @@ export default function DiscoveryStep({ hallId, smyooCredentialId, onPrefill }: 
         ))}
       </div>
 
+      {/* 扫描限制网段（默认空 = hall_master 自动检测） */}
+      <div style={{ marginBottom: 12 }}>
+        <Typography.Text style={{ fontSize: 12 }} type="secondary">
+          扫描网段（可选）
+        </Typography.Text>
+        <Input
+          size="small"
+          placeholder="留空 = hall_master 自动用接到的 RFC1918 /24；或填 192.168.50.0/24, 192.168.20.0/24"
+          value={cidrsInput}
+          onChange={(e) => setCidrsInput(e.target.value)}
+          disabled={scanning}
+          style={{ fontFamily: 'var(--font-family-mono, ui-monospace, monospace)', fontSize: 12 }}
+        />
+      </div>
+
+      {/* 闪优 vendor_credential 选择（仅勾选 smyoo 时显示，且 admin 没主动传 prop 时） */}
+      {protocols.includes('smyoo') && smyooCredentialId == null && (
+        <div style={{ marginBottom: 12 }}>
+          <Typography.Text style={{ fontSize: 12 }} type="secondary">
+            闪优厂家账号（必选）
+          </Typography.Text>
+          {smyooCreds.length === 0 ? (
+            <Alert
+              type="warning"
+              showIcon
+              message={
+                <span style={{ fontSize: 12 }}>
+                  尚无 vendor_key=smyoo 的厂家凭据 ——{' '}
+                  <a href="/platform/device-catalog" target="_blank" rel="noreferrer">
+                    去新建
+                  </a>{' '}
+                  后再扫描，或取消勾选闪优。
+                </span>
+              }
+              style={{ padding: '4px 12px' }}
+            />
+          ) : (
+            <Select
+              size="small"
+              style={{ width: '100%' }}
+              placeholder="选择厂家账号"
+              value={effectiveCredId}
+              onChange={setInternalCredId}
+              disabled={scanning}
+              options={smyooCreds.map((c) => ({
+                value: c.id,
+                label: `${c.label}${c.phone_masked ? ` · ${c.phone_masked}` : ''}${c.complete ? '' : ' · ⚠ 缺字段'}`,
+              }))}
+            />
+          )}
+        </div>
+      )}
+
       <Space style={{ marginBottom: 16 }}>
         {!scanning ? (
           <Button type="primary" onClick={startScan}>
             🔍 开始扫描
           </Button>
         ) : (
-          <Button onClick={stopScan} danger>
-            ■ 中止
-          </Button>
+          <>
+            <Button onClick={togglePause}>{paused ? '▶ 继续' : '⏸ 暂停'}</Button>
+            <Button onClick={stopScan} danger>
+              ■ 中止
+            </Button>
+          </>
         )}
         {snapshot && !snapshot.partial && (
           <Button onClick={startScan}>⟳ 重新扫描</Button>
@@ -235,8 +335,8 @@ export default function DiscoveryStep({ hallId, smyooCredentialId, onPrefill }: 
       {scanning && (
         <div
           style={{
-            background: 'var(--ant-color-info-bg)',
-            border: '1px solid var(--ant-color-info-border)',
+            background: paused ? 'var(--ant-color-warning-bg)' : 'var(--ant-color-info-bg)',
+            border: `1px solid ${paused ? 'var(--ant-color-warning-border)' : 'var(--ant-color-info-border)'}`,
             borderRadius: 8,
             padding: '12px 16px',
             marginBottom: 16,
@@ -245,10 +345,10 @@ export default function DiscoveryStep({ hallId, smyooCredentialId, onPrefill }: 
             gap: 12,
           }}
         >
-          <Spin size="small" />
+          {paused ? <span style={{ fontSize: 18 }}>⏸</span> : <Spin size="small" />}
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 500, fontSize: 13 }}>
-              扫描进行中…
+              {paused ? '已暂停拉取（后端 task 仍在跑，点 [▶ 继续] 恢复显示）' : '扫描进行中…'}
               {snapshot && ` 已找到 ${snapshot.results.length} 台`}
             </div>
             <div style={{ fontSize: 11.5, color: 'var(--ant-color-text-secondary)' }}>

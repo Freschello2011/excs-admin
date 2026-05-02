@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Card, Table, Button, Space, Tag, Tabs, Modal, Form, Input,
-  Select, Progress, Typography,
+  Select, Typography,
 } from 'antd';
 import { useMessage } from '@/hooks/useMessage';
 import { UploadOutlined, DeleteOutlined, SendOutlined } from '@ant-design/icons';
@@ -15,6 +15,7 @@ import { useHallStore } from '@/stores/hallStore';
 import type { AppRelease } from '@/api/gen/client';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
+import ReleasePublishModal, { type ReleasePayloadInput } from './ReleasePublishModal';
 import styles from './ReleasesPage.module.scss';
 
 const { Text } = Typography;
@@ -49,7 +50,6 @@ export default function ReleasesPage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploading, setUploading] = useState(false);
 
-  const [uploadForm] = Form.useForm();
   const [assignForm] = Form.useForm();
 
   // ==================== 版本列表 ====================
@@ -76,40 +76,24 @@ export default function ReleasesPage() {
 
   // ==================== 上传新版本 ====================
 
-  const handleUpload = async () => {
+  // Phase 4：Modal 升级为 Markdown + is_critical + 灰度，主流程移到 ReleasePublishModal。
+  // 这里只做：拿凭证 → PUT OSS → 计 SHA-256 → 调 createRelease（带 5 个新字段）。
+  const handlePublish = async (payload: ReleasePayloadInput, file: File) => {
     try {
-      const values = await uploadForm.validateFields();
-      const file = values.file?.[0]?.originFileObj || values._file;
-      if (!file) {
-        message.error('请选择文件');
-        return;
-      }
-      const fileError = validateFile(file);
-      if (fileError) {
-        message.error(fileError);
-        return;
-      }
-      // release.manage 是 critical action，requestUpload + createRelease 都要带 reason。
-      const reason = (values.reason as string | undefined)?.trim();
-      if (!reason || reason.length < 5) {
-        message.error('请填写发布原因（≥ 5 字，审计必填）');
-        return;
-      }
-
       setUploading(true);
       setUploadProgress(0);
 
-      // 1. 获取上传凭证
+      // 1. 上传凭证
       const uploadRes = await releaseApi.requestUpload({
-        platform: values.platform,
-        arch: values.platform.split('-').pop() || 'x64',
-        version: values.version,
+        platform: payload.platform,
+        arch: payload.arch,
+        version: payload.version,
         filename: file.name,
         content_type: file.type || 'application/octet-stream',
-      }, reason);
+      }, payload.reason);
       const { presigned_url, oss_key } = uploadRes.data.data;
 
-      // 2. 上传文件到 OSS
+      // 2. PUT 到 OSS
       await new Promise<void>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.upload.addEventListener('progress', (e) => {
@@ -127,20 +111,24 @@ export default function ReleasesPage() {
       const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
       const sha256 = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
 
-      // 4. 注册版本元数据
+      // 4. 注册（含 5 个新字段）
       await releaseApi.createRelease({
-        platform: values.platform,
-        arch: values.platform.split('-').pop() || 'x64',
-        version: values.version,
+        platform: payload.platform,
+        arch: payload.arch,
+        version: payload.version,
         oss_key,
         file_size: file.size,
         sha256,
-        release_notes: values.release_notes || '',
-      }, reason);
+        release_notes: payload.release_notes,
+        release_notes_md: payload.release_notes_md || undefined,
+        is_critical: payload.is_critical || undefined,
+        rollout_policy: payload.rollout_policy,
+        rollout_percent: payload.rollout_percent,
+        rollout_hall_ids: payload.rollout_hall_ids?.map((id) => id),
+      }, payload.reason);
 
-      message.success('版本发布成功');
+      message.success(payload.is_critical ? '紧急补丁已发布' : '版本发布成功');
       setUploadModalOpen(false);
-      uploadForm.resetFields();
       queryClient.invalidateQueries({ queryKey: queryKeys.releases({}) });
     } catch (err: unknown) {
       message.error(err instanceof Error ? err.message : '上传失败');
@@ -148,20 +136,6 @@ export default function ReleasesPage() {
       setUploading(false);
       setUploadProgress(0);
     }
-  };
-
-  // 文件校验
-  const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500 MB
-  const ALLOWED_EXTENSIONS = ['.zip', '.dmg', '.pkg', '.exe', '.msi', '.msix'];
-  const validateFile = (file: File): string | null => {
-    if (file.size > MAX_FILE_SIZE) {
-      return `文件大小 ${formatFileSize(file.size)} 超过限制（最大 500 MB）`;
-    }
-    const ext = '.' + file.name.split('.').pop()?.toLowerCase();
-    if (!ALLOWED_EXTENSIONS.includes(ext)) {
-      return `不支持的文件类型 ${ext}，允许：${ALLOWED_EXTENSIONS.join(', ')}`;
-    }
-    return null;
   };
 
   // ==================== 展厅版本指定 ====================
@@ -312,49 +286,14 @@ export default function ReleasesPage() {
         />
       </Card>
 
-      {/* 上传新版本弹窗 */}
-      <Modal
-        title="发布新版本"
+      {/* 上传新版本弹窗（Phase 4：Markdown + is_critical + 灰度 + 实时预览矩阵） */}
+      <ReleasePublishModal
         open={uploadModalOpen}
-        onOk={handleUpload}
-        onCancel={() => { setUploadModalOpen(false); uploadForm.resetFields(); }}
-        confirmLoading={uploading}
-        okText="发布"
-        width={520}
-      >
-        <Form form={uploadForm} layout="vertical">
-          <Form.Item name="platform" label="目标平台" rules={[{ required: true }]}>
-            <Select options={PLATFORMS} placeholder="选择平台" />
-          </Form.Item>
-          <Form.Item name="version" label="版本号" rules={[{ required: true, pattern: /^\d+\.\d+\.\d+/, message: '请输入 semver 格式版本号' }]}>
-            <Input placeholder="例如 1.2.0" />
-          </Form.Item>
-          <Form.Item name="_file" label="安装包" rules={[{ required: true, message: '请选择文件' }]}>
-            <input
-              type="file"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) uploadForm.setFieldValue('_file', file);
-              }}
-            />
-          </Form.Item>
-          <Form.Item name="release_notes" label="发布说明">
-            <Input.TextArea rows={3} placeholder="本次更新内容..." />
-          </Form.Item>
-          <Form.Item
-            name="reason"
-            label="操作原因"
-            rules={[
-              { required: true, message: '请填写操作原因（审计用）' },
-              { min: 5, message: '操作原因至少 5 字' },
-            ]}
-            help="release.manage 是高风险操作，原因将记入审计日志（≥ 5 字）"
-          >
-            <Input.TextArea rows={2} maxLength={500} showCount placeholder="例如：发布 macOS arm64 v1.3.0 修复 XX 闪退" />
-          </Form.Item>
-          {uploading && <Progress percent={uploadProgress} />}
-        </Form>
-      </Modal>
+        uploading={uploading}
+        uploadProgress={uploadProgress}
+        onCancel={() => { if (!uploading) setUploadModalOpen(false); }}
+        onSubmit={handlePublish}
+      />
 
       {/* 指定展厅版本弹窗 */}
       <Modal

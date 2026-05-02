@@ -51,6 +51,10 @@ export interface PollOptions {
 
 export interface PollHandle {
   cancel: () => void;
+  /** P9-B 前端补齐：暂停拉取（不取消后端 task；admin 点 [⏸ 暂停] 时调用）。 */
+  pause: () => void;
+  /** 恢复拉取（admin 点 [▶ 继续] 时调用）。 */
+  resume: () => void;
 }
 
 /**
@@ -60,10 +64,15 @@ export interface PollHandle {
 export function pollDiscoveryResults(opts: PollOptions): PollHandle {
   const { hallId, taskId, intervalMs = 1500, onSnapshot, onDone } = opts;
   let cancelled = false;
+  let paused = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
 
   const tick = async () => {
     if (cancelled) return;
+    if (paused) {
+      // 暂停期间不再 schedule 下一帧；resume() 会重新调度
+      return;
+    }
     try {
       const res = await discoveryApi.results(hallId, taskId);
       if (cancelled) return;
@@ -78,12 +87,9 @@ export function pollDiscoveryResults(opts: PollOptions): PollHandle {
     } catch (err) {
       // 轮询期单次失败不中断；仅当后续也失败时才看到效果
       if (cancelled) return;
-      // 持续失败时 caller 可手动 cancel；这里不做指数退避
-      // 把错误透给 onDone 让 UI 知道有异常（最后一次）
-      // 但仍排定下一次重试
       void err;
     }
-    if (cancelled) return;
+    if (cancelled || paused) return;
     timer = setTimeout(tick, intervalMs);
   };
 
@@ -94,6 +100,17 @@ export function pollDiscoveryResults(opts: PollOptions): PollHandle {
       cancelled = true;
       if (timer) clearTimeout(timer);
       onDone?.(null);
+    },
+    pause: () => {
+      paused = true;
+      if (timer) clearTimeout(timer);
+      timer = null;
+    },
+    resume: () => {
+      if (cancelled || !paused) return;
+      paused = false;
+      // 立刻拉一次（让 UI 立刻有反馈），由 tick 自己排定下一帧
+      tick();
     },
   };
 }

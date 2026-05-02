@@ -35,6 +35,7 @@ import type {
   HallListPage,
   HallMasterStatusDTO,
   HallRuntimeStatus,
+  OperationMode,
   ListDevicesParams,
   ListHallsParams,
   ListPairingCodesParams,
@@ -146,6 +147,13 @@ export const hallApi = {
     return asAxiosResp(hallClient.deleteExhibit(hallId, exhibitId));
   },
 
+  reorderExhibits(
+    hallId: number,
+    exhibitIds: number[],
+  ): Promise<AxiosResponse<ApiResponse<void>>> {
+    return asAxiosResp(hallClient.reorderExhibits(hallId, exhibitIds));
+  },
+
   getExhibits(hallId: number): Promise<AxiosResponse<ApiResponse<ExhibitListItem[]>>> {
     return asAxiosResp(hallClient.listExhibits(hallId));
   },
@@ -224,6 +232,18 @@ export const hallApi = {
     reason?: string,
   ): Promise<AxiosResponse<ApiResponse<ElectionResultDTO>>> {
     return asAxiosResp(hallClient.electHallMaster(hallId, reason));
+  },
+
+  /**
+   * 切换运营模式。production 切换需 reason ≥ 5 字（后端 RequireReason）；
+   * 其余 3 态 reason 可空。
+   */
+  changeOperationMode(
+    hallId: number,
+    operationMode: OperationMode,
+    reason?: string,
+  ): Promise<AxiosResponse<ApiResponse<void>>> {
+    return asAxiosResp(hallClient.changeOperationMode(hallId, operationMode, reason));
   },
 
   /* ==================== Pairing Code ====================

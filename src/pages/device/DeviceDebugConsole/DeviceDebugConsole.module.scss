@@ -545,6 +545,53 @@
   white-space: nowrap;
 }
 
+/* RawStream 顶部 ♥ chip — 替代不显示在流中的心跳 */
+.heartbeatChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #d9f7be;
+  color: #1f6b3a;
+  font-size: 10.5px;
+  font-weight: 500;
+  font-family: monospace;
+}
+
+.heartbeatChipDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #52c41a;
+  animation: pulse 1.5s infinite;
+}
+
+/* 触发按钮：mockup 05 行 168 .preset-fire — 紫色小色块 ▶ */
+.presetFire {
+  border: none;
+  cursor: pointer;
+  padding: 3px 10px;
+  border-radius: 4px;
+  background: var(--ant-color-primary);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s ease;
+}
+
+.presetFire:hover {
+  background: var(--ant-color-primary-hover);
+}
+
+.presetFire:active {
+  background: var(--ant-color-primary-active);
+}
+
 /* Raw 流 */
 .rawStream {
   background: #0f1226;
@@ -557,6 +604,12 @@
   overflow: auto;
   line-height: 1.55;
   white-space: pre-wrap;
+}
+
+/* sidePanel 常驻卡片用：高度精简（mockup 05 行 519-541） */
+.rawStreamMini {
+  height: 220px;
+  font-size: 11px;
 }
 
 .rawOut {

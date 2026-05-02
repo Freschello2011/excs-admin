@@ -12,7 +12,11 @@ import request from './request';
 import type { components } from '@/api/gen/schema.gen';
 import type { ChannelMap } from './channelMap';
 import type { CommandPreset } from './commandPreset';
-import type { ConnectorKind, ConnectorRef } from '@/types/deviceConnector';
+import type {
+  ConnectorKind,
+  ConnectorRef,
+  DeviceCommand,
+} from '@/types/deviceConnector';
 
 interface ApiEnvelope<T> {
   code: number;
@@ -32,6 +36,9 @@ export interface DeviceDebugDeviceView {
   last_heartbeat_at?: string | null;
   channel_map: ChannelMap;
   command_presets: CommandPreset[];
+  /** ADR-0017 P-C：仅 raw_transport 设备返回；其他 kind 缺省 */
+  inline_commands?: DeviceCommand[] | null;
+  inline_heartbeat_command_code?: string;
 }
 
 export interface DeviceDebugBundle {
