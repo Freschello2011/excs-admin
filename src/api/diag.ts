@@ -55,7 +55,7 @@ export const diagApi = {
       params: { hall_id: hallId },
     }),
 
-  /** 当前录制状态 */
+  /** 当前录制状态（5s 轮询）— /diag/* 透传 URL 由 request.ts DIAG_PROXY_PATH_RE 全局静默。 */
   recordingStatus: (hallId: number, exhibitId: number) =>
     request.get<ApiEnvelope<RecordingStatus | null>>(base(exhibitId, 'events/recording'), {
       params: { hall_id: hallId },
@@ -70,7 +70,7 @@ export const diagApi = {
     request.post<ApiEnvelope<RecordingStatus>>(
       base(exhibitId, 'events/recording/start'),
       body,
-      { skipErrorMessage: true, params: { hall_id: hallId } },
+      { params: { hall_id: hallId } },
     ),
 
   /** 停录制（返回切片 URL 列表） */
@@ -131,7 +131,6 @@ export const diagApi = {
       }>
     >(base(exhibitId, 'network/interfaces'), {
       params: { hall_id: hallId },
-      skipErrorMessage: true,
     }),
 };
 

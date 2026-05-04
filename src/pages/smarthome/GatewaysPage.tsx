@@ -36,7 +36,7 @@ const SSE_STATUS_MAP: Record<SSEStatus, { color: string; text: string }> = {
 
 /* ==================== 组件 ==================== */
 
-export default function GatewaysPage() {
+export default function GatewaysPage({ embedded }: { embedded?: boolean } = {}) {
   const { message } = useMessage();
   const queryClient = useQueryClient();
   const selectedHallId = useHallStore((s) => s.selectedHallId);
@@ -245,7 +245,7 @@ export default function GatewaysPage() {
 
   return (
     <div>
-      <PageHeader title="网关管理" description="管理 Hue Bridge 和小米网关设备" />
+      {!embedded && <PageHeader title="网关管理" description="管理 Hue Bridge 和小米网关设备" />}
 
       <Space wrap style={{ marginBottom: 16 }}>
         <Select

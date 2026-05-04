@@ -40,6 +40,12 @@ interface PlaybackState {
 interface ViewState {
   zoomLevel: number;       // pixels per millisecond
   scrollLeft: number;      // horizontal scroll offset in px
+  /**
+   * 用户是否手动调整过缩放/视图。
+   * fitToScreen 仅在 false 时生效（避免覆盖用户已选择的缩放）。
+   * 任何手动 setZoomLevel / setZoomLevelAnchored 会置为 true。
+   */
+  _userZoomed: boolean;
 }
 
 interface TimelineState {
@@ -63,17 +69,41 @@ interface TimelineState {
   /* Dirty flag — tracks unsaved changes */
   dirty: boolean;
 
-  /* Undo / Redo history */
-  _past: ShowTrack[][];
-  _future: ShowTrack[][];
+  /**
+   * 最近一次"已保存/已加载"时间戳（Date.now() 毫秒）。
+   * loadShow / markClean 时刷新；用于顶栏 Badge 显示"X 分钟前"。
+   */
+  lastSavedAt: number | null;
+
+  /* Undo / Redo history — Batch C 起每个 snapshot 也含 view + selection */
+  _past: HistorySnapshot[];
+  _future: HistorySnapshot[];
 
   /* Clipboard */
   clipboard: ShowAction[] | null;
+
+  /** 当前正在拖动的 snap hint（ms），用于 overlay 红线和状态栏文案；非拖动状态为 null */
+  snapHintMs: number | null;
+}
+
+/**
+ * 历史栈快照 — Batch C 起新增 view + selection。
+ * tracks 是深拷贝；view 是值拷贝；selection 是 Set 拷贝。
+ */
+interface HistorySnapshot {
+  tracks: ShowTrack[];
+  view: ViewState;
+  selectedActionIds: Set<number>;
 }
 
 interface TimelineActions {
   /* Data loading */
   loadShow: (show: ShowDetail) => void;
+  /**
+   * Batch C P11：仅 patch show 元数据字段（如 pre_roll_ms / post_roll_ms），不动
+   * tracks / dirty / history / view。给顶栏 inline 编辑 pre/post roll 用。
+   */
+  setShowMeta: (patch: Partial<ShowDetail>) => void;
   setSpriteSheets: (sheets: SpriteSheet[]) => void;
   setWaveformPeaks: (peaks: number[]) => void;
 
@@ -82,6 +112,11 @@ interface TimelineActions {
   addTrack: (name: string, trackType: TrackType) => void;
   removeTrack: (trackId: number) => void;
   renameTrack: (trackId: number, name: string) => void;
+  /**
+   * Batch C P10：轨道重排 — splice + 重算 sort_order；走 pushHistory（可撤销）。
+   * fromIdx / toIdx 基于 tracks 数组下标（已按 sort_order 由前端展示）。
+   */
+  reorderTrack: (fromIdx: number, toIdx: number) => void;
   addAction: (trackId: number, action: ShowAction) => void;
   updateAction: (actionId: number, patch: Partial<ShowAction>) => void;
   removeAction: (actionId: number) => void;
@@ -104,7 +139,20 @@ interface TimelineActions {
 
   /* View */
   setZoomLevel: (level: number) => void;
+  /**
+   * 锚点缩放：以 anchorPx（容器左边为 0）为锚点缩放，鼠标位置下的时间不漂移。
+   * 公式：scrollLeft' = (anchorPx + scrollLeft) * (newLevel/oldLevel) - anchorPx
+   * 同时 clamp 到 [0, totalWidth - viewportWidth]。
+   */
+  setZoomLevelAnchored: (level: number, anchorPx: number, viewportWidth: number, totalDurationMs: number) => void;
+  /**
+   * 进页 fit-to-screen：仅在 _userZoomed=false 时生效。
+   * 计算 zoomLevel = viewportWidth / totalDurationMs 并把 scrollLeft 置 0。
+   */
+  fitToScreen: (viewportWidth: number, totalDurationMs: number) => void;
   setScrollLeft: (px: number) => void;
+  /** Snap hint — 拖动时高亮的对齐目标 ms；非拖动状态为 null */
+  setSnapHint: (ms: number | null) => void;
 
   /* Selection */
   selectAction: (id: number) => void;
@@ -128,12 +176,14 @@ const initialState: TimelineState = {
   spriteSheets: [],
   waveformPeaks: [],
   playback: { isPlaying: false, currentTimeMs: 0 },
-  view: { zoomLevel: 0.1, scrollLeft: 0 },   // 0.1 px/ms = 100px per second
+  view: { zoomLevel: 0.1, scrollLeft: 0, _userZoomed: false },   // 0.1 px/ms = 100px per second
   selectedActionIds: new Set(),
   dirty: false,
+  lastSavedAt: null,
   _past: [],
   _future: [],
   clipboard: null,
+  snapHintMs: null,
 };
 
 /** Deep-clone tracks array for history snapshot */
@@ -141,13 +191,39 @@ function cloneTracks(tracks: ShowTrack[]): ShowTrack[] {
   return tracks.map((t) => ({ ...t, actions: t.actions.map((a) => ({ ...a, params: { ...a.params } })) }));
 }
 
+/**
+ * 构造历史快照（值拷贝 view + 深拷贝 tracks + 拷贝 selection Set）。
+ * Batch C P19：snapshot 增量含 view 和 selection。
+ */
+function snapshot(s: TimelineState): HistorySnapshot {
+  return {
+    tracks: cloneTracks(s.tracks),
+    view: { ...s.view },
+    selectedActionIds: new Set(s.selectedActionIds),
+  };
+}
+
 /* ==================== Store ==================== */
 
 export const useTimelineStore = create<TimelineStore>()((set, get) => {
-  /** Push current tracks to _past before a mutation */
-  function pushHistory() {
-    const { tracks, _past } = get();
-    const past = [..._past, cloneTracks(tracks)];
+  /**
+   * Push current state to _past before a mutation.
+   *
+   * `kind='mutation'`：track / 选区 / 数据类变更，无条件 push。
+   * `kind='view'`：手动 view 操作（缩放）— 启用 coalesce，避免 wheel 拖滑爆栈。
+   *   coalesce 规则：last past entry 的 tracks 引用 === 当前 tracks 时跳过 push（连续
+   *   纯 view 改动只占第一格）。fitToScreen / setScrollLeft 不调用 pushHistory。
+   */
+  function pushHistory(kind: 'mutation' | 'view' = 'mutation') {
+    const s = get();
+    if (kind === 'view') {
+      const last = s._past[s._past.length - 1];
+      if (last && last.tracks === s.tracks) {
+        // 连续 view-only 改动：上次 push 的 tracks 引用未变 → 跳过，保留更早的 view 锚点
+        return;
+      }
+    }
+    const past = [...s._past, snapshot(s)];
     if (past.length > MAX_HISTORY) past.shift();
     set({ _past: past, _future: [] });
   }
@@ -165,18 +241,24 @@ export const useTimelineStore = create<TimelineStore>()((set, get) => {
           waveformPeaks = Array.from(bin, (c) => c.charCodeAt(0));
         } catch { /* ignore */ }
       }
-      set({
+      set((s) => ({
         show,
         tracks: show.tracks ?? [],
         spriteSheets: mapSpriteSheets(show.sprite_sheets as unknown[]),
         waveformPeaks,
         dirty: false,
+        lastSavedAt: Date.now(),
         selectedActionIds: new Set(),
         playback: { isPlaying: false, currentTimeMs: 0 },
+        // 重新加载演出 → 重置 fit-to-screen 标记，使下一次首次渲染重新 fit
+        view: { ...s.view, _userZoomed: false, scrollLeft: 0 },
         _past: [],
         _future: [],
-      });
+      }));
     },
+
+    setShowMeta: (patch) =>
+      set((s) => (s.show ? { show: { ...s.show, ...patch } as ShowDetail } : {})),
 
     setSpriteSheets: (sheets) => set({ spriteSheets: sheets }),
     setWaveformPeaks: (peaks) => set({ waveformPeaks: peaks }),
@@ -211,6 +293,24 @@ export const useTimelineStore = create<TimelineStore>()((set, get) => {
         tracks: s.tracks.map((t) => (t.id === trackId ? { ...t, name } : t)),
         dirty: true,
       }));
+    },
+
+    reorderTrack: (fromIdx, toIdx) => {
+      const { tracks } = get();
+      if (
+        fromIdx === toIdx
+        || fromIdx < 0 || fromIdx >= tracks.length
+        || toIdx < 0 || toIdx >= tracks.length
+      ) return;
+      pushHistory();
+      set((s) => {
+        const next = [...s.tracks];
+        const [moved] = next.splice(fromIdx, 1);
+        next.splice(toIdx, 0, moved);
+        // 重算 sort_order：1, 2, 3, ...（保持简单递增；后端 saveTimeline 直接覆盖）
+        const reordered = next.map((t, i) => ({ ...t, sort_order: i + 1 }));
+        return { tracks: reordered, dirty: true };
+      });
     },
 
     addAction: (trackId, action) => {
@@ -253,29 +353,35 @@ export const useTimelineStore = create<TimelineStore>()((set, get) => {
     },
 
     markDirty: () => set({ dirty: true }),
-    markClean: () => set({ dirty: false }),
+    markClean: () => set({ dirty: false, lastSavedAt: Date.now() }),
 
-    /* Undo / Redo */
+    /* Undo / Redo — Batch C P19：snapshot 含 tracks + view + selection，一并恢复 */
     undo: () => {
-      const { _past, tracks, _future } = get();
-      if (_past.length === 0) return;
-      const prev = _past[_past.length - 1];
+      const s = get();
+      if (s._past.length === 0) return;
+      const prev = s._past[s._past.length - 1];
+      const cur = snapshot(s);
       set({
-        _past: _past.slice(0, -1),
-        _future: [cloneTracks(tracks), ..._future].slice(0, MAX_HISTORY),
-        tracks: prev,
+        _past: s._past.slice(0, -1),
+        _future: [cur, ...s._future].slice(0, MAX_HISTORY),
+        tracks: prev.tracks,
+        view: prev.view,
+        selectedActionIds: prev.selectedActionIds,
         dirty: true,
       });
     },
 
     redo: () => {
-      const { _past, tracks, _future } = get();
-      if (_future.length === 0) return;
-      const next = _future[0];
+      const s = get();
+      if (s._future.length === 0) return;
+      const next = s._future[0];
+      const cur = snapshot(s);
       set({
-        _future: _future.slice(1),
-        _past: [..._past, cloneTracks(tracks)].slice(-MAX_HISTORY),
-        tracks: next,
+        _future: s._future.slice(1),
+        _past: [...s._past, cur].slice(-MAX_HISTORY),
+        tracks: next.tracks,
+        view: next.view,
+        selectedActionIds: next.selectedActionIds,
         dirty: true,
       });
     },
@@ -323,11 +429,34 @@ export const useTimelineStore = create<TimelineStore>()((set, get) => {
     setCurrentTime: (ms) =>
       set((s) => ({ playback: { ...s.playback, currentTimeMs: ms } })),
 
-    /* View */
-    setZoomLevel: (level) =>
-      set((s) => ({ view: { ...s.view, zoomLevel: level } })),
+    /* View — Batch C P19：手动 view 操作 push 'view' 入栈（fitToScreen / setScrollLeft 不入栈） */
+    setZoomLevel: (level) => {
+      pushHistory('view');
+      set((s) => ({ view: { ...s.view, zoomLevel: level, _userZoomed: true } }));
+    },
+    setZoomLevelAnchored: (level, anchorPx, viewportWidth, totalDurationMs) => {
+      pushHistory('view');
+      set((s) => {
+        const oldLevel = s.view.zoomLevel;
+        if (oldLevel <= 0 || level <= 0) return {};
+        const oldScrollLeft = s.view.scrollLeft;
+        const rawScrollLeft = (anchorPx + oldScrollLeft) * (level / oldLevel) - anchorPx;
+        const totalWidth = totalDurationMs * level;
+        const maxScroll = Math.max(0, totalWidth - viewportWidth);
+        const clamped = Math.max(0, Math.min(maxScroll, rawScrollLeft));
+        return { view: { zoomLevel: level, scrollLeft: clamped, _userZoomed: true } };
+      });
+    },
+    fitToScreen: (viewportWidth, totalDurationMs) =>
+      set((s) => {
+        if (s.view._userZoomed) return {};
+        if (viewportWidth <= 0 || totalDurationMs <= 0) return {};
+        const level = viewportWidth / totalDurationMs;
+        return { view: { zoomLevel: level, scrollLeft: 0, _userZoomed: false } };
+      }),
     setScrollLeft: (px) =>
       set((s) => ({ view: { ...s.view, scrollLeft: px } })),
+    setSnapHint: (ms) => set({ snapHintMs: ms }),
 
     /* Selection */
     selectAction: (id) =>

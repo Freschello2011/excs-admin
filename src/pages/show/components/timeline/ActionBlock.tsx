@@ -16,6 +16,8 @@ const MIN_DURATION_MS = 100;
 
 /* ==================== Props ==================== */
 
+export type ResizeEdge = 'left' | 'right';
+
 interface ActionBlockProps {
   action: ShowAction;
   trackType: TrackType;
@@ -24,15 +26,17 @@ interface ActionBlockProps {
   selected: boolean;
   onSelect: (id: number, multi: boolean) => void;
   onDoubleClick: (id: number) => void;
-  onDragMove: (id: number, newStartMs: number) => void;
-  onResize: (id: number, newStartMs: number, newDurationMs: number) => void;
+  onDragMove: (id: number, newStartMs: number, shift: boolean) => void;
+  onResize: (id: number, newStartMs: number, newDurationMs: number, edge: ResizeEdge, shift: boolean) => void;
+  /** 拖动结束（mouseup）时调用——用于清理 snap hint 等瞬态状态 */
+  onDragEnd?: (id: number) => void;
 }
 
 /* ==================== Component ==================== */
 
 export default function ActionBlock({
   action, trackType, zoomLevel, scrollLeft, selected,
-  onSelect, onDoubleClick, onDragMove, onResize,
+  onSelect, onDoubleClick, onDragMove, onResize, onDragEnd,
 }: ActionBlockProps) {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -93,18 +97,19 @@ export default function ActionBlock({
       const dx = ev.clientX - ds.startX;
       const deltaMsRaw = dx / zoomLevel;
 
+      const shift = ev.shiftKey;
       if (ds.mode === 'move') {
         const newStart = Math.max(0, Math.round(ds.origStartMs + deltaMsRaw));
-        onDragMove(action.id, newStart);
+        onDragMove(action.id, newStart, shift);
       } else if (ds.mode === 'resize-left') {
         const maxDelta = ds.origDurationMs - MIN_DURATION_MS;
         const clampedDelta = Math.min(deltaMsRaw, maxDelta);
         const newStart = Math.max(0, Math.round(ds.origStartMs + clampedDelta));
         const newDuration = Math.max(MIN_DURATION_MS, Math.round(ds.origDurationMs - clampedDelta));
-        onResize(action.id, newStart, newDuration);
+        onResize(action.id, newStart, newDuration, 'left', shift);
       } else {
         const newDuration = Math.max(MIN_DURATION_MS, Math.round(ds.origDurationMs + deltaMsRaw));
-        onResize(action.id, ds.origStartMs, newDuration);
+        onResize(action.id, ds.origStartMs, newDuration, 'right', shift);
       }
     };
 
@@ -113,11 +118,12 @@ export default function ActionBlock({
       setDragging(false);
       window.removeEventListener('mousemove', handleGlobalMove);
       window.removeEventListener('mouseup', handleGlobalUp);
+      onDragEnd?.(action.id);
     };
 
     window.addEventListener('mousemove', handleGlobalMove);
     window.addEventListener('mouseup', handleGlobalUp);
-  }, [action.id, action.start_time_ms, action.duration_ms, zoomLevel, onSelect, onDragMove, onResize]);
+  }, [action.id, action.start_time_ms, action.duration_ms, zoomLevel, onSelect, onDragMove, onResize, onDragEnd]);
 
   /* ── Double click ── */
   const handleDblClick = useCallback((e: React.MouseEvent) => {

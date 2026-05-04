@@ -65,11 +65,7 @@ const MyContentsPage = lazy(() => import('@/pages/vendor/MyContentsPage'));
 const TeamMembersPage = lazy(() => import('@/pages/vendor/TeamMembersPage'));
 const VendorMessagesPage = lazy(() => import('@/pages/vendor/MessagesPage'));
 const VendorSettingsPage = lazy(() => import('@/pages/vendor/SettingsPage'));
-const GatewaysPage = lazy(() => import('@/pages/smarthome/GatewaysPage'));
-const DeviceHealthPage = lazy(() => import('@/pages/smarthome/DeviceHealthPage'));
-const RulesPage = lazy(() => import('@/pages/smarthome/RulesPage'));
-const TriggerLogsPage = lazy(() => import('@/pages/smarthome/TriggerLogsPage'));
-const AlertsPage = lazy(() => import('@/pages/smarthome/AlertsPage'));
+const SmartHomeHubPage = lazy(() => import('@/pages/smarthome/SmartHomeHubPage'));
 const NotFound = lazy(() => import('@/pages/NotFound'));
 
 /* ─── Suspense wrapper ─── */
@@ -343,27 +339,17 @@ export const router = createBrowserRouter([
         path: 'ai/avatars',
         element: <HallRoute><AiAvatarListPage /></HallRoute>,
       },
-      /* SmartHome（展厅管理 region 的折叠子组，admin-only） */
+      /* SmartHome 聚合页（5 tab：网关/设备全景/规则/触发日志/告警，admin-only） */
       {
-        path: 'smarthome/gateways',
-        element: <RequireAdmin><HallRoute><GatewaysPage /></HallRoute></RequireAdmin>,
+        path: 'smarthome',
+        element: <RequireAdmin><HallRoute><SmartHomeHubPage /></HallRoute></RequireAdmin>,
       },
-      {
-        path: 'smarthome/health',
-        element: <RequireAdmin><HallRoute><DeviceHealthPage /></HallRoute></RequireAdmin>,
-      },
-      {
-        path: 'smarthome/rules',
-        element: <RequireAdmin><HallRoute><RulesPage /></HallRoute></RequireAdmin>,
-      },
-      {
-        path: 'smarthome/trigger-logs',
-        element: <RequireAdmin><HallRoute><TriggerLogsPage /></HallRoute></RequireAdmin>,
-      },
-      {
-        path: 'smarthome/alerts',
-        element: <RequireAdmin><HallRoute><AlertsPage /></HallRoute></RequireAdmin>,
-      },
+      /* 旧 5 路径 → 新 hub ?tab=xxx，保留外链/书签 */
+      { path: 'smarthome/gateways', element: <Navigate to="/smarthome?tab=gateways" replace /> },
+      { path: 'smarthome/health', element: <Navigate to="/smarthome?tab=health" replace /> },
+      { path: 'smarthome/rules', element: <Navigate to="/smarthome?tab=rules" replace /> },
+      { path: 'smarthome/trigger-logs', element: <Navigate to="/smarthome?tab=trigger-logs" replace /> },
+      { path: 'smarthome/alerts', element: <Navigate to="/smarthome?tab=alerts" replace /> },
 
       /* ─── 平台管理 region（admin-only，与展厅无关）─── */
       /* device-mgmt-v2 P6：设备目录（4 tab 合并入口） */

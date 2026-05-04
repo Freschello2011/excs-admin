@@ -68,7 +68,7 @@ const WEEKDAY_OPTIONS = [
 
 /* ==================== 组件 ==================== */
 
-export default function RulesPage() {
+export default function RulesPage({ embedded }: { embedded?: boolean } = {}) {
   const { message } = useMessage();
   const queryClient = useQueryClient();
   const selectedHallId = useHallStore((s) => s.selectedHallId);
@@ -394,15 +394,17 @@ export default function RulesPage() {
 
   return (
     <div>
-      <PageHeader
-        title="规则管理"
-        description="配置智能家居事件规则，实现设备联动自动化"
-        extra={
-          selectedHallId ? (
-            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>新建规则</Button>
-          ) : undefined
-        }
-      />
+      {!embedded && (
+        <PageHeader
+          title="规则管理"
+          description="配置智能家居事件规则，实现设备联动自动化"
+          extra={
+            selectedHallId ? (
+              <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>新建规则</Button>
+            ) : undefined
+          }
+        />
+      )}
 
       <Space wrap style={{ marginBottom: 16 }}>
         <Select

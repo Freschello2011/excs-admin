@@ -38,7 +38,7 @@ function getDeviceStatusText(device: DeviceHealthDTO): string {
 
 /* ==================== 组件 ==================== */
 
-export default function DeviceHealthPage() {
+export default function DeviceHealthPage({ embedded }: { embedded?: boolean } = {}) {
   const selectedHallId = useHallStore((s) => s.selectedHallId);
   const setSelectedHall = useHallStore((s) => s.setSelectedHall);
   const clearSelectedHall = useHallStore((s) => s.clearSelectedHall);
@@ -89,15 +89,17 @@ export default function DeviceHealthPage() {
 
   return (
     <div>
-      <PageHeader
-        title="设备全景"
-        description="实时监控所有智能家居设备状态"
-        extra={
-          selectedHallId ? (
-            <Button icon={<ReloadOutlined />} onClick={() => refetch()}>刷新</Button>
-          ) : undefined
-        }
-      />
+      {!embedded && (
+        <PageHeader
+          title="设备全景"
+          description="实时监控所有智能家居设备状态"
+          extra={
+            selectedHallId ? (
+              <Button icon={<ReloadOutlined />} onClick={() => refetch()}>刷新</Button>
+            ) : undefined
+          }
+        />
+      )}
 
       <Space wrap style={{ marginBottom: 16 }}>
         <Select

@@ -130,6 +130,23 @@ const DIAG_REVERSE_CHANNEL_KINDS = new Set([
   'app_error',
 ]);
 
+/* ==================== /diag/* 透传 URL 前缀豁免 ==================== *
+ * 命中此前缀的 URL 是 cloud `ProxyExhibitDiag` 字节级透传展厅 App 9900 /diag/* 的响应；
+ * 9900 返回裸 JSON（如 `{ok, recording}` / `{kind, details}`）不带 envelope，与 admin 全局
+ * envelope 契约割裂。命中后：
+ *   - 成功路径：response.data.code === undefined → 视为成功，直接 return（不进 fallback）
+ *   - 错误路径：HTTP 4xx/5xx → 静默 reject（DRC kind 静默集仍优先生效；legacy masterAddrResolve
+ *     `hall=N 当前无在线 master` 也走静默——错误 banner / 调用方 mutation onError 接管）
+ * 不覆盖：
+ *   - `/v2/halls/:id/discovery/*`（DiscoveryHandler.wrapEnvelope 已包 envelope，业务 412/503 由调
+ *     用方自行 toast）
+ *   - reverse channel ErrorEnvelope 上的 error.kind 静默矩阵（沿用 DIAG_REVERSE_CHANNEL_KINDS）
+ */
+const DIAG_PROXY_PATH_RE = /\/api\/v\d+\/v2\/exhibits\/\d+\/diag\//;
+function isDiagProxyUrl(url?: string): boolean {
+  return !!url && DIAG_PROXY_PATH_RE.test(url);
+}
+
 /* ==================== 403 permission_denied 文案 ==================== */
 const PERMISSION_DENIED_FALLBACK: Record<string, string> = {
   no_grants: '您尚未获得任何授权，请联系管理员',
@@ -258,6 +275,12 @@ request.interceptors.response.use(
       return response;
     }
 
+    // /diag/* 透传：cloud ProxyExhibitDiag 字节级透传展厅 App 9900 裸 JSON（无 envelope）。
+    // 命中 URL 前缀且无 code 字段 → 视为成功，直接 return（不再走 line 318 fallback toast）。
+    if (isDiagProxyUrl(response.config.url) && (res === null || typeof res !== 'object' || res.code === undefined)) {
+      return response;
+    }
+
     // Handle token expired — attempt refresh
     if (res.code === 1002) {
       const originalConfig = response.config;
@@ -336,7 +359,9 @@ request.interceptors.response.use(
       const status = error.response.status as number;
       const resData = error.response.data;
 
-      const silent = error.config?.skipErrorMessage;
+      // /diag/* 透传 URL 走静默：错误由 DiagChannelBanner / 调用方 mutation onError 接管，
+      // 不进全局 toast。reject 仍然抛出，DRC kind 静默集分支优先（在下方处理）。
+      const silent = error.config?.skipErrorMessage || isDiagProxyUrl(error.config?.url);
 
       // Phase 5b：后端 authz 403 结构化响应 {error:'permission_denied', action, reason, resource?, hint?}
       if (status === 403 && resData && typeof resData === 'object' && resData.error === 'permission_denied') {

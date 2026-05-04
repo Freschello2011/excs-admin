@@ -4277,6 +4277,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/app-logs/upload-url": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 生成 App 调试日志上传的 presigned PUT URL（中控 / 展厅 App 通用）
+         * @description App 端 `/diag/logs/upload` 把 LogRingBuffer + status 打成 gzip 后调本端点拿
+         *     presigned PUT URL（1h 有效），随后直传阿里云 OSS。响应同时返回 24h 有效的
+         *     GET URL 给 admin 下载。
+         *
+         *     object_key 模式：`app-logs/{app}/{user_id}/{yyyyMMdd}/{log_id}.gz`
+         *     （user_id 由 server 从 JWT claims 解出，App 端不传）。
+         *
+         *     bucket 选择：sys-config `oss.debug_recording_bucket` 优先，空则 fallback 到
+         *     `OssGateway.RawBucket`，与 `/v2/diag/recordings/upload-url` 同款。
+         *
+         *     详见 [`09-deploy/diag/README.md`](../../../../09-deploy/diag/README.md) "P1.1 logs/upload" 段。
+         */
+        post: operations["createAppLogsUploadUrl"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/preset-catalog": {
         parameters: {
             query?: never;
@@ -4362,7 +4392,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 列已安装插件 */
+        /**
+         * 列已安装插件
+         * @description 默认排除「被任意 preset 当 delegate 用」的 plugin（如 smyoo 已被 preset
+         *     shanyou_switch_16ch 收编，ADR-0012），避免与「已支持型号」tab 重复露出。
+         *     传 `include_delegate=true` 可看全表，供 admin / debug / 二次集成 opt-in。
+         */
         get: operations["listPlugins"];
         put?: never;
         post?: never;
@@ -5788,8 +5823,15 @@ export interface components {
         ConnectionConfig: {
             [key: string]: unknown;
         };
-        /** @enum {string} */
-        DeviceStatus: "online" | "offline";
+        /**
+         * @description 设备运行状态。
+         *     - online：心跳正常
+         *     - offline：心跳超时（PRD-v2 §3.5）
+         *     - unknown：初态 / send-only 设备的兜底值（ADR-0017 D2 raw_transport 受控 app 只接收不响应，
+         *       允许零 query 命令，此时 status=unknown 而非 offline，admin UI 显示为灰态不误导运维）
+         * @enum {string}
+         */
+        DeviceStatus: "online" | "offline" | "unknown";
         /**
          * @description 设备接入方式（DDD-v2 §二）
          * @enum {string}
@@ -6404,6 +6446,13 @@ export interface components {
             base_content_id: number;
             /** @description 基准视频名（service 层 join 输出） */
             base_content_name?: string;
+            /**
+             * @description 基准视频处理状态（excs_contents.pipeline_status 透传）。
+             *     值集合：uploading / encrypting / encrypted / generating_thumbnail /
+             *     ai_tagging / publishing / ready / failed / 空字符串（无基准视频或字段缺省）。
+             *     前端按此字段推断 VideoPreview 四态：absent / processing / failed / ready。
+             */
+            base_content_pipeline_status?: string;
             /** @description 基准视频的雪碧图（service 层从 contents.sprite_sheets JSON 透传） */
             sprite_sheets?: components["schemas"]["ShowSpriteSheet"][] | null;
             /** @description 基准视频波形峰值（已序列化的 JSON 字符串，前端按需解析） */
@@ -8790,6 +8839,36 @@ export interface components {
             /** @description presigned GET URL，24h 有效；admin 下载该切片用 */
             get_url: string;
             /** @description OSS object key（recording/{exhibit_id}/{yyyyMMdd}/{recording_id}.gz） */
+            object_key: string;
+            /**
+             * Format: date-time
+             * @description PUT URL 过期时刻（UTC）
+             */
+            expires_at: string;
+        };
+        AppLogsUploadUrlRequest: {
+            /**
+             * @description 上传方 App 类型（control = 中控 / exhibit = 展厅）
+             * @enum {string}
+             */
+            app: "control" | "exhibit";
+            /**
+             * @description 客户端生成的日志包标识（建议 GUID 或 timestamp+random），
+             *     用于 object_key 去重；同一 user 同一天传多份不会撞 key。
+             */
+            log_id: string;
+            /**
+             * @description HTTP Content-Type，默认 application/gzip
+             * @default application/gzip
+             */
+            content_type: string;
+        };
+        AppLogsUploadUrl: {
+            /** @description presigned PUT URL，1h 有效；App 直接 HTTP PUT gzip 流上去 */
+            put_url: string;
+            /** @description presigned GET URL，24h 有效；admin 下载该日志包用 */
+            get_url: string;
+            /** @description OSS object key（app-logs/{app}/{user_id}/{yyyyMMdd}/{log_id}.gz） */
             object_key: string;
             /**
              * Format: date-time
@@ -17640,6 +17719,35 @@ export interface operations {
             403: components["responses"]["Forbidden"];
         };
     };
+    createAppLogsUploadUrl: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppLogsUploadUrlRequest"];
+            };
+        };
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["AppLogsUploadUrl"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
     listPresetCatalog: {
         parameters: {
             query?: never;
@@ -17848,7 +17956,10 @@ export interface operations {
     };
     listPlugins: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 是否包含被 preset 委托用的 plugin（默认 false） */
+                include_delegate?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;

@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useCallback } from 'react';
-import { Form, Input, InputNumber, Select, Tag, Empty } from 'antd';
+import { Form, Input, Select, Tag, Empty } from 'antd';
 import { useQuery } from '@tanstack/react-query';
 import { hallApi } from '@/api/hall';
 import { commandApi } from '@/api/command';
 import { queryKeys } from '@/api/queryKeys';
 import type { ShowAction, ActionType } from '@/api/gen/client';
+import TimeCodeInput from '@/components/TimeCodeInput';
 
 /* ==================== Constants ==================== */
 
@@ -20,11 +21,13 @@ interface PropertyPanelProps {
   action: ShowAction | null;
   hallId: number;
   onChange: (actionId: number, patch: Partial<ShowAction>) => void;
+  /** 当前播放游标 ms — 用于"贴到游标"按钮 */
+  currentTimeMs: number;
 }
 
 /* ==================== Component ==================== */
 
-export default function PropertyPanel({ action, hallId, onChange }: PropertyPanelProps) {
+export default function PropertyPanel({ action, hallId, onChange, currentTimeMs }: PropertyPanelProps) {
   const [form] = Form.useForm();
 
   /* ── Sync form when selection changes ── */
@@ -35,8 +38,6 @@ export default function PropertyPanel({ action, hallId, onChange }: PropertyPane
         action_type: action.action_type,
         device_id: action.device_id,
         command: action.command,
-        start_time_ms: action.start_time_ms,
-        duration_ms: action.duration_ms,
         params_json: JSON.stringify(action.params ?? {}, null, 2),
       });
     } else {
@@ -102,8 +103,6 @@ export default function PropertyPanel({ action, hallId, onChange }: PropertyPane
     if ('action_type' in changed) patch.action_type = changed.action_type as ActionType;
     if ('device_id' in changed) patch.device_id = (changed.device_id as number) ?? null;
     if ('command' in changed) patch.command = changed.command as string;
-    if ('start_time_ms' in changed) patch.start_time_ms = changed.start_time_ms as number;
-    if ('duration_ms' in changed) patch.duration_ms = changed.duration_ms as number;
     if ('params_json' in changed) {
       try {
         patch.params = JSON.parse(changed.params_json as string);
@@ -189,12 +188,22 @@ export default function PropertyPanel({ action, hallId, onChange }: PropertyPane
 
         <div style={{ fontSize: 11, color: 'var(--ant-color-text-tertiary)', margin: '4px 0', textTransform: 'uppercase', letterSpacing: 0.5 }}>时间</div>
 
-        <Form.Item label="开始(ms)" name="start_time_ms" style={{ marginBottom: 8 }}>
-          <InputNumber min={0} step={100} style={{ width: '100%' }} />
+        <Form.Item label="开始" style={{ marginBottom: 8 }}>
+          <TimeCodeInput
+            value={action.start_time_ms}
+            min={0}
+            showPasteCursor
+            onPasteCursor={() => onChange(action.id, { start_time_ms: Math.round(currentTimeMs) })}
+            onChange={(ms) => onChange(action.id, { start_time_ms: ms })}
+          />
         </Form.Item>
 
-        <Form.Item label="时长(ms)" name="duration_ms" style={{ marginBottom: 8 }}>
-          <InputNumber min={100} step={100} style={{ width: '100%' }} />
+        <Form.Item label="时长" style={{ marginBottom: 8 }}>
+          <TimeCodeInput
+            value={action.duration_ms}
+            min={100}
+            onChange={(ms) => onChange(action.id, { duration_ms: ms })}
+          />
         </Form.Item>
 
         <div style={{ fontSize: 11, color: 'var(--ant-color-text-tertiary)', margin: '4px 0', textTransform: 'uppercase', letterSpacing: 0.5 }}>参数</div>

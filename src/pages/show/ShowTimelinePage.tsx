@@ -1,9 +1,10 @@
 import { useEffect, useRef, useCallback, useMemo, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useBlocker } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import {
-  Button, Space, Tag, Slider, Spin, Badge, Select, Modal,
+  Button, Space, Tag, Slider, Spin, Modal, InputNumber, Tooltip,
 } from 'antd';
+import type { TrackType as TrackTypeEnum } from '@/api/gen/client';
 import { useMessage } from '@/hooks/useMessage';
 import {
   ArrowLeftOutlined, SaveOutlined,
@@ -11,24 +12,28 @@ import {
   CaretRightOutlined, PauseOutlined,
   UndoOutlined, RedoOutlined,
   ThunderboltOutlined, StopOutlined,
-  VideoCameraOutlined,
+  VideoCameraOutlined, WarningFilled,
+  CompressOutlined, ExpandAltOutlined,
 } from '@ant-design/icons';
 import {
   DndContext, PointerSensor, useSensor, useSensors,
   type DragStartEvent, type DragEndEvent, DragOverlay,
 } from '@dnd-kit/core';
 import { showApi } from '@/api/show';
-import { contentApi } from '@/api/content';
 import { queryKeys } from '@/api/queryKeys';
 import { useTimelineStore } from '@/stores/timelineStore';
 import type { ShowAction, TrackType, SaveTimelineBody } from '@/api/gen/client';
-import type { ContentListItem } from '@/api/gen/client';
 import {
   TimeRuler, SpriteStrip, WaveformStrip, PlaybackCursor,
-  TrackArea, PropertyPanel, VideoPreview,
+  TrackArea, PropertyPanel, VideoPreview, Minimap,
   usePlaybackEngine, useRehearsal, ActionLibrary, useTimelineKeyboard,
 } from './components/timeline';
 import type { DragData } from './components/timeline/ActionLibrary';
+import type { ResizeEdge } from './components/timeline/ActionBlock';
+import SplitPane from '@/components/SplitPane';
+import {
+  findSnapTarget, buildSecondCandidates, buildActionEdgeCandidates,
+} from '@/lib/timeline/snap';
 
 /* ==================== Constants ==================== */
 
@@ -47,6 +52,96 @@ function formatMs(ms: number): string {
   return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
 }
 
+/** Format ms with 0.1s precision for snap hint status text — e.g. "01:23.5" */
+function formatMsHint(ms: number): string {
+  const total = Math.max(0, Math.round(ms));
+  const min = Math.floor(total / 60000);
+  const sec = Math.floor((total % 60000) / 1000);
+  const tenth = Math.floor((total % 1000) / 100);
+  return `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}.${tenth}`;
+}
+
+/** Snap 像素阈值 */
+const SNAP_THRESHOLD_PX = 8;
+/** SplitPane 比例 localStorage key */
+const PREVIEW_RATIO_KEY = 'excs.timeline.previewRatio';
+/** Batch D：Minimap 折叠状态 localStorage key */
+const MINIMAP_VISIBLE_KEY = 'excs.timeline.minimapVisible';
+/** pre/post roll 节流（ms） — 输入后 500ms 才发请求 */
+const ROLL_THROTTLE_MS = 500;
+
+/**
+ * Batch C P14：动作类型 → 推荐轨道类型。
+ * device 命令 → light/mechanical/audio/custom（任一即 OK）。
+ * scene → 任意（视为通用编排单元）。
+ * media → video。
+ *
+ * 不匹配时给警告角标，不阻断落点（用户可以强行落，例如"灯光命令落到自定义轨道做特殊编排"）。
+ */
+function isTrackTypeRecommended(
+  dragType: 'device' | 'scene' | 'media',
+  trackType: TrackTypeEnum,
+): boolean {
+  if (dragType === 'scene') return true;
+  if (dragType === 'media') return trackType === 'video';
+  // device
+  return trackType === 'light' || trackType === 'mechanical'
+    || trackType === 'audio' || trackType === 'custom';
+}
+
+/** 给警告 tooltip 提示推荐轨道类型 */
+function recommendedTrackLabel(dragType: 'device' | 'scene' | 'media'): string {
+  if (dragType === 'media') return '视频';
+  return '灯光 / 机械 / 音频 / 自定义';
+}
+
+/**
+ * Batch C P21：拖入设备命令时根据 params_schema 预填 params。
+ * - required 字段：有 widget.default 取 default；否则给类型对应的零值（避免后端 422）。
+ * - 非 required 字段：仅当 default 存在时填，否则留空。
+ */
+function buildInitialParams(command: { params_schema?: { [k: string]: unknown } | null }): Record<string, unknown> {
+  const schema = command.params_schema as
+    | { required?: string[]; properties?: Record<string, { type?: string; default?: unknown }> }
+    | null
+    | undefined;
+  if (!schema || !schema.properties) return {};
+  const required = new Set(schema.required ?? []);
+  const out: Record<string, unknown> = {};
+  for (const [key, prop] of Object.entries(schema.properties)) {
+    if (prop && Object.prototype.hasOwnProperty.call(prop, 'default')) {
+      out[key] = prop.default;
+    } else if (required.has(key)) {
+      // 必填但无默认 → 给类型零值
+      switch (prop?.type) {
+        case 'integer':
+        case 'number':
+          out[key] = 0; break;
+        case 'boolean':
+          out[key] = false; break;
+        case 'array':
+          out[key] = []; break;
+        case 'object':
+          out[key] = {}; break;
+        default:
+          out[key] = '';
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * dirty 计时文案：基于 lastSavedAt（毫秒时间戳）和 dirty 状态。
+ * dirty=true → "未保存（X 分钟）"；dirty=false → "已保存（X 分钟前）"。
+ * X 为 floor((now - lastSavedAt) / 60000)。
+ */
+function formatSavedAgo(now: number, lastSavedAt: number | null, dirty: boolean): string {
+  if (lastSavedAt == null) return dirty ? '未保存' : '已保存';
+  const mins = Math.max(0, Math.floor((now - lastSavedAt) / 60000));
+  return dirty ? `未保存（${mins} 分钟）` : `已保存（${mins} 分钟前）`;
+}
+
 /* ==================== Component ==================== */
 
 export default function ShowTimelinePage() {
@@ -56,12 +151,12 @@ export default function ShowTimelinePage() {
   const navigate = useNavigate();
 
   const {
-    show, tracks, dirty, view, spriteSheets, waveformPeaks,
-    selectedActionIds, clipboard,
-    loadShow, markClean,
-    addTrack, removeTrack, renameTrack, updateAction, addAction,
+    show, tracks, dirty, lastSavedAt, view, spriteSheets, waveformPeaks,
+    selectedActionIds, clipboard, snapHintMs,
+    loadShow, setShowMeta, markClean,
+    addTrack, removeTrack, renameTrack, reorderTrack, updateAction, addAction,
     selectAction, clearSelection, toggleActionSelection,
-    setZoomLevel, setScrollLeft, reset,
+    setZoomLevelAnchored, fitToScreen, setScrollLeft, setSnapHint, reset,
     undo, redo, canUndo, canRedo,
     copySelected, paste,
   } = useTimelineStore();
@@ -94,14 +189,47 @@ export default function ShowTimelinePage() {
     return () => ro.disconnect();
   }, [showLoaded]);
 
-  /* Wheel → virtual horizontal scroll for reference panel */
+  /* Wheel → 锚点缩放 (Ctrl/⌘) 或 虚拟横向滚动 */
   const handleRefWheel = useCallback((e: React.WheelEvent) => {
+    if (e.ctrlKey || e.metaKey) {
+      if (e.deltaY === 0) return;
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.1 : 0.9;
+      const rect = refPanelRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const anchorPx = e.clientX - rect.left;
+      setZoomLevelAnchored(view.zoomLevel * factor, anchorPx, refVpWidth, totalDurationMs);
+      return;
+    }
     const dx = e.deltaX || (e.shiftKey ? e.deltaY : 0);
     if (dx === 0) return;
     e.preventDefault();
     const maxScroll = Math.max(0, totalDurationMs * view.zoomLevel - refVpWidth);
     setScrollLeft(Math.max(0, Math.min(maxScroll, view.scrollLeft + dx)));
-  }, [view.zoomLevel, view.scrollLeft, refVpWidth, totalDurationMs, setScrollLeft]);
+  }, [view.zoomLevel, view.scrollLeft, refVpWidth, totalDurationMs, setScrollLeft, setZoomLevelAnchored]);
+
+  /* fit-to-screen：show 加载完且 viewport 首次有宽度时调一次 */
+  useEffect(() => {
+    if (refVpWidth > 0 && totalDurationMs > 0) {
+      fitToScreen(refVpWidth, totalDurationMs);
+    }
+  }, [refVpWidth, totalDurationMs, fitToScreen]);
+
+  /* Slider zoom（用 viewport 中点作锚点） */
+  const handleZoomChange = useCallback((val: number) => {
+    setZoomLevelAnchored(val, refVpWidth / 2, refVpWidth, totalDurationMs);
+  }, [setZoomLevelAnchored, refVpWidth, totalDurationMs]);
+
+  /* TrackArea Ctrl+wheel 锚点缩放 */
+  const handleZoomAtAnchor = useCallback((level: number, anchorPx: number, viewportWidth: number) => {
+    setZoomLevelAnchored(level, anchorPx, viewportWidth, totalDurationMs);
+  }, [setZoomLevelAnchored, totalDurationMs]);
+
+  /* Slider 下限：fit-to-screen 对应的 zoom 值（防止滑到比 fit 还小） */
+  const sliderMin = useMemo(() => {
+    if (refVpWidth <= 0 || totalDurationMs <= 0) return 0.005;
+    return Math.max(0.005, refVpWidth / totalDurationMs);
+  }, [refVpWidth, totalDurationMs]);
 
   /* ── DnD sensors ── */
   const sensors = useSensors(
@@ -110,11 +238,33 @@ export default function ShowTimelinePage() {
 
   /* ── DnD active item state for overlay ── */
   const [dragLabel, setDragLabel] = useState<string | null>(null);
+  /**
+   * Batch C P14：拖拽中的"类型联动"提示。
+   * dragType = 当前拖动的来源类型；overTrackType = 当前悬停的轨道类型；
+   * mismatch = !recommended（角标 + tooltip 用）。
+   */
+  const [dragType, setDragType] = useState<'device' | 'scene' | 'media' | null>(null);
+  const [overTrackType, setOverTrackType] = useState<TrackTypeEnum | null>(null);
+  const dragMismatch = useMemo(() => {
+    if (!dragType || !overTrackType) return false;
+    return !isTrackTypeRecommended(dragType, overTrackType);
+  }, [dragType, overTrackType]);
+
+  /**
+   * 构造 snap 候选：整秒 + 当前游标 + 其它 action 的起点和终点（剔除自身）。
+   * （提前到 DnD 之前定义，handleDragEnd / drag-move 都引用它。）
+   */
+  const buildSnapCandidates = useCallback((excludeId: number | null): number[] => {
+    const seconds = buildSecondCandidates(totalDurationMs);
+    const edges = buildActionEdgeCandidates(tracks, excludeId);
+    return [...seconds, Math.round(currentTimeMs), ...edges];
+  }, [tracks, totalDurationMs, currentTimeMs]);
 
   /* ── DnD handlers ── */
   const handleDragStart = useCallback((event: DragStartEvent) => {
     const data = event.active.data.current as DragData | undefined;
     if (!data) return;
+    setDragType(data.type);
     switch (data.type) {
       case 'device': setDragLabel(data.command.name); break;
       case 'scene': setDragLabel(data.scene.name); break;
@@ -122,8 +272,21 @@ export default function ShowTimelinePage() {
     }
   }, []);
 
+  /* ── DnD over：跟踪当前悬停轨道类型，给类型联动警告用 ── */
+  const handleDragOver = useCallback((event: { over: { data?: { current?: unknown } } | null }) => {
+    const overData = event.over?.data?.current as { trackId?: number } | undefined;
+    if (!overData?.trackId) {
+      setOverTrackType(null);
+      return;
+    }
+    const track = tracks.find((t) => t.id === overData.trackId);
+    setOverTrackType(track ? (track.track_type as TrackTypeEnum) : null);
+  }, [tracks]);
+
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     setDragLabel(null);
+    setDragType(null);
+    setOverTrackType(null);
     const { active, over } = event;
     if (!over) return;
 
@@ -140,26 +303,37 @@ export default function ShowTimelinePage() {
     const pointerX = (event.activatorEvent as PointerEvent)?.clientX ?? 0;
     const deltaX = event.delta.x;
     const dropX = pointerX + deltaX - trackEl.left;
-    const dropTimeMs = Math.max(0, Math.round((dropX + view.scrollLeft) / view.zoomLevel));
+    const rawDropMs = Math.max(0, Math.round((dropX + view.scrollLeft) / view.zoomLevel));
+    // Snap drop time（除非按住 shift）
+    const shiftAtDrop = (event.activatorEvent as PointerEvent)?.shiftKey ?? false;
+    let dropTimeMs = rawDropMs;
+    if (!shiftAtDrop) {
+      const candidates = buildSnapCandidates(null);
+      const snap = findSnapTarget(rawDropMs, candidates, SNAP_THRESHOLD_PX, view.zoomLevel);
+      if (snap) dropTimeMs = snap.snappedMs;
+    }
 
     // Create action based on drag data type
     const tempId = -(Date.now() % 1_000_000) - Math.floor(Math.random() * 10000);
 
     let newAction: ShowAction;
     switch (data.type) {
-      case 'device':
+      case 'device': {
+        // Batch C P21：用 deviceId/deviceName 直接填；按 params_schema.required + widget.default 预填
+        const initialParams = buildInitialParams(data.command);
         newAction = {
           id: tempId,
-          device_id: null,
-          device_name: '',
+          device_id: data.deviceId,
+          device_name: data.deviceName,
           name: data.command.name,
           action_type: 'device',
           start_time_ms: dropTimeMs,
           duration_ms: 2000,
           command: data.command.code,
-          params: {},
+          params: initialParams,
         };
         break;
+      }
       case 'scene':
         newAction = {
           id: tempId,
@@ -191,10 +365,12 @@ export default function ShowTimelinePage() {
     addAction(trackId, newAction);
     clearSelection();
     selectAction(tempId);
-  }, [view.scrollLeft, view.zoomLevel, addAction, clearSelection, selectAction]);
+  }, [view.scrollLeft, view.zoomLevel, addAction, clearSelection, selectAction, buildSnapCandidates]);
 
   const handleDragCancel = useCallback(() => {
     setDragLabel(null);
+    setDragType(null);
+    setOverTrackType(null);
   }, []);
 
   /* ── Fetch show data ── */
@@ -219,41 +395,93 @@ export default function ShowTimelinePage() {
 
   useEffect(() => () => { reset(); }, [reset]);
 
-  /* ── Base video selector ── */
-  const [videoModalOpen, setVideoModalOpen] = useState(false);
-  const [selectedVideoId, setSelectedVideoId] = useState<number | undefined>();
-
-  const { data: videoContents } = useQuery({
-    queryKey: queryKeys.contents({ hall_id: show?.hall_id ?? 0, page: 1, page_size: 200, status: 'ready' }),
-    queryFn: () => contentApi.listContents({ hall_id: show!.hall_id, page: 1, page_size: 200, status: 'ready' as never }),
-    select: (res) => (res.data.data?.list ?? []).filter((c: ContentListItem) => c.type === 'video'),
-    enabled: !!show?.hall_id,
+  /* ── Batch D：Minimap 显隐（默认展开），localStorage 持久化 ── */
+  const [minimapVisible, setMinimapVisible] = useState<boolean>(() => {
+    try {
+      const v = localStorage.getItem(MINIMAP_VISIBLE_KEY);
+      return v == null ? true : v === '1';
+    } catch { return true; }
   });
-  const videoOptions = (videoContents ?? []).map((c: ContentListItem) => {
-    const dur = c.duration_ms > 0 ? ` (${Math.floor(c.duration_ms / 60000)}:${String(Math.floor((c.duration_ms % 60000) / 1000)).padStart(2, '0')})` : '';
-    return { value: c.id, label: `${c.name}${dur}`, duration: c.duration_ms };
-  });
-
-  const updateShowMutation = useMutation({
-    mutationFn: (data: { base_content_id: number; duration_ms: number }) =>
-      showApi.updateShow(showId, data),
-    onSuccess: () => {
-      message.success('基准视频已更新');
-      setVideoModalOpen(false);
-      // Refetch show data
-      window.location.reload();
-    },
-    onError: () => { message.error('更新失败'); },
-  });
-
-  const handleVideoConfirm = useCallback(() => {
-    if (!selectedVideoId) return;
-    const v = videoOptions.find((o) => o.value === selectedVideoId);
-    updateShowMutation.mutate({
-      base_content_id: selectedVideoId,
-      duration_ms: v?.duration ?? show?.duration_ms ?? 60000,
+  const toggleMinimap = useCallback(() => {
+    setMinimapVisible((prev) => {
+      const next = !prev;
+      try { localStorage.setItem(MINIMAP_VISIBLE_KEY, next ? '1' : '0'); } catch { /* ignore */ }
+      return next;
     });
-  }, [selectedVideoId, videoOptions, show, updateShowMutation]);
+  }, []);
+
+  /* ── 1s tick — drives "X 分钟前/X 分钟" 实时刷新 ── */
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  /* ── 离开拦截 1：useBlocker（react-router 内部跳转） ── */
+  const blocker = useBlocker(
+    useCallback(({ currentLocation, nextLocation }) =>
+      dirty && currentLocation.pathname !== nextLocation.pathname,
+    [dirty]),
+  );
+  // React StrictMode dev 会让 effect 跑两遍 → Modal 弹两次；用 ref 守门
+  const blockedHandledRef = useRef(false);
+  useEffect(() => {
+    if (blocker.state === 'blocked' && !blockedHandledRef.current) {
+      blockedHandledRef.current = true;
+      Modal.confirm({
+        title: '有未保存改动',
+        content: '当前演出时间轴有未保存的改动，确定离开吗？离开后改动会丢失。',
+        okText: '离开',
+        okButtonProps: { danger: true },
+        cancelText: '留下继续编辑',
+        onOk: () => { blockedHandledRef.current = false; blocker.proceed?.(); },
+        onCancel: () => { blockedHandledRef.current = false; blocker.reset?.(); },
+      });
+    }
+    if (blocker.state === 'unblocked') blockedHandledRef.current = false;
+  }, [blocker, blocker.state]);
+
+  /* ── 离开拦截 2：beforeunload（关页签 / 刷新 / 关浏览器） ── */
+  useEffect(() => {
+    if (!dirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = ''; // Chrome 需要赋值才弹原生确认
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [dirty]);
+
+  /* ── Batch C P11：pre/post roll inline 编辑（节流 500ms） ── */
+  const rollMutation = useMutation({
+    mutationFn: (patch: { pre_roll_ms?: number; post_roll_ms?: number }) =>
+      showApi.updateShow(showId, patch),
+    onError: () => { message.error('前导/尾声更新失败'); },
+  });
+  const rollTimerRef = useRef<{ pre?: ReturnType<typeof setTimeout>; post?: ReturnType<typeof setTimeout> }>({});
+  const handlePreRollChange = useCallback((sec: number | null) => {
+    if (sec == null || sec < 0) return;
+    const ms = Math.round(sec * 1000);
+    setShowMeta({ pre_roll_ms: ms }); // 立即视觉反馈
+    if (rollTimerRef.current.pre) clearTimeout(rollTimerRef.current.pre);
+    rollTimerRef.current.pre = setTimeout(() => {
+      rollMutation.mutate({ pre_roll_ms: ms });
+    }, ROLL_THROTTLE_MS);
+  }, [setShowMeta, rollMutation]);
+  const handlePostRollChange = useCallback((sec: number | null) => {
+    if (sec == null || sec < 0) return;
+    const ms = Math.round(sec * 1000);
+    setShowMeta({ post_roll_ms: ms });
+    if (rollTimerRef.current.post) clearTimeout(rollTimerRef.current.post);
+    rollTimerRef.current.post = setTimeout(() => {
+      rollMutation.mutate({ post_roll_ms: ms });
+    }, ROLL_THROTTLE_MS);
+  }, [setShowMeta, rollMutation]);
+  // 卸载清理 timer
+  useEffect(() => () => {
+    if (rollTimerRef.current.pre) clearTimeout(rollTimerRef.current.pre);
+    if (rollTimerRef.current.post) clearTimeout(rollTimerRef.current.post);
+  }, []);
 
   /* ── Save mutation ── */
   const saveMutation = useMutation({
@@ -304,6 +532,10 @@ export default function ShowTimelinePage() {
     renameTrack(trackId, name);
   }, [renameTrack]);
 
+  const handleReorderTrack = useCallback((fromIdx: number, toIdx: number) => {
+    reorderTrack(fromIdx, toIdx);
+  }, [reorderTrack]);
+
   /* ── Action callbacks ── */
   const handleSelectAction = useCallback((id: number, multi: boolean) => {
     if (multi) {
@@ -318,13 +550,60 @@ export default function ShowTimelinePage() {
     // Double-click focuses the property panel (selection is already handled by mousedown)
   }, []);
 
-  const handleDragMoveAction = useCallback((id: number, newStartMs: number) => {
-    updateAction(id, { start_time_ms: newStartMs });
-  }, [updateAction]);
+  const handleDragMoveAction = useCallback((id: number, newStartMs: number, shift: boolean) => {
+    if (shift) {
+      updateAction(id, { start_time_ms: newStartMs });
+      setSnapHint(null);
+      return;
+    }
+    const candidates = buildSnapCandidates(id);
+    const snap = findSnapTarget(newStartMs, candidates, SNAP_THRESHOLD_PX, view.zoomLevel);
+    if (snap) {
+      updateAction(id, { start_time_ms: snap.snappedMs });
+      setSnapHint(snap.hitTarget);
+    } else {
+      updateAction(id, { start_time_ms: newStartMs });
+      setSnapHint(null);
+    }
+  }, [updateAction, buildSnapCandidates, view.zoomLevel, setSnapHint]);
 
-  const handleResizeAction = useCallback((id: number, newStartMs: number, newDurationMs: number) => {
-    updateAction(id, { start_time_ms: newStartMs, duration_ms: newDurationMs });
-  }, [updateAction]);
+  const handleResizeAction = useCallback((id: number, newStartMs: number, newDurationMs: number, edge: ResizeEdge, shift: boolean) => {
+    if (shift) {
+      updateAction(id, { start_time_ms: newStartMs, duration_ms: newDurationMs });
+      setSnapHint(null);
+      return;
+    }
+    const candidates = buildSnapCandidates(id);
+    if (edge === 'left') {
+      // 左边缘吸附：保持右边缘不动 → newEnd = newStartMs + newDurationMs
+      const newEnd = newStartMs + newDurationMs;
+      const snap = findSnapTarget(newStartMs, candidates, SNAP_THRESHOLD_PX, view.zoomLevel);
+      if (snap) {
+        const snappedStart = Math.max(0, Math.min(newEnd - 100, snap.snappedMs));
+        updateAction(id, { start_time_ms: snappedStart, duration_ms: newEnd - snappedStart });
+        setSnapHint(snap.hitTarget);
+      } else {
+        updateAction(id, { start_time_ms: newStartMs, duration_ms: newDurationMs });
+        setSnapHint(null);
+      }
+    } else {
+      // 右边缘吸附：保持起点不动 → 吸附 end 时间
+      const oldEnd = newStartMs + newDurationMs;
+      const snap = findSnapTarget(oldEnd, candidates, SNAP_THRESHOLD_PX, view.zoomLevel);
+      if (snap) {
+        const snappedDur = Math.max(100, snap.snappedMs - newStartMs);
+        updateAction(id, { start_time_ms: newStartMs, duration_ms: snappedDur });
+        setSnapHint(snap.hitTarget);
+      } else {
+        updateAction(id, { start_time_ms: newStartMs, duration_ms: newDurationMs });
+        setSnapHint(null);
+      }
+    }
+  }, [updateAction, buildSnapCandidates, view.zoomLevel, setSnapHint]);
+
+  const handleActionDragEnd = useCallback((_id: number) => {
+    setSnapHint(null);
+  }, [setSnapHint]);
 
   const handleAddAction = useCallback((trackId: number) => {
     // Create a new action at playback cursor position
@@ -356,7 +635,6 @@ export default function ShowTimelinePage() {
     updateAction(actionId, patch);
   }, [updateAction]);
 
-  const handleZoomChange = useCallback((val: number) => setZoomLevel(val), [setZoomLevel]);
 
   /* ── Selected action for property panel ── */
   const selectedAction = useMemo(() => {
@@ -397,6 +675,7 @@ export default function ShowTimelinePage() {
     <DndContext
       sensors={sensors}
       onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
@@ -412,24 +691,75 @@ export default function ShowTimelinePage() {
           <Space size={8}>
             <Button size="small" icon={<ArrowLeftOutlined />} onClick={() => navigate(`/shows/${showId}`)}>返回</Button>
             <span style={{ fontWeight: 600, fontSize: 15 }}>{show.name}</span>
-            {dirty && <Badge status="warning" text="未保存" />}
+            <span
+              style={{
+                fontSize: 11,
+                color: dirty ? '#faad14' : 'var(--ant-color-text-tertiary)',
+                fontWeight: dirty ? 500 : 400,
+              }}
+            >
+              {dirty ? '● ' : '○ '}
+              {formatSavedAgo(now, lastSavedAt, dirty)}
+            </span>
             <Tag style={{ fontSize: 11 }}>{formatMs(totalDurationMs)}</Tag>
+            {/* Batch C P11：pre/post roll inline 编辑（节流 500ms 写库） */}
+            <Tooltip title="前导（视频前留白时长，秒）">
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ fontSize: 11, color: 'var(--ant-color-text-tertiary)' }}>前导</span>
+                <InputNumber
+                  size="small"
+                  min={0}
+                  step={0.5}
+                  precision={1}
+                  value={(show.pre_roll_ms ?? 0) / 1000}
+                  onChange={handlePreRollChange}
+                  style={{ width: 60 }}
+                  controls={false}
+                />
+                <span style={{ fontSize: 11, color: 'var(--ant-color-text-tertiary)' }}>s</span>
+              </span>
+            </Tooltip>
+            <Tooltip title="尾声（视频后留白时长，秒）">
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ fontSize: 11, color: 'var(--ant-color-text-tertiary)' }}>尾声</span>
+                <InputNumber
+                  size="small"
+                  min={0}
+                  step={0.5}
+                  precision={1}
+                  value={(show.post_roll_ms ?? 0) / 1000}
+                  onChange={handlePostRollChange}
+                  style={{ width: 60 }}
+                  controls={false}
+                />
+                <span style={{ fontSize: 11, color: 'var(--ant-color-text-tertiary)' }}>s</span>
+              </span>
+            </Tooltip>
             {show.base_content_name || show.base_content_id ? (
-              <Tag
-                icon={<VideoCameraOutlined />}
-                color="blue"
-                style={{ cursor: 'pointer', fontSize: 11 }}
-                onClick={() => { setSelectedVideoId(show.base_content_id ?? undefined); setVideoModalOpen(true); }}
-              >
-                {show.base_content_name || `视频 #${show.base_content_id}`}
-              </Tag>
+              <>
+                <Tag
+                  icon={<VideoCameraOutlined />}
+                  color="blue"
+                  style={{ fontSize: 11 }}
+                >
+                  {show.base_content_name || `视频 #${show.base_content_id}`}
+                </Tag>
+                <Button
+                  type="link"
+                  size="small"
+                  style={{ fontSize: 11, padding: 0, height: 'auto' }}
+                  onClick={() => navigate(`/shows/${showId}`)}
+                >
+                  在详情页修改
+                </Button>
+              </>
             ) : (
               <Button
                 size="small"
                 icon={<VideoCameraOutlined />}
-                onClick={() => { setSelectedVideoId(undefined); setVideoModalOpen(true); }}
+                onClick={() => navigate(`/shows/${showId}`)}
               >
-                选择基准视频
+                前往详情页选择基准视频
               </Button>
             )}
           </Space>
@@ -453,13 +783,19 @@ export default function ShowTimelinePage() {
             <ZoomOutOutlined style={{ fontSize: 12, color: 'var(--ant-color-text-quaternary)' }} />
             <Slider
               style={{ width: 100 }}
-              min={0.03} max={0.5} step={0.01}
+              min={sliderMin} max={0.5} step={0.001}
               value={view.zoomLevel}
               onChange={handleZoomChange}
               tooltip={{ formatter: (v) => `${((v ?? 0.1) * 1000).toFixed(0)} px/s` }}
             />
             <ZoomInOutlined style={{ fontSize: 12, color: 'var(--ant-color-text-quaternary)' }} />
-            <Button type="primary" size="small" icon={<SaveOutlined />} onClick={handleSave} loading={saveMutation.isPending} disabled={!dirty}>保存</Button>
+            <Button
+              type="primary" size="small" icon={<SaveOutlined />}
+              onClick={handleSave} loading={saveMutation.isPending} disabled={!dirty}
+              className={dirty ? 'excs-save-pulse' : undefined}
+            >
+              保存
+            </Button>
           </Space>
         </div>
 
@@ -469,20 +805,27 @@ export default function ShowTimelinePage() {
           {/* Left: Action Library */}
           <ActionLibrary hallId={show.hall_id} />
 
-          {/* Center: Video + Refs + Tracks */}
+          {/* Center: Video + Refs + Tracks（30:70 SplitPane） */}
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
-
-            {/* Video Frame Preview — 60% of available height */}
-            <div style={{ flex: '0.6 1 0%', minHeight: 120, overflow: 'hidden' }}>
-              <VideoPreview
-                currentTimeMs={currentTimeMs}
-                spriteSheets={spriteSheets}
-                totalDurationMs={totalDurationMs}
-                preRollMs={preRollMs}
-                videoDurationMs={videoDurationMs}
-              />
-            </div>
-
+            <SplitPane
+              storageKey={PREVIEW_RATIO_KEY}
+              initialRatio={0.3}
+              minTopPx={120}
+              minBottomPx={160}
+              top={(
+                <VideoPreview
+                  currentTimeMs={currentTimeMs}
+                  spriteSheets={spriteSheets}
+                  totalDurationMs={totalDurationMs}
+                  preRollMs={preRollMs}
+                  videoDurationMs={videoDurationMs}
+                  baseContentId={show.base_content_id || null}
+                  pipelineStatus={show.base_content_pipeline_status}
+                  showId={showId}
+                />
+              )}
+              bottom={(
+                <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
             {/* Reference Strip (ruler + sprite + waveform + cursor) */}
             <div style={{ display: 'flex', borderTop: '1px solid var(--ant-color-border-secondary)', flexShrink: 0 }}>
               <div style={{
@@ -544,7 +887,8 @@ export default function ShowTimelinePage() {
             </div>
 
             {/* Track Area — takes remaining space */}
-            <div style={{ flex: '0.4 1 0%', minHeight: 80, overflow: 'hidden', borderTop: '1px solid var(--ant-color-border-secondary)' }}>
+            <div style={{ flex: 1, minHeight: 80, overflow: 'hidden', borderTop: '1px solid var(--ant-color-border-secondary)', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
               <TrackArea
                 tracks={tracks}
                 totalDurationMs={totalDurationMs}
@@ -555,19 +899,40 @@ export default function ShowTimelinePage() {
                 onAddTrack={handleAddTrack}
                 onRemoveTrack={handleRemoveTrack}
                 onRenameTrack={handleRenameTrack}
+                onReorderTrack={handleReorderTrack}
                 onSelectAction={handleSelectAction}
                 onDoubleClickAction={handleDoubleClickAction}
                 onClearSelection={clearSelection}
                 onDragMoveAction={handleDragMoveAction}
                 onResizeAction={handleResizeAction}
+                onActionDragEnd={handleActionDragEnd}
                 onAddAction={handleAddAction}
                 onScrollLeftChange={setScrollLeft}
+                onZoomAtAnchor={handleZoomAtAnchor}
                 onCopySelected={copySelected}
                 onPaste={paste}
                 onDeleteSelected={handleDeleteSelected}
                 currentTimeMs={currentTimeMs}
+                snapHintMs={snapHintMs}
               />
+              </div>
+              {minimapVisible && (
+                <Minimap
+                  tracks={tracks}
+                  totalDurationMs={totalDurationMs}
+                  preRollMs={preRollMs}
+                  postRollMs={postRollMs}
+                  viewportWidth={refVpWidth}
+                  zoomLevel={view.zoomLevel}
+                  scrollLeft={view.scrollLeft}
+                  currentTimeMs={currentTimeMs}
+                  onScrollLeftChange={setScrollLeft}
+                />
+              )}
             </div>
+                </div>
+              )}
+            />
           </div>
 
           {/* Right: Property Panel */}
@@ -583,6 +948,7 @@ export default function ShowTimelinePage() {
               action={selectedAction}
               hallId={show.hall_id}
               onChange={handlePropertyChange}
+              currentTimeMs={currentTimeMs}
             />
           </div>
         </div>
@@ -611,52 +977,63 @@ export default function ShowTimelinePage() {
             {tracks.length} 轨道 · {tracks.reduce((sum, t) => sum + (t.actions?.length ?? 0), 0)} 动作
           </span>
           {selectedActionIds.size > 0 && <span>· 选中 {selectedActionIds.size}</span>}
+          {snapHintMs != null && (
+            <span style={{ color: '#ff4d4f', fontWeight: 500 }}>
+              · 对齐到 {formatMsHint(snapHintMs)}
+            </span>
+          )}
           <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--ant-color-text-quaternary)' }}>
-            Space 播放 · Del 删除 · Ctrl+Z 撤销 · Ctrl+C/V 复制粘贴 · +/- 缩放
+            Space 播放 · Del 删除 · Ctrl+Z 撤销 · Ctrl+C/V 复制粘贴 · Ctrl+滚轮 锚点缩放 · Shift 临时关 Snap
           </span>
+          <Tooltip title={minimapVisible ? '折叠总览' : '展开总览'}>
+            <Button
+              type="text"
+              size="small"
+              icon={minimapVisible ? <CompressOutlined /> : <ExpandAltOutlined />}
+              onClick={toggleMinimap}
+              style={{ fontSize: 12 }}
+            />
+          </Tooltip>
         </div>
       </div>
 
-      {/* ── Drag Overlay ── */}
+      {/* ── Drag Overlay — Batch C P14：类型不匹配显示黄色警告角标 ── */}
       <DragOverlay>
         {dragLabel && (
-          <div style={{
-            padding: '6px 12px', borderRadius: 4,
-            background: 'var(--ant-color-primary)', color: '#fff',
-            fontSize: 12, fontWeight: 500,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-            whiteSpace: 'nowrap', pointerEvents: 'none',
-          }}>
-            {dragLabel}
-          </div>
+          <Tooltip
+            open={dragMismatch}
+            title={dragType ? `建议拖到 ${recommendedTrackLabel(dragType)} 轨道` : ''}
+            placement="top"
+          >
+            <div style={{
+              position: 'relative',
+              padding: '6px 12px', borderRadius: 4,
+              background: 'var(--ant-color-primary)', color: '#fff',
+              fontSize: 12, fontWeight: 500,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+              whiteSpace: 'nowrap', pointerEvents: 'none',
+            }}>
+              {dragLabel}
+              {dragMismatch && (
+                <WarningFilled
+                  style={{
+                    position: 'absolute',
+                    top: -6,
+                    right: -6,
+                    fontSize: 14,
+                    color: '#faad14',
+                    background: '#fff',
+                    borderRadius: '50%',
+                    padding: 1,
+                    boxShadow: '0 0 4px rgba(0,0,0,0.2)',
+                  }}
+                />
+              )}
+            </div>
+          </Tooltip>
         )}
       </DragOverlay>
 
-      {/* ── Base Video Selector Modal ── */}
-      <Modal
-        title="选择基准视频"
-        open={videoModalOpen}
-        onOk={handleVideoConfirm}
-        onCancel={() => setVideoModalOpen(false)}
-        confirmLoading={updateShowMutation.isPending}
-        okButtonProps={{ disabled: !selectedVideoId }}
-        width={480}
-        destroyOnClose
-      >
-        <p style={{ color: 'var(--ant-color-text-secondary)', marginBottom: 12 }}>
-          基准视频决定演出时长，其帧参考和音频波形将显示在时间轴中辅助编排。
-        </p>
-        <Select
-          style={{ width: '100%' }}
-          value={selectedVideoId}
-          onChange={setSelectedVideoId}
-          options={videoOptions}
-          placeholder="搜索或选择视频"
-          showSearch
-          optionFilterProp="label"
-          size="large"
-        />
-      </Modal>
     </DndContext>
   );
 }

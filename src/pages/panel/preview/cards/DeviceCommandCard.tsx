@@ -15,7 +15,54 @@ interface Props {
 interface ButtonShape {
   label?: string;
   icon?: string;
-  actions?: Array<{ device_id?: number; command?: string }>;
+  actions?: Array<{
+    device_id?: number;
+    command?: string;
+    params?: Record<string, unknown>;
+  }>;
+}
+
+/** 解析按钮通道意图（与中控 App `services/panel/channel_state.dart` 同语义）。 */
+function inferChannelIntent(b: ButtonShape): {
+  kind: 'on' | 'off';
+  channels: number[];
+  deviceIds: number[];
+} | null {
+  if (!b.actions?.length) return null;
+  const chs = new Set<number>();
+  const devs = new Set<number>();
+  let kind: 'on' | 'off' | null = null;
+  for (const a of b.actions) {
+    const cmd = a.command;
+    if (!cmd) return null;
+    const k = cmd.endsWith('_on') || cmd === 'on'
+      ? 'on'
+      : cmd.endsWith('_off') || cmd === 'off'
+        ? 'off'
+        : null;
+    if (!k) return null;
+    if (kind === null) kind = k;
+    else if (kind !== k) return null;
+    if (typeof a.device_id === 'number') devs.add(a.device_id);
+    const p = a.params;
+    if (p && typeof p === 'object') {
+      const ch = (p as Record<string, unknown>).channel;
+      if (typeof ch === 'number') chs.add(ch);
+      const list = (p as Record<string, unknown>).channels;
+      if (Array.isArray(list)) list.forEach((v) => typeof v === 'number' && chs.add(v));
+      const start = (p as Record<string, unknown>).start;
+      const end = (p as Record<string, unknown>).end;
+      if (typeof start === 'number' && typeof end === 'number' && end >= start) {
+        for (let i = start; i <= end; i++) chs.add(i);
+      }
+    }
+  }
+  if (!kind || chs.size === 0) return null;
+  return {
+    kind,
+    channels: [...chs].sort((a, b) => a - b),
+    deviceIds: [...devs],
+  };
 }
 
 /**
@@ -88,19 +135,35 @@ export default function DeviceCommandCard({ card, nameMaps, columns }: Props) {
       }}
     >
       {buttons.map((b, i) => {
-        const firstAction = b.actions?.[0];
-        const deviceLabel = firstAction?.device_id
-          ? nameMaps.device.get(firstAction.device_id) ?? `设备 #${firstAction.device_id}`
-          : undefined;
-        const status = b.actions?.length
-          ? `${b.actions.length} 动作${deviceLabel ? ' · ' + deviceLabel : ''}`
-          : '未配置';
+        const intent = inferChannelIntent(b);
+        // 预览态没有 device retained state，无法显示真实"已开/已关/部分"五态。
+        // 改为展示**配置意图**：通道按钮 → "目标 1,3,5 开"，让 admin 一眼看出
+        // binding 是否符合预期；非通道按钮 → 保留原"N 动作 · 设备名"摘要。
+        let status: string;
+        if (intent) {
+          const list = intent.channels.length <= 6
+            ? intent.channels.join(',')
+            : `${intent.channels.length} 路`;
+          status = `目标 ${list} ${intent.kind === 'on' ? '开' : '关'}`;
+        } else {
+          const firstAction = b.actions?.[0];
+          const deviceLabel = firstAction?.device_id
+            ? nameMaps.device.get(firstAction.device_id) ?? `设备 #${firstAction.device_id}`
+            : undefined;
+          status = b.actions?.length
+            ? `${b.actions.length} 动作${deviceLabel ? ' · ' + deviceLabel : ''}`
+            : '未配置';
+        }
         return (
           <PanelButtonCell
             key={i}
             tone="command"
             label={b.label || `按钮 ${i + 1}`}
             status={status}
+            iconHidden
+            titleMaxLines={2}
+            statusColor={PT.textDisabled}
+            borderColor={PT.glassStroke}
           />
         );
       })}

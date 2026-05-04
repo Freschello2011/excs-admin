@@ -20,8 +20,14 @@ interface Props {
   status?: ReactNode;
   /** 状态文字颜色（默认按 tone 推） */
   statusColor?: string;
+  /** 描边色显式覆盖（panel-redesign 2026-05-04：通道按钮五态需要 mint/amber/coral 主动指派） */
+  borderColor?: string;
   /** 右上角小图标（22×22 描边方块占位） */
   iconSlot?: ReactNode;
+  /** 命令按钮模式：不渲染右上角图标，标题占满宽度（panel-redesign 2026-05-04） */
+  iconHidden?: boolean;
+  /** 标题最大行数，默认 1。命令按钮模式建议 2，配合 iconHidden 让长 label 不被截 */
+  titleMaxLines?: number;
   /** 按下 / 高亮态（运行中 / pressed） */
   pressed?: boolean;
   /** 视觉 tone：决定描边色 + 外发光 */
@@ -64,7 +70,10 @@ export default function PanelButtonCell({
   label,
   status,
   statusColor,
+  borderColor,
   iconSlot,
+  iconHidden,
+  titleMaxLines = 1,
   pressed,
   tone = 'scene',
   empty,
@@ -87,12 +96,13 @@ export default function PanelButtonCell({
 
   const colors = toneColors(tone);
   const showGlow = pressed && colors.glow;
+  const effectiveBorder = borderColor ?? colors.border;
   const style: CSSProperties = {
     minHeight: 'var(--cell-h)',
     padding: 'var(--cell-padding)',
     borderRadius: 'var(--cell-radius)',
     background: 'var(--cell-bg)',
-    border: `1.5px solid ${colors.border}`,
+    border: `1.5px solid ${effectiveBorder}`,
     backdropFilter: 'var(--cell-blur)',
     WebkitBackdropFilter: 'var(--cell-blur)',
     boxShadow: showGlow
@@ -126,16 +136,20 @@ export default function PanelButtonCell({
             fontSize: 'var(--cell-title-fs)',
             fontWeight: 600,
             color: labelColor,
-            lineHeight: 1.2,
+            lineHeight: titleMaxLines > 1 ? 1.15 : 1.2,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
+            display: '-webkit-box',
+            WebkitLineClamp: titleMaxLines,
+            WebkitBoxOrient: 'vertical',
+            whiteSpace: titleMaxLines > 1 ? 'normal' : 'nowrap',
             flex: 1,
+            wordBreak: 'break-word',
           }}
         >
           {label}
         </div>
-        {iconSlot ?? (
+        {!iconHidden && (iconSlot ?? (
           <div
             style={{
               width: 22,
@@ -146,7 +160,7 @@ export default function PanelButtonCell({
               opacity: pressed ? 1 : 0.7,
             }}
           />
-        )}
+        ))}
       </div>
       {status != null && (
         <div

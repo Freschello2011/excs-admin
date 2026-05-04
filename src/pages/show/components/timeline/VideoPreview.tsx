@@ -1,6 +1,27 @@
 import { useRef, useEffect, useCallback } from 'react';
-import { VideoCameraOutlined } from '@ant-design/icons';
+import { Spin } from 'antd';
+import { VideoCameraOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
+import { Link } from 'react-router-dom';
 import type { SpriteSheet } from '@/api/gen/client';
+
+/* ==================== State inference ==================== */
+
+type PreviewState = 'absent' | 'processing' | 'failed' | 'ready';
+
+const PROCESSING_STATUSES = new Set([
+  'uploading', 'encrypting', 'encrypted',
+  'generating_thumbnail', 'ai_tagging', 'publishing',
+]);
+
+function inferState(
+  baseContentId: number | null | undefined,
+  pipelineStatus: string | undefined,
+): PreviewState {
+  if (!baseContentId) return 'absent';
+  if (pipelineStatus === 'failed') return 'failed';
+  if (pipelineStatus && PROCESSING_STATUSES.has(pipelineStatus)) return 'processing';
+  return 'ready';
+}
 
 /* ==================== Image cache ==================== */
 
@@ -26,13 +47,21 @@ interface VideoPreviewProps {
   totalDurationMs: number;
   preRollMs: number;
   videoDurationMs: number;
+  /** 基准视频 id；null/undefined → absent */
+  baseContentId?: number | null;
+  /** excs_contents.pipeline_status 透传；用于 processing/failed 推断 */
+  pipelineStatus?: string;
+  /** 演出 id，供"前往详情页"链接 */
+  showId: number;
 }
 
 /* ==================== Component ==================== */
 
 export default function VideoPreview({
   currentTimeMs, spriteSheets, totalDurationMs, preRollMs, videoDurationMs,
+  baseContentId, pipelineStatus, showId,
 }: VideoPreviewProps) {
+  const state = inferState(baseContentId, pipelineStatus);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -56,12 +85,11 @@ export default function VideoPreview({
     ctx.fillStyle = '#111';
     ctx.fillRect(0, 0, cw, ch);
 
-    // Check if we have valid sprite sheets with URLs
+    // Non-ready states have JSX overlays; canvas stays blank
+    if (state !== 'ready') return;
+
     const validSheets = spriteSheets.filter((s) => s.url && s.frame_count > 0);
-    if (validSheets.length === 0 || videoDurationMs <= 0) {
-      // Empty state — draw nothing, the JSX overlay handles this
-      return;
-    }
+    if (validSheets.length === 0 || videoDurationMs <= 0) return;
 
     // Calculate which frame to show based on current time
     // Frame time is relative to video (subtract pre-roll)
@@ -151,7 +179,7 @@ export default function VideoPreview({
       ctx.textAlign = 'center';
       ctx.fillText('帧加载失败', cw / 2, ch / 2);
     }
-  }, [currentTimeMs, spriteSheets, totalDurationMs, preRollMs, videoDurationMs]);
+  }, [currentTimeMs, spriteSheets, totalDurationMs, preRollMs, videoDurationMs, state]);
 
   useEffect(() => {
     draw();
@@ -179,18 +207,44 @@ export default function VideoPreview({
       }}
     >
       <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />
-      {(spriteSheets.length === 0 || !spriteSheets.some((s) => s.url && s.frame_count > 0)) && (
-        <div style={{
-          position: 'absolute', inset: 0,
-          display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center',
-          color: '#555', gap: 8,
-        }}>
+      {state === 'absent' && (
+        <div style={overlayStyle}>
           <VideoCameraOutlined style={{ fontSize: 36 }} />
           <span>无基准视频</span>
-          <span style={{ fontSize: 11, color: '#444' }}>选择基准视频后显示帧预览</span>
+          <Link
+            to={`/shows/${showId}`}
+            style={{ fontSize: 12, color: '#1890ff' }}
+          >
+            前往详情页选择基准视频 →
+          </Link>
+        </div>
+      )}
+      {state === 'processing' && (
+        <div style={overlayStyle}>
+          <Spin size="large" />
+          <span style={{ marginTop: 8 }}>雪碧图生成中（FFmpeg）</span>
+          <span style={{ fontSize: 11, color: '#444' }}>
+            视频上传后服务端预生成 {pipelineStatus ? `（当前: ${pipelineStatus}）` : ''}；稍后刷新页面
+          </span>
+        </div>
+      )}
+      {state === 'failed' && (
+        <div style={{ ...overlayStyle, color: '#ff4d4f' }}>
+          <ExclamationCircleOutlined style={{ fontSize: 36 }} />
+          <span>基准视频处理失败</span>
+          <Link to="/contents" style={{ fontSize: 12, color: '#1890ff' }}>
+            前往内容管理重试 →
+          </Link>
         </div>
       )}
     </div>
   );
 }
+
+const overlayStyle: React.CSSProperties = {
+  position: 'absolute', inset: 0,
+  display: 'flex', flexDirection: 'column',
+  alignItems: 'center', justifyContent: 'center',
+  color: '#999', gap: 6,
+  pointerEvents: 'auto',
+};

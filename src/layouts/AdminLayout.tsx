@@ -107,14 +107,14 @@ function buildMenuRegions(selectedHallId?: number): MenuRegion[] {
         },
         {
           key: 'smarthome',
-          label: '智能家居',
-          collapsible: true,
+          label: '',
           items: [
-            { path: '/smarthome/gateways', icon: 'router', label: '网关管理', requireActions: ['smarthome.manage_gateway', 'smarthome.view'] },
-            { path: '/smarthome/health', icon: 'monitor_heart', label: '设备全景', requireActions: ['smarthome.view'] },
-            { path: '/smarthome/rules', icon: 'rule', label: '规则管理', requireActions: ['smarthome.manage_rule', 'smarthome.view'] },
-            { path: '/smarthome/trigger-logs', icon: 'receipt_long', label: '触发日志', requireActions: ['smarthome.view'] },
-            { path: '/smarthome/alerts', icon: 'warning', label: '告警列表', requireActions: ['smarthome.alert_ack', 'smarthome.view'] },
+            // 5 子页（网关 / 设备全景 / 规则 / 触发日志 / 告警）合并到 SmartHomeHubPage 的 5 tab，
+            // requireActions 取并集：任一 action 命中即可见
+            {
+              path: '/smarthome', icon: 'home_iot_device', label: '智能家居',
+              requireActions: ['smarthome.view', 'smarthome.manage_gateway', 'smarthome.manage_rule', 'smarthome.alert_ack'],
+            },
           ],
         },
       ],
@@ -191,11 +191,7 @@ const titleMap: Record<string, string> = {
   '/ai/avatars': '数字人',
   '/notifications': '通知管理',
   '/logs': '操作日志',
-  '/smarthome/gateways': '网关管理',
-  '/smarthome/health': '设备全景',
-  '/smarthome/rules': '规则管理',
-  '/smarthome/trigger-logs': '触发日志',
-  '/smarthome/alerts': '告警列表',
+  '/smarthome': '智能家居',
   '/analytics': '运营分析',
   '/platform/device-catalog': '设备目录',
   '/platform/ai-avatar-library': 'AI 形象库',
@@ -390,7 +386,6 @@ export default function AdminLayout() {
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
-    smarthome: true,
     'platform-catalog': true,
     'platform-assets': true,
     analytics: true,

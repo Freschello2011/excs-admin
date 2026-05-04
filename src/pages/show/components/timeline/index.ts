@@ -8,6 +8,7 @@ export { default as PropertyPanel } from './PropertyPanel';
 export { default as VideoPreview } from './VideoPreview';
 export { default as ActionLibrary } from './ActionLibrary';
 export { default as ContextMenu } from './ContextMenu';
+export { default as Minimap } from './Minimap';
 export { usePlaybackEngine } from './usePlaybackEngine';
 export { useRehearsal } from './useRehearsal';
 export { useTimelineKeyboard } from './useTimelineKeyboard';

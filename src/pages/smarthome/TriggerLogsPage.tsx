@@ -40,7 +40,7 @@ type FilterMode = 'all' | 'triggered' | 'skipped';
 
 /* ==================== 组件 ==================== */
 
-export default function TriggerLogsPage() {
+export default function TriggerLogsPage({ embedded }: { embedded?: boolean } = {}) {
   const selectedHallId = useHallStore((s) => s.selectedHallId);
   const setSelectedHall = useHallStore((s) => s.setSelectedHall);
   const clearSelectedHall = useHallStore((s) => s.clearSelectedHall);
@@ -158,7 +158,7 @@ export default function TriggerLogsPage() {
 
   return (
     <div>
-      <PageHeader title="触发日志" description="查看智能家居规则触发和事件记录" />
+      {!embedded && <PageHeader title="触发日志" description="查看智能家居规则触发和事件记录" />}
 
       <Space wrap style={{ marginBottom: 16 }}>
         <Select

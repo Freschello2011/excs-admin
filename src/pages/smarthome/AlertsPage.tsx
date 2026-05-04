@@ -49,7 +49,7 @@ const ALERT_EVENT_OPTIONS = [
   ...Object.entries(ALERT_EVENT_LABELS).map(([value, label]) => ({ value, label })),
 ];
 
-export default function AlertsPage() {
+export default function AlertsPage({ embedded }: { embedded?: boolean } = {}) {
   const { message } = useMessage();
   const queryClient = useQueryClient();
   const selectedHallId = useHallStore((s) => s.selectedHallId);
@@ -145,7 +145,7 @@ export default function AlertsPage() {
 
   return (
     <div>
-      <PageHeader title="告警列表" description="查看和处理智能家居系统告警" />
+      {!embedded && <PageHeader title="告警列表" description="查看和处理智能家居系统告警" />}
 
       <Space wrap style={{ marginBottom: 16 }}>
         <Select

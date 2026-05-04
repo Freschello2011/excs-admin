@@ -1,9 +1,16 @@
 import { useCallback, useRef, useState } from 'react';
-import { Button, Tag, Popconfirm, Input, Select, Space } from 'antd';
-import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
-import { useDroppable } from '@dnd-kit/core';
+import { Button, Tag, Popconfirm, Input, Select, Space, Tooltip } from 'antd';
+import { PlusOutlined, DeleteOutlined, HolderOutlined } from '@ant-design/icons';
+import {
+  useDroppable, DndContext, closestCenter, PointerSensor,
+  useSensor, useSensors, type DragEndEvent as SortableDragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext, useSortable, verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import type { ShowTrack, ShowAction, TrackType } from '@/api/gen/client';
-import ActionBlock from './ActionBlock';
+import ActionBlock, { type ResizeEdge } from './ActionBlock';
 import ContextMenu, {
   buildTrackEmptyMenu, buildActionMenu, buildTrackLabelMenu,
   type MenuPosition, type MenuItem,
@@ -29,12 +36,109 @@ const TRACK_TYPE_OPTIONS: { label: string; value: TrackType }[] = [
   { label: '自定义', value: 'custom' },
 ];
 
+/* ==================== Sortable track label ==================== */
+//
+// Batch C P10：左侧轨道列拖手柄重排。手柄 = HolderOutlined（仅手柄触发拖拽，
+// 防止误拖名称区或删除按钮）。与 PanelEditorPage 同款（@dnd-kit/sortable）。
+
+function SortableTrackLabel({
+  track, isRenaming, renameValue, onRenameChange, onRenameConfirm,
+  onLabelContextMenu, onRemove,
+}: {
+  track: ShowTrack;
+  isRenaming: boolean;
+  renameValue: string;
+  onRenameChange: (v: string) => void;
+  onRenameConfirm: () => void;
+  onLabelContextMenu: (e: React.MouseEvent) => void;
+  onRemove: () => void;
+}) {
+  const {
+    attributes, listeners, setNodeRef, transform, transition, isDragging,
+  } = useSortable({ id: `track-label-${track.id}` });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 10 : undefined,
+    height: TRACK_H,
+    display: 'flex',
+    alignItems: 'center',
+    padding: '0 4px 0 2px',
+    borderBottom: '1px solid var(--ant-color-border)',
+    gap: 4,
+    fontSize: 12,
+    background: isDragging ? 'var(--ant-color-bg-elevated)' : undefined,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      onContextMenu={onLabelContextMenu}
+    >
+      <Tooltip title="长按拖动重排" placement="right">
+        <span
+          {...listeners}
+          style={{
+            cursor: 'grab',
+            display: 'flex',
+            alignItems: 'center',
+            color: 'var(--ant-color-text-quaternary)',
+            padding: '0 2px',
+          }}
+        >
+          <HolderOutlined style={{ fontSize: 12 }} />
+        </span>
+      </Tooltip>
+      <Tag
+        color={TRACK_TYPE_COLORS[track.track_type as TrackType]}
+        style={{ margin: 0, fontSize: 10, lineHeight: '18px', padding: '0 4px' }}
+      >
+        {TRACK_TYPE_LABELS[track.track_type as TrackType]}
+      </Tag>
+      {isRenaming ? (
+        <Input
+          size="small"
+          value={renameValue}
+          onChange={(e) => onRenameChange(e.target.value)}
+          onPressEnter={onRenameConfirm}
+          onBlur={onRenameConfirm}
+          autoFocus
+          style={{ flex: 1 }}
+        />
+      ) : (
+        <span style={{
+          flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {track.name}
+        </span>
+      )}
+      <Popconfirm
+        title="确认删除该轨道？"
+        description="轨道内的所有动作也将被删除"
+        onConfirm={onRemove}
+        okText="删除"
+        cancelText="取消"
+      >
+        <Button
+          type="text" size="small" danger
+          icon={<DeleteOutlined />}
+          style={{ fontSize: 11 }}
+        />
+      </Popconfirm>
+    </div>
+  );
+}
+
 /* ==================== Droppable track row ==================== */
 
 function DroppableTrackRow({
   track, totalWidth, zoomLevel, scrollLeft, selectedActionIds,
   onSelectAction, onDoubleClickAction, onDragMoveAction, onResizeAction,
-  onAddAction, onContextMenu,
+  onActionDragEnd, onAddAction, onContextMenu,
 }: {
   track: ShowTrack;
   totalWidth: number;
@@ -43,8 +147,9 @@ function DroppableTrackRow({
   selectedActionIds: Set<number>;
   onSelectAction: (id: number, multi: boolean) => void;
   onDoubleClickAction: (id: number) => void;
-  onDragMoveAction: (id: number, newStartMs: number) => void;
-  onResizeAction: (id: number, newStartMs: number, newDurationMs: number) => void;
+  onDragMoveAction: (id: number, newStartMs: number, shift: boolean) => void;
+  onResizeAction: (id: number, newStartMs: number, newDurationMs: number, edge: ResizeEdge, shift: boolean) => void;
+  onActionDragEnd: (id: number) => void;
   onAddAction: (trackId: number) => void;
   onContextMenu: (e: React.MouseEvent, trackId: number, actionId?: number) => void;
 }) {
@@ -93,6 +198,7 @@ function DroppableTrackRow({
           onDoubleClick={onDoubleClickAction}
           onDragMove={onDragMoveAction}
           onResize={onResizeAction}
+          onDragEnd={onActionDragEnd}
         />
       ))}
     </div>
@@ -111,29 +217,51 @@ interface TrackAreaProps {
   onAddTrack: (name: string, trackType: TrackType) => void;
   onRemoveTrack: (trackId: number) => void;
   onRenameTrack: (trackId: number, name: string) => void;
+  /** Batch C P10：轨道重排（fromIdx/toIdx 基于当前 tracks 数组顺序） */
+  onReorderTrack: (fromIdx: number, toIdx: number) => void;
   onSelectAction: (id: number, multi: boolean) => void;
   onDoubleClickAction: (id: number) => void;
   onClearSelection: () => void;
-  onDragMoveAction: (id: number, newStartMs: number) => void;
-  onResizeAction: (id: number, newStartMs: number, newDurationMs: number) => void;
+  onDragMoveAction: (id: number, newStartMs: number, shift: boolean) => void;
+  onResizeAction: (id: number, newStartMs: number, newDurationMs: number, edge: ResizeEdge, shift: boolean) => void;
+  onActionDragEnd: (id: number) => void;
   onAddAction: (trackId: number) => void;
   onScrollLeftChange: (px: number) => void;
+  /** Ctrl+wheel 锚点缩放：(level, anchorPx, viewportWidth) */
+  onZoomAtAnchor: (level: number, anchorPx: number, viewportWidth: number) => void;
   onCopySelected: () => void;
   onPaste: (trackId: number, atMs: number) => void;
   onDeleteSelected: () => void;
   currentTimeMs: number;
+  /** Snap hint ms（拖动时高亮）；null 不渲染 */
+  snapHintMs: number | null;
 }
 
 /* ==================== Component ==================== */
 
 export default function TrackArea({
   tracks, totalDurationMs, zoomLevel, scrollLeft, selectedActionIds, hasClipboard,
-  onAddTrack, onRemoveTrack, onRenameTrack,
+  onAddTrack, onRemoveTrack, onRenameTrack, onReorderTrack,
   onSelectAction, onDoubleClickAction,
-  onClearSelection, onDragMoveAction, onResizeAction, onAddAction,
-  onScrollLeftChange, onCopySelected, onPaste, onDeleteSelected, currentTimeMs,
+  onClearSelection, onDragMoveAction, onResizeAction, onActionDragEnd, onAddAction,
+  onScrollLeftChange, onZoomAtAnchor, onCopySelected, onPaste, onDeleteSelected,
+  currentTimeMs, snapHintMs,
 }: TrackAreaProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  /* Sortable sensors（独立于动作库 DnD 的 PointerSensor，仅手柄触发） */
+  const sortableSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+  );
+
+  const handleSortableDragEnd = useCallback((e: SortableDragEndEvent) => {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const fromIdx = tracks.findIndex((t) => `track-label-${t.id}` === String(active.id));
+    const toIdx = tracks.findIndex((t) => `track-label-${t.id}` === String(over.id));
+    if (fromIdx < 0 || toIdx < 0) return;
+    onReorderTrack(fromIdx, toIdx);
+  }, [tracks, onReorderTrack]);
 
   /* ── Add track popover state ── */
   const [addOpen, setAddOpen] = useState(false);
@@ -164,8 +292,20 @@ export default function TrackArea({
     if (e.target === e.currentTarget) onClearSelection();
   }, [onClearSelection]);
 
-  /* ── Wheel → horizontal scroll ── */
+  /* ── Wheel：Ctrl/⌘+滚轮 = 锚点缩放；否则 = 横向滚动 ── */
   const handleWheel = useCallback((e: React.WheelEvent) => {
+    if (e.ctrlKey || e.metaKey) {
+      // 锚点缩放：deltaY < 0 zoom in 1.1×；> 0 zoom out 0.9×
+      if (e.deltaY === 0) return;
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.1 : 0.9;
+      const rect = scrollRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const anchorPx = e.clientX - rect.left;
+      const vpWidth = scrollRef.current?.clientWidth ?? rect.width;
+      onZoomAtAnchor(zoomLevel * factor, anchorPx, vpWidth);
+      return;
+    }
     const dx = e.deltaX || (e.shiftKey ? e.deltaY : 0);
     if (dx === 0) return;
     e.preventDefault();
@@ -173,7 +313,7 @@ export default function TrackArea({
     const vpWidth = scrollRef.current?.clientWidth ?? 0;
     const maxScroll = Math.max(0, totalWidth - vpWidth);
     onScrollLeftChange(Math.max(0, Math.min(maxScroll, scrollLeft + dx)));
-  }, [totalDurationMs, zoomLevel, scrollLeft, onScrollLeftChange]);
+  }, [totalDurationMs, zoomLevel, scrollLeft, onScrollLeftChange, onZoomAtAnchor]);
 
   /* ── Track area right-click ── */
   const handleTrackContextMenu = useCallback((e: React.MouseEvent, trackId: number, actionId?: number) => {
@@ -276,56 +416,31 @@ export default function TrackArea({
           display: 'flex', flexDirection: 'column',
         }}
       >
-        {/* Track label rows */}
+        {/* Track label rows — Batch C P10：dnd-kit Sortable 重排 */}
         <div style={{ flex: 1, overflow: 'auto' }}>
-          {tracks.map((track) => (
-            <div
-              key={track.id}
-              onContextMenu={(e) => handleLabelContextMenu(e, track.id)}
-              style={{
-                height: TRACK_H, display: 'flex', alignItems: 'center',
-                padding: '0 8px', borderBottom: '1px solid var(--ant-color-border)',
-                gap: 6, fontSize: 12,
-              }}
+          <DndContext
+            sensors={sortableSensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleSortableDragEnd}
+          >
+            <SortableContext
+              items={tracks.map((t) => `track-label-${t.id}`)}
+              strategy={verticalListSortingStrategy}
             >
-              <Tag
-                color={TRACK_TYPE_COLORS[track.track_type as TrackType]}
-                style={{ margin: 0, fontSize: 10, lineHeight: '18px', padding: '0 4px' }}
-              >
-                {TRACK_TYPE_LABELS[track.track_type as TrackType]}
-              </Tag>
-              {renamingTrackId === track.id ? (
-                <Input
-                  size="small"
-                  value={renameValue}
-                  onChange={(e) => setRenameValue(e.target.value)}
-                  onPressEnter={handleRenameConfirm}
-                  onBlur={handleRenameConfirm}
-                  autoFocus
-                  style={{ flex: 1 }}
+              {tracks.map((track) => (
+                <SortableTrackLabel
+                  key={track.id}
+                  track={track}
+                  isRenaming={renamingTrackId === track.id}
+                  renameValue={renameValue}
+                  onRenameChange={setRenameValue}
+                  onRenameConfirm={handleRenameConfirm}
+                  onLabelContextMenu={(e) => handleLabelContextMenu(e, track.id)}
+                  onRemove={() => onRemoveTrack(track.id)}
                 />
-              ) : (
-                <span style={{
-                  flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                }}>
-                  {track.name}
-                </span>
-              )}
-              <Popconfirm
-                title="确认删除该轨道？"
-                description="轨道内的所有动作也将被删除"
-                onConfirm={() => onRemoveTrack(track.id)}
-                okText="删除"
-                cancelText="取消"
-              >
-                <Button
-                  type="text" size="small" danger
-                  icon={<DeleteOutlined />}
-                  style={{ fontSize: 11 }}
-                />
-              </Popconfirm>
-            </div>
-          ))}
+              ))}
+            </SortableContext>
+          </DndContext>
 
           {/* Add track button */}
           <div style={{ padding: '8px', borderBottom: '1px solid var(--ant-color-border)' }}>
@@ -380,10 +495,32 @@ export default function TrackArea({
             onDoubleClickAction={onDoubleClickAction}
             onDragMoveAction={onDragMoveAction}
             onResizeAction={onResizeAction}
+            onActionDragEnd={onActionDragEnd}
             onAddAction={onAddAction}
             onContextMenu={handleTrackContextMenu}
           />
         ))}
+
+        {/* Snap hint overlay — 拖动期间高亮的对齐位置 */}
+        {snapHintMs != null && (() => {
+          const x = snapHintMs * zoomLevel - scrollLeft;
+          if (x < 0 || x > totalWidth) return null;
+          return (
+            <div
+              style={{
+                position: 'absolute',
+                left: x,
+                top: 0,
+                bottom: 0,
+                width: 1,
+                background: '#ff4d4f',
+                boxShadow: '0 0 4px rgba(255,77,79,0.6)',
+                pointerEvents: 'none',
+                zIndex: 20,
+              }}
+            />
+          );
+        })()}
 
         {tracks.length === 0 && (
           <div style={{
