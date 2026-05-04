@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, Tag, Popconfirm, Input, Select, Space, Tooltip } from 'antd';
 import { PlusOutlined, DeleteOutlined, HolderOutlined } from '@ant-design/icons';
 import {
@@ -292,27 +292,36 @@ export default function TrackArea({
     if (e.target === e.currentTarget) onClearSelection();
   }, [onClearSelection]);
 
-  /* ── Wheel：Ctrl/⌘+滚轮 = 锚点缩放；否则 = 横向滚动 ── */
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    if (e.ctrlKey || e.metaKey) {
-      // 锚点缩放：deltaY < 0 zoom in 1.1×；> 0 zoom out 0.9×
-      if (e.deltaY === 0) return;
+  /* ── Wheel：Ctrl/⌘+滚轮 = 锚点缩放；否则 = 横向滚动
+     React 17+ 的 onWheel 是 passive listener，preventDefault() 会被忽略——
+     必须用 addEventListener('wheel', handler, { passive: false }) 注册原生
+     listener，并 stopPropagation 阻止冒泡到 admin layout 触发横向滚出可视区。 */
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const handler = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        if (e.deltaY === 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const factor = e.deltaY < 0 ? 1.1 : 0.9;
+        const rect = el.getBoundingClientRect();
+        const anchorPx = e.clientX - rect.left;
+        const vpWidth = el.clientWidth || rect.width;
+        onZoomAtAnchor(zoomLevel * factor, anchorPx, vpWidth);
+        return;
+      }
+      const dx = e.deltaX || (e.shiftKey ? e.deltaY : 0);
+      if (dx === 0) return;
       e.preventDefault();
-      const factor = e.deltaY < 0 ? 1.1 : 0.9;
-      const rect = scrollRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      const anchorPx = e.clientX - rect.left;
-      const vpWidth = scrollRef.current?.clientWidth ?? rect.width;
-      onZoomAtAnchor(zoomLevel * factor, anchorPx, vpWidth);
-      return;
-    }
-    const dx = e.deltaX || (e.shiftKey ? e.deltaY : 0);
-    if (dx === 0) return;
-    e.preventDefault();
-    const totalWidth = totalDurationMs * zoomLevel;
-    const vpWidth = scrollRef.current?.clientWidth ?? 0;
-    const maxScroll = Math.max(0, totalWidth - vpWidth);
-    onScrollLeftChange(Math.max(0, Math.min(maxScroll, scrollLeft + dx)));
+      e.stopPropagation();
+      const totalWidth = totalDurationMs * zoomLevel;
+      const vpWidth = el.clientWidth || 0;
+      const maxScroll = Math.max(0, totalWidth - vpWidth);
+      onScrollLeftChange(Math.max(0, Math.min(maxScroll, scrollLeft + dx)));
+    };
+    el.addEventListener('wheel', handler, { passive: false });
+    return () => el.removeEventListener('wheel', handler);
   }, [totalDurationMs, zoomLevel, scrollLeft, onScrollLeftChange, onZoomAtAnchor]);
 
   /* ── Track area right-click ── */
@@ -476,7 +485,6 @@ export default function TrackArea({
       {/* ── Right: action track area (horizontally scrollable) ── */}
       <div
         ref={scrollRef}
-        onWheel={handleWheel}
         onClick={handleAreaClick}
         style={{
           flex: 1, overflow: 'hidden', position: 'relative',

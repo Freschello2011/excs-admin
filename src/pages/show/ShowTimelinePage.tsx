@@ -189,23 +189,33 @@ export default function ShowTimelinePage() {
     return () => ro.disconnect();
   }, [showLoaded]);
 
-  /* Wheel → 锚点缩放 (Ctrl/⌘) 或 虚拟横向滚动 */
-  const handleRefWheel = useCallback((e: React.WheelEvent) => {
-    if (e.ctrlKey || e.metaKey) {
-      if (e.deltaY === 0) return;
+  /* Wheel → 锚点缩放 (Ctrl/⌘) 或 虚拟横向滚动
+     React 17+ onWheel 是 passive listener，preventDefault 被忽略——
+     用 addEventListener('wheel', { passive: false }) + stopPropagation
+     防止 Ctrl+wheel 冒泡到 admin layout 把整页横向滚出。 */
+  useEffect(() => {
+    const el = refPanelRef.current;
+    if (!el) return;
+    const handler = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        if (e.deltaY === 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const factor = e.deltaY < 0 ? 1.1 : 0.9;
+        const rect = el.getBoundingClientRect();
+        const anchorPx = e.clientX - rect.left;
+        setZoomLevelAnchored(view.zoomLevel * factor, anchorPx, refVpWidth, totalDurationMs);
+        return;
+      }
+      const dx = e.deltaX || (e.shiftKey ? e.deltaY : 0);
+      if (dx === 0) return;
       e.preventDefault();
-      const factor = e.deltaY < 0 ? 1.1 : 0.9;
-      const rect = refPanelRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      const anchorPx = e.clientX - rect.left;
-      setZoomLevelAnchored(view.zoomLevel * factor, anchorPx, refVpWidth, totalDurationMs);
-      return;
-    }
-    const dx = e.deltaX || (e.shiftKey ? e.deltaY : 0);
-    if (dx === 0) return;
-    e.preventDefault();
-    const maxScroll = Math.max(0, totalDurationMs * view.zoomLevel - refVpWidth);
-    setScrollLeft(Math.max(0, Math.min(maxScroll, view.scrollLeft + dx)));
+      e.stopPropagation();
+      const maxScroll = Math.max(0, totalDurationMs * view.zoomLevel - refVpWidth);
+      setScrollLeft(Math.max(0, Math.min(maxScroll, view.scrollLeft + dx)));
+    };
+    el.addEventListener('wheel', handler, { passive: false });
+    return () => el.removeEventListener('wheel', handler);
   }, [view.zoomLevel, view.scrollLeft, refVpWidth, totalDurationMs, setScrollLeft, setZoomLevelAnchored]);
 
   /* fit-to-screen：show 加载完且 viewport 首次有宽度时调一次 */
@@ -840,7 +850,6 @@ export default function ShowTimelinePage() {
 
               <div
                 ref={refPanelRef}
-                onWheel={handleRefWheel}
                 style={{ flex: 1, position: 'relative', overflow: 'hidden' }}
               >
                 <TimeRuler

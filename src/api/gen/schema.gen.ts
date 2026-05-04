@@ -6572,6 +6572,16 @@ export interface components {
             version?: number;
             /** @description 指令状态（starting / pausing / resuming / canceling / sent / 或具体 ack 反馈） */
             status: string;
+            /**
+             * @description 当指令收到 ack 时透传 ack.detail（执行失败时含错误描述，如"演出引擎未初始化"/解析错误）。
+             *     ack=executed 或无 ack 时缺省。
+             */
+            detail?: string;
+            /**
+             * @description 当 ack.status=failed 时透传 ack.error_code（如 NOT_INITIALIZED / MISSING_FIELD / PARSE_ERROR）。
+             *     前端可据此显示更精确的错误。
+             */
+            error_code?: string;
         };
         RehearseShowRequest: {
             /**
