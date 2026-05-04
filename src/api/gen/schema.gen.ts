@@ -6373,6 +6373,7 @@ export interface components {
              * @description 基准视频 id；不传或 0 表示无基准视频
              */
             base_content_id?: number;
+            /** @description 演出主时长（基准视频时长，**不含** pre_roll_ms / post_roll_ms）；总时长 = pre_roll + duration + post_roll，由各端自行相加 */
             duration_ms: number;
             /** @description 不传则默认 2000 */
             pre_roll_ms?: number | null;

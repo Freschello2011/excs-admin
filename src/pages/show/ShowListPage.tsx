@@ -265,8 +265,13 @@ export default function ShowListPage() {
               }}
             />
           </Form.Item>
-          <Form.Item name="duration_ms" label="时长（毫秒）" rules={[{ required: true }]}>
-            <InputNumber min={1000} step={1000} style={{ width: '100%' }} placeholder="60000" />
+          <Form.Item
+            name="duration_ms"
+            label="时长（毫秒）"
+            rules={[{ required: true }]}
+            extra="= 基准视频时长（不含前导/尾声）；选基准视频后自动反填"
+          >
+            <InputNumber min={1000} step={1000} style={{ width: '100%' }} placeholder="60000" addonAfter="ms" />
           </Form.Item>
         </Form>
       </Modal>
