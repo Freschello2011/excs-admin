@@ -2,20 +2,20 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Table, Select, Button, Modal, Form, Input, InputNumber,
-  Popconfirm, Card, Divider, Space,
+  Popconfirm, Card, Divider, Space, Tag,
 } from 'antd';
 import { useMessage } from '@/hooks/useMessage';
 import type { TableColumnsType } from 'antd';
-import { PlusOutlined, PlusCircleOutlined } from '@ant-design/icons';
+import { PlusOutlined } from '@ant-design/icons';
 import PageHeader from '@/components/common/PageHeader';
 import { commandApi } from '@/api/command';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
 import { useCan } from '@/lib/authz/can';
 import { useHallStore } from '@/stores/hallStore';
-import type { SceneListItem, SceneAction } from '@/api/gen/client';
-import type { DeviceListItem } from '@/api/gen/client';
-import SceneActionRow from './SceneActionRow';
+import type { SceneListItem, ActionStep } from '@/api/gen/client';
+import type { DeviceListItem, ExhibitListItem } from '@/api/gen/client';
+import ActionStepListEditor from './ActionStepListEditor';
 
 const ICON_OPTIONS = [
   { value: 'bulb', label: '灯泡' },
@@ -42,7 +42,7 @@ export default function SceneListPage() {
   const [editingScene, setEditingScene] = useState<SceneListItem | null>(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [detailScene, setDetailScene] = useState<SceneListItem | null>(null);
-  const [actions, setActions] = useState<SceneAction[]>([]);
+  const [actions, setActions] = useState<ActionStep[]>([]);
   const [form] = Form.useForm();
 
   // Scenes query
@@ -57,6 +57,14 @@ export default function SceneListPage() {
   const { data: devices } = useQuery({
     queryKey: queryKeys.devices({ hall_id: selectedHallId! } as Record<string, unknown>),
     queryFn: () => hallApi.getDevices({ hall_id: selectedHallId! }),
+    select: (res) => res.data.data,
+    enabled: !!selectedHallId,
+  });
+
+  // Exhibits for content-type ActionStep target
+  const { data: exhibits } = useQuery({
+    queryKey: queryKeys.exhibits(selectedHallId!),
+    queryFn: () => hallApi.getExhibits(selectedHallId!),
     select: (res) => res.data.data,
     enabled: !!selectedHallId,
   });
@@ -100,14 +108,14 @@ export default function SceneListPage() {
     let name = scene.name;
     let icon = scene.icon;
     let sortOrder = scene.sort_order;
-    let actionList: SceneAction[] = [];
+    let actionList: ActionStep[] = [];
     try {
       const res = await commandApi.getScene(scene.id);
       const detail = res.data.data;
       name = detail.name;
       icon = detail.icon;
       sortOrder = detail.sort_order;
-      actionList = detail.actions ?? [];
+      actionList = (detail.actions ?? []).map(normalizeActionStep);
     } catch {
       // fallback to list data
     }
@@ -123,7 +131,7 @@ export default function SceneListPage() {
     setDetailScene(scene);
     try {
       const res = await commandApi.getScene(scene.id);
-      setActions(res.data.data.actions ?? []);
+      setActions((res.data.data.actions ?? []).map(normalizeActionStep));
     } catch {
       setActions([]);
     }
@@ -139,36 +147,21 @@ export default function SceneListPage() {
 
   const handleSubmit = () => {
     form.validateFields().then((values) => {
+      // 提交前补 sort_order（按当前数组顺序）
+      const orderedActions = actions.map((a, i) => ({ ...a, sort_order: i }));
       const body = {
         hall_id: selectedHallId!,
         name: values.name,
         icon: values.icon,
         sort_order: values.sort_order,
         scene_type: 'preset' as const,
-        actions,
+        actions: orderedActions,
       };
       if (editingScene) {
         updateMutation.mutate({ id: editingScene.id, data: body });
       } else {
         createMutation.mutate(body);
       }
-    });
-  };
-
-  // Action list management
-  const addAction = () => {
-    setActions([...actions, { device_id: 0, command: '', params: {} }]);
-  };
-
-  const removeAction = (index: number) => {
-    setActions(actions.filter((_, i) => i !== index));
-  };
-
-  const patchAction = (index: number, patch: Partial<SceneAction>) => {
-    setActions((prev) => {
-      const next = [...prev];
-      next[index] = { ...next[index], ...patch } as SceneAction;
-      return next;
     });
   };
 
@@ -205,7 +198,7 @@ export default function SceneListPage() {
     <div>
       <PageHeader
         title="场景管理"
-        description="管理展厅场景与动作"
+        description="管理展厅场景与动作（ADR-0020：支持设备指令 + 展项播控混合编排）"
         extra={
           canManage ? (
             <Button type="primary" icon={<PlusOutlined />} onClick={openCreate} disabled={!selectedHallId}>
@@ -237,7 +230,7 @@ export default function SceneListPage() {
         onOk={handleSubmit}
         onCancel={closeModal}
         confirmLoading={createMutation.isPending || updateMutation.isPending}
-        width={700}
+        width={780}
         destroyOnClose
       >
         <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
@@ -256,20 +249,12 @@ export default function SceneListPage() {
 
         <Divider plain>动作列表</Divider>
 
-        {actions.map((action, index) => (
-          <SceneActionRow
-            key={index}
-            action={action}
-            index={index}
-            devices={devices ?? []}
-            onChange={(patch) => patchAction(index, patch)}
-            onRemove={() => removeAction(index)}
-          />
-        ))}
-
-        <Button type="dashed" block icon={<PlusCircleOutlined />} onClick={addAction}>
-          添加动作
-        </Button>
+        <ActionStepListEditor
+          value={actions}
+          onChange={setActions}
+          devices={devices ?? []}
+          exhibits={(exhibits ?? []) as ExhibitListItem[]}
+        />
       </Modal>
 
       {/* Detail Modal (view actions) */}
@@ -278,29 +263,89 @@ export default function SceneListPage() {
         open={detailModalOpen}
         onCancel={() => setDetailModalOpen(false)}
         footer={null}
-        width={600}
+        width={640}
       >
         {actions.length === 0 ? (
           <div style={{ textAlign: 'center', color: 'var(--ant-color-text-quaternary)', padding: 24 }}>
             暂无动作
           </div>
         ) : (
-          actions.map((action, index) => {
-            const device = (devices ?? []).find((d: DeviceListItem) => d.id === action.device_id);
-            return (
-              <Card key={index} size="small" style={{ marginBottom: 8 }}>
-                <Space>
-                  <span><strong>设备：</strong>{device?.name ?? `#${action.device_id}`}</span>
-                  <span><strong>指令：</strong>{action.command}</span>
-                  {action.params && Object.keys(action.params).length > 0 && (
-                    <span><strong>参数：</strong>{JSON.stringify(action.params)}</span>
-                  )}
-                </Space>
-              </Card>
-            );
-          })
+          actions.map((step, index) => (
+            <ActionStepReadonlyCard
+              key={index}
+              index={index}
+              step={step}
+              devices={devices ?? []}
+              exhibits={(exhibits ?? []) as ExhibitListItem[]}
+            />
+          ))
         )}
       </Modal>
     </div>
+  );
+}
+
+/**
+ * 老 SceneAction 数据兼容：旧记录可能没有 type 字段，server 反序列化时补默认 'device'，
+ * 但 client 直接拿到的 JSON 也可能缺；统一在前端 normalize 一遍，避免 segmented 显示空。
+ */
+function normalizeActionStep(s: ActionStep): ActionStep {
+  return {
+    ...s,
+    type: s.type ?? 'device',
+    delay_from_start_ms: s.delay_from_start_ms ?? 0,
+    precondition_block: s.precondition_block ?? false,
+  };
+}
+
+function ActionStepReadonlyCard({
+  index,
+  step,
+  devices,
+  exhibits,
+}: {
+  index: number;
+  step: ActionStep;
+  devices: DeviceListItem[];
+  exhibits: ExhibitListItem[];
+}) {
+  const stepType = step.type ?? 'device';
+  const target =
+    stepType === 'device'
+      ? devices.find((d) => d.id === step.device_id)?.name ?? `device#${step.device_id ?? '?'}`
+      : exhibits.find((e) => e.id === step.exhibit_id)?.name ?? `exhibit#${step.exhibit_id ?? '?'}`;
+  const precondCount = (step.preconditions ?? []).length;
+
+  return (
+    <Card size="small" style={{ marginBottom: 8 }}>
+      <Space wrap>
+        <Tag color="default">Step {index + 1}</Tag>
+        <Tag color={stepType === 'device' ? 'blue' : 'purple'}>
+          {stepType === 'device' ? '设备指令' : '展项播控'}
+        </Tag>
+        <span>
+          <strong>目标：</strong>
+          {target}
+        </span>
+        <span>
+          <strong>命令：</strong>
+          {step.command || '—'}
+        </span>
+        {step.params && Object.keys(step.params).length > 0 && (
+          <span>
+            <strong>参数：</strong>
+            <code style={{ fontSize: 11 }}>{JSON.stringify(step.params)}</code>
+          </span>
+        )}
+        {step.delay_from_start_ms ? (
+          <Tag color="gold">延时 {step.delay_from_start_ms}ms</Tag>
+        ) : null}
+        {precondCount > 0 && (
+          <Tag color={step.precondition_block ? 'red' : 'orange'}>
+            前置 {precondCount}{step.precondition_block ? '·阻塞' : '·跳过'}
+          </Tag>
+        )}
+      </Space>
+    </Card>
   );
 }

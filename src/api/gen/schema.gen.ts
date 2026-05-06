@@ -353,6 +353,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/commands/device-command-button": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 触发设备命令按钮（创建 RunbookExecution）
+         * @description ADR-0020：按 panel_card_id + button_index 取当前生效版本的 binding，创建 RunbookExecution
+         *     异步派发。占锁失败返回 status=runbook_busy。前端订阅 MQTT
+         *     excs/{hall_id}/runbook/{exec_id}/progress 看进度，或 GET /runbooks/{exec_id} 拉快照。
+         */
+        post: operations["triggerDeviceCommandButton"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/commands/exhibit": {
         parameters: {
             query?: never;
@@ -364,6 +386,86 @@ export interface paths {
         put?: never;
         /** 发送展项播控指令（play / pause / seek 等） */
         post: operations["sendExhibitCommand"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runbooks/{execId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                execId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Runbook 执行快照
+         * @description 返回 RunbookExecution 全量状态 + steps 数组。前端断线重连后用此端点对账，
+         *     实时进度走 MQTT excs/{hall_id}/runbook/{exec_id}/progress。
+         */
+        get: operations["getRunbookExecution"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runbooks/{execId}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                execId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 暂停 Runbook（worker 在下一 step 前阻塞） */
+        post: operations["pauseRunbookExecution"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runbooks/{execId}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                execId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 恢复 Runbook */
+        post: operations["resumeRunbookExecution"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runbooks/{execId}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                execId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 中止 Runbook（worker 退出 + 释放锁 + 状态置 cancelled） */
+        post: operations["stopRunbookExecution"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5034,20 +5136,69 @@ export interface components {
             action_count: number;
             is_current: boolean;
         };
-        SceneAction: {
+        ActionStepPrecondition: {
+            /**
+             * @description - exhibit_app_online: 指定 exhibit_id 的展项 App 在线
+             *     - device_online:      指定 device_id 的设备在线
+             *     - hall_master_ready:  hall_master 已选举完成
+             *     - scene_state:        当前场景 == 指定 scene_id
+             *     - action_done:        同 runbook 内 step_id 已 success
+             * @enum {string}
+             */
+            kind: "exhibit_app_online" | "device_online" | "hall_master_ready" | "scene_state" | "action_done";
+            /** Format: int64 */
+            exhibit_id?: number | null;
+            /** Format: int64 */
+            device_id?: number | null;
+            /** Format: int64 */
+            scene_id?: number | null;
+            /** Format: int64 */
+            step_id?: number | null;
+        };
+        ActionStep: {
             /**
              * Format: int64
-             * @description 动作 id；新建场景时不传，更新时全量替换可不带（后端按位置重建）
+             * @description step id；新建时不传，更新时全量替换可不带（后端按位置重建）
              */
             id?: number;
-            /** Format: int64 */
-            device_id: number;
-            /** @description 设备指令名（如 power_on / set_brightness） */
+            /**
+             * @description 派发目标类型；缺省 = device（向后兼容）
+             * @enum {string}
+             */
+            type?: "device" | "content";
+            /**
+             * Format: int64
+             * @description type=device 时必填；type=content 时缺省
+             */
+            device_id?: number | null;
+            /**
+             * Format: int64
+             * @description type=content 时必填；type=device 时缺省
+             */
+            exhibit_id?: number | null;
+            /**
+             * Format: int64
+             * @description type=content 多屏展项的目标 display；缺省 = 主屏
+             */
+            display_id?: number | null;
+            /** @description 指令名（device → device.command；content → play / pause / stop / seek 等） */
             command: string;
-            /** @description 指令参数 JSON；shape 由具体设备 command 决定 */
+            /** @description 指令参数 JSON；shape 由具体 command 决定 */
             params?: {
                 [key: string]: unknown;
             } | null;
+            /** @description 同一 runbook 内的派发顺序键；缺省 0 */
+            sort_order?: number;
+            /** @description 相对 RunbookExecution 启动时刻的延时（毫秒）；缺省 0 */
+            delay_from_start_ms?: number;
+            /** @description 派发前置检查（5 类）；空数组 / null = 不检查 */
+            preconditions?: components["schemas"]["ActionStepPrecondition"][] | null;
+            /**
+             * @description true  = 任一 precondition 失败 → 整 runbook 进 failed；
+             *     false = 任一失败 → 仅本 step 标记 skipped 继续后续；
+             *     缺省 false。
+             */
+            precondition_block?: boolean;
         };
         CreateSceneRequest: {
             /** Format: int64 */
@@ -5057,10 +5208,10 @@ export interface components {
             sort_order?: number;
             /** @enum {string} */
             scene_type?: "preset";
-            actions?: components["schemas"]["SceneAction"][];
+            actions?: components["schemas"]["ActionStep"][];
         };
         SceneDetail: components["schemas"]["SceneListItem"] & {
-            actions: components["schemas"]["SceneAction"][];
+            actions: components["schemas"]["ActionStep"][];
         };
         /** @description 全量替换 actions（旧 actions 整体删除后重建）。空数组 = 清空动作。 */
         UpdateSceneRequest: {
@@ -5069,20 +5220,23 @@ export interface components {
             sort_order?: number;
             /** @enum {string} */
             scene_type?: "preset";
-            actions?: components["schemas"]["SceneAction"][];
+            actions?: components["schemas"]["ActionStep"][];
         };
         SwitchSceneResult: {
-            /** @description MQTT 消息 id，关联 cmd-ack */
-            msg_id: string;
+            /** @description 兼容字段；当前实现固定为 execution_id（异步 runbook 不再有单 cmd-ack 概念） */
+            msg_id?: string;
+            /** @description status=queued 时填；订阅 MQTT excs/{hall}/runbook/{exec_id}/progress 看进度 */
+            execution_id?: string | null;
             /** Format: int64 */
             scene_id: number;
             scene_name: string;
             action_count: number;
-            /**
-             * @description 发送状态。`sent` 表示已写入 MQTT；其余为 cmd-ack 回带的状态字符串。
-             * @example sent
-             */
-            status: string;
+            /** @enum {string} */
+            status: "queued" | "already_active" | "runbook_busy";
+            /** @description status=runbook_busy 时填；指向当前占锁的 runbook */
+            current_execution_id?: string | null;
+            /** @description status=runbook_busy 时填；当前占锁 runbook 的 source_name（场景名 / 按钮 label） */
+            current_source_name?: string | null;
         };
         DeviceCommandRequest: {
             /** Format: int64 */
@@ -5110,6 +5264,32 @@ export interface components {
              */
             status: string;
         };
+        DeviceCommandButtonTriggerRequest: {
+            /** Format: int64 */
+            hall_id: number;
+            /**
+             * Format: int64
+             * @description card_type=device_command 的 PanelCard.ID（取当前生效版本的 binding）
+             */
+            panel_card_id: number;
+            /** @description binding.buttons[] 数组下标（0-based） */
+            button_index: number;
+        };
+        DeviceCommandButtonTriggerResult: {
+            /** @description status=queued 时填 */
+            execution_id?: string | null;
+            /** Format: int64 */
+            hall_id: number;
+            /** Format: int64 */
+            panel_card_id: number;
+            button_index: number;
+            button_label: string;
+            action_count: number;
+            /** @enum {string} */
+            status: "queued" | "runbook_busy";
+            current_execution_id?: string | null;
+            current_source_name?: string | null;
+        };
         ExhibitCommandRequest: {
             /** Format: int64 */
             exhibit_id: number;
@@ -5118,6 +5298,44 @@ export interface components {
             params?: {
                 [key: string]: unknown;
             } | null;
+        };
+        RunbookStepStatus: {
+            /** Format: int64 */
+            step_id: number;
+            /** @enum {string} */
+            status: "pending" | "running" | "success" | "failed" | "skipped";
+            /** @description RFC3339；pending 时空字符串 */
+            started_at?: string | null;
+            /** @description RFC3339；非终态时空字符串 */
+            ended_at?: string | null;
+            /** @description failed 时的错误说明 */
+            error?: string | null;
+            /** @description 前置检查不通过时的简述（如 "device_online failed - device 12 offline"） */
+            precond_report?: string | null;
+        };
+        RunbookExecutionDTO: {
+            /** @description UUID */
+            exec_id: string;
+            /** Format: int64 */
+            hall_id: number;
+            /** @enum {string} */
+            source_type: "scene" | "device_command_button";
+            /**
+             * @description scene → "{scene_id}"；
+             *     device_command_button → "{panel_card_id}:{button_index}"
+             */
+            source_id: string;
+            /** @description scene.name / button.label，仅 UI 展示用 */
+            source_name: string;
+            /** @enum {string} */
+            status: "queued" | "running" | "paused" | "success" | "failed" | "cancelled";
+            /** @description RFC3339 */
+            created_at: string;
+            started_at?: string | null;
+            ended_at?: string | null;
+            /** @description status=failed 时的根因 */
+            error?: string | null;
+            steps: components["schemas"]["RunbookStepStatus"][];
         };
         DeviceRealtimeStatusDTO: {
             /** Format: int64 */
@@ -6259,6 +6477,18 @@ export interface components {
         ControlAppSpriteSheet: {
             [key: string]: unknown;
         };
+        ControlAppSyncSlideDTO: {
+            /** @description 0-based 播放顺序 */
+            index: number;
+            /** Format: int64 */
+            content_id: number;
+            /**
+             * @description 该 slide 引用的 image content 的 OSS 签名缩略图 URL
+             *     （image processing w_320/q_75/jpg，1h 过期）；
+             *     若引用 content 没有 thumbnail_key 则 null，客户端回落胶片底纹
+             */
+            thumbnail_url?: string | null;
+        };
         ControlAppSyncContentDTO: {
             /** Format: int64 */
             id: number;
@@ -6286,6 +6516,26 @@ export interface components {
             /** @description 加密文件 sha256（service 层 *string，可能为 null） */
             sha256?: string | null;
             sprite_sheets?: components["schemas"]["ControlAppSpriteSheet"][] | null;
+            /**
+             * @description OSS 已签名缩略图 URL（含 image processing 参数 w_320/q_75/jpg，1h 过期）；
+             *     image 类型才提供，video 仍走 sprite_sheets。客户端直接当 URL 用，不二次拼参数。
+             */
+            thumbnail_url?: string | null;
+            /**
+             * @description 动态 PPT 幻灯片列表（按播放顺序）。仅 type=slideshow 的虚拟内容项填，
+             *     image / video 为 null。每张 slide 引用一条 image content，
+             *     thumbnail_url 派生方式同上 image 字段（OSS w_320/q_75/jpg 签名，1h 过期）。
+             */
+            slides?: components["schemas"]["ControlAppSyncSlideDTO"][] | null;
+            /**
+             * Format: int64
+             * @description slideshow 虚拟项专用：背景视频 / 图片 content_id；中控 App 选中虚拟项时
+             *     用此值 + image_content_ids（从 slides 反推）+ slideshow_transition 拼
+             *     slideshow_start payload。其余 type 为 null。
+             */
+            slideshow_background_content_id?: number | null;
+            /** @description slideshow 过渡效果（fade / cut / ...）；其余 type 为 null */
+            slideshow_transition?: string | null;
         };
         ControlAppSyncShowDTO: {
             /** Format: int64 */
@@ -6416,6 +6666,18 @@ export interface components {
             params?: {
                 [key: string]: unknown;
             };
+            /**
+             * @description 服务端按 device.connector_spec 模板预渲染的 wire payload（如 K32 ":::DMSZ0A."）。
+             *     仅对 v2 preset/protocol/raw_transport 设备 + cmd 在 spec 清单内的 action 才有值；
+             *     v1 设备 / 未匹配 spec / params 不合 → 空字符串，展厅 ShowEngine 走老 ExecuteCommandAsync。
+             *     与 panel device_command 路径同源（command.Service.RenderDeviceCommandRaw）。
+             */
+            raw_data?: string;
+            /**
+             * @description raw_data 的 wire 编码格式（text / hex）；与 raw_data 同源、空时跟空。
+             *     驱动按此判断如何解释 raw_data（SerialDriver 历史默认 hex，preset 多数为 text）。
+             */
+            raw_format?: string;
         };
         ShowTrackDTO: {
             /** Format: int64 */
@@ -10265,6 +10527,37 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
+    triggerDeviceCommandButton: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceCommandButtonTriggerRequest"];
+            };
+        };
+        responses: {
+            /** @description 已下发或冲突 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["DeviceCommandButtonTriggerResult"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
     sendExhibitCommand: {
         parameters: {
             query?: never;
@@ -10293,6 +10586,132 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
+        };
+    };
+    getRunbookExecution: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                execId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["RunbookExecutionDTO"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    pauseRunbookExecution: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                execId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已暂停 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["RunbookExecutionDTO"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description 状态不允许暂停（如已终态） */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
+                };
+            };
+        };
+    };
+    resumeRunbookExecution: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                execId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已恢复 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["RunbookExecutionDTO"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description 当前不是 paused 状态 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
+                };
+            };
+        };
+    };
+    stopRunbookExecution: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                execId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已中止 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["RunbookExecutionDTO"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     getDeviceRealtimeStatus: {

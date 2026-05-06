@@ -23,9 +23,12 @@ function mapSpriteSheets(raw: any[] | null | undefined): SpriteSheet[] {
       const frameIntervalMs: number = s.frame_interval_ms ?? 1000;
       const frameWidth: number = s.frame_width ?? 320;
       const frameHeight: number = s.frame_height ?? 180;
-      const cols: number = s.columns ?? DEFAULT_SPRITE_COLS;
-      const rows: number = s.rows ?? Math.ceil(frameCount / cols);
-      const fps: number = s.fps ?? (frameIntervalMs > 0 ? 1000 / frameIntervalMs : 1);
+      // 防御 0 fallback：服务端历史 DTO 字段常 0（columns/rows/fps 未持久化），
+      // `??` 只对 null/undefined 生效，0 会原样保留 → 用 `||` 强制非真值 fallback。
+      // 服务端 show_handler_typed.go 已在 typed handler 推断这三个字段，本处是双层保险。
+      const cols: number = s.columns || DEFAULT_SPRITE_COLS;
+      const rows: number = s.rows || Math.ceil(frameCount / cols);
+      const fps: number = s.fps || (frameIntervalMs > 0 ? 1000 / frameIntervalMs : 1);
       return { url, frame_width: frameWidth, frame_height: frameHeight, columns: cols, rows, frame_count: frameCount, fps, frame_interval_ms: frameIntervalMs };
     });
 }

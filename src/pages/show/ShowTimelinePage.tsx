@@ -218,12 +218,24 @@ export default function ShowTimelinePage() {
     return () => el.removeEventListener('wheel', handler);
   }, [view.zoomLevel, view.scrollLeft, refVpWidth, totalDurationMs, setScrollLeft, setZoomLevelAnchored]);
 
-  /* fit-to-screen：show 加载完且 viewport 首次有宽度时调一次 */
+  /* fit-to-screen：
+   * 1) showId 切换 / 首次进入：强制 fit（绕过 _userZoomed），保证关键帧默认完全可见；
+   * 2) 之后 refVpWidth / totalDurationMs 变（窗口 resize / pre-post roll 改）：尊重 _userZoomed。 */
+  const fittedShowIdRef = useRef<number | null>(null);
   useEffect(() => {
-    if (refVpWidth > 0 && totalDurationMs > 0) {
-      fitToScreen(refVpWidth, totalDurationMs);
+    if (refVpWidth <= 0 || totalDurationMs <= 0 || !show) return;
+    if (fittedShowIdRef.current !== show.id) {
+      // 首次进 / 换 show — 强制 fit，重置用户手动缩放标记
+      fittedShowIdRef.current = show.id;
+      const level = refVpWidth / totalDurationMs;
+      useTimelineStore.setState((s) => ({
+        view: { ...s.view, zoomLevel: level, scrollLeft: 0, _userZoomed: false },
+      }));
+      return;
     }
-  }, [refVpWidth, totalDurationMs, fitToScreen]);
+    // 同 show 内 viewport / 时长变化 — 走原 fitToScreen（_userZoomed 守卫）
+    fitToScreen(refVpWidth, totalDurationMs);
+  }, [show?.id, refVpWidth, totalDurationMs, fitToScreen]);
 
   /* Slider zoom（用 viewport 中点作锚点） */
   const handleZoomChange = useCallback((val: number) => {

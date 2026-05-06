@@ -940,6 +940,7 @@ export default function PanelEditorPage() {
                 value={deviceCommandBinding}
                 onChange={setDeviceCommandBinding}
                 devices={devices ?? []}
+                exhibits={exhibits ?? []}
               />
             </Form.Item>
           )}

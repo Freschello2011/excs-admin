@@ -179,7 +179,13 @@ export const authClient = {
  * Command context typed client（12 个端点）—— Phase 2-A
  * ============================================================ */
 
-export type SceneAction = components['schemas']['SceneAction'];
+/**
+ * SceneAction 在 yaml 里 $ref → ActionStep（ADR-0020），bundler 把别名 tree-shake 了；
+ * 前端层别名直接指 ActionStep，业务代码继续用 SceneAction 名字保兼容。
+ */
+export type ActionStep = components['schemas']['ActionStep'];
+export type ActionStepPrecondition = components['schemas']['ActionStepPrecondition'];
+export type SceneAction = ActionStep;
 export type SceneListItem = components['schemas']['SceneListItem'];
 export type SceneDetail = components['schemas']['SceneDetail'];
 export type CreateSceneRequest = components['schemas']['CreateSceneRequest'];
@@ -1777,11 +1783,12 @@ export type PanelPublishResult = components['schemas']['PanelPublishResult'];
  * PanelVersionDetailDTO 里走 `type: object` 透传）。redocly bundler 会把它们
  * tree-shake 掉，所以前端这边手动声明 typed 视图（与 yaml 同形）。
  */
-export interface DeviceCommandAction {
-  device_id: number;
-  command: string;
-  params?: Record<string, unknown>;
-}
+/**
+ * ADR-0020：DeviceCommandAction 在 yaml 里已 $ref → ActionStep。前端类型直接指 ActionStep
+ * 即可，旧字段（device_id/command/params）是 ActionStep 的子集；新增 type=content / 延时 /
+ * 前置等字段透传。
+ */
+export type DeviceCommandAction = ActionStep;
 
 export interface DeviceCommandButton {
   label: string;
