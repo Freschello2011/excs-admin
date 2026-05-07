@@ -13,6 +13,8 @@ import {
 import PreviewPanel from './preview/PreviewPanel';
 import PanelVersionDrawer from './PanelVersionDrawer';
 import DeviceCommandCardEditor from './DeviceCommandCardEditor';
+import DeviceCommandButtonEditorV2 from './DeviceCommandButtonEditorV2';
+import { isFeatureEnabled } from '@/lib/featureFlags';
 import {
   bufferFromPanel,
   bufferFromSnapshot,
@@ -466,7 +468,21 @@ export default function PanelEditorPage() {
     setCardModalOpen(true);
   };
 
+  /* device_command 卡 v2 编辑器 Drawer 状态（runbook_v2_admin flag 开后启用）。
+     —— 同 session 切换 flag 不生效（页面级单次读取，避免跨 component 状态飘移）。 */
+  const runbookV2Enabled = useMemo(() => isFeatureEnabled('runbook_v2_admin'), []);
+  const [v2EditorOpen, setV2EditorOpen] = useState(false);
+  const [v2EditorCard, setV2EditorCard] = useState<BufferCard | null>(null);
+  const [v2EditorSectionId, setV2EditorSectionId] = useState<number | null>(null);
+
   const openEditCard = (card: BufferCard, sectionId: number) => {
+    if (runbookV2Enabled && card.card_type === 'device_command') {
+      // v2 三栏壳路径
+      setV2EditorCard(card);
+      setV2EditorSectionId(sectionId);
+      setV2EditorOpen(true);
+      return;
+    }
     setEditingCard(card);
     setCardSectionId(sectionId);
     cardForm.resetFields();
@@ -483,6 +499,21 @@ export default function PanelEditorPage() {
       setDeviceCommandBinding(null);
     }
     setCardModalOpen(true);
+  };
+
+  const handleV2EditorActivateCard = (newSectionId: number, newCard: BufferCard) => {
+    setV2EditorCard(newCard);
+    setV2EditorSectionId(newSectionId);
+  };
+
+  const handleV2EditorApply = (cardId: number, binding: Record<string, unknown>) => {
+    setBuffer((b) => updateCard(b, cardId, { binding }));
+  };
+
+  const handleV2EditorClose = () => {
+    setV2EditorOpen(false);
+    setV2EditorCard(null);
+    setV2EditorSectionId(null);
   };
 
   const handleCardSubmit = () => {
@@ -982,6 +1013,19 @@ export default function PanelEditorPage() {
         hallId={hallId}
         currentVersionId={currentVersionId}
         onView={handleViewVersion}
+      />
+
+      {/* ─── device_command 编辑器 v2 (ADR-0020-v2 Stage 5 admin Phase C · S5-9) ─── */}
+      <DeviceCommandButtonEditorV2
+        open={v2EditorOpen}
+        hallId={hallId}
+        card={v2EditorCard}
+        sectionId={v2EditorSectionId}
+        sections={sections}
+        disabled={!canEdit || viewVersionId != null}
+        onActivateCard={handleV2EditorActivateCard}
+        onApply={handleV2EditorApply}
+        onClose={handleV2EditorClose}
       />
     </div>
   );
