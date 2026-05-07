@@ -36,3 +36,19 @@ Object.defineProperty(globalThis, 'sessionStorage', {
   configurable: true,
   writable: true,
 });
+
+// jsdom 不实现 ResizeObserver —— antd 6 Select / Drawer / Slider 触发 dropdown 时
+// 调 rc-resize-observer 走 ResizeObserver，缺会抛 ReferenceError。给个 noop。
+// tsconfig.node.json 只挂 lib=ES2023，不带 DOM；用 Record 索引绕过 typeof globalThis。
+{
+  type GlobalRecord = Record<string, unknown>;
+  const g = globalThis as unknown as GlobalRecord;
+  if (typeof g.ResizeObserver === 'undefined') {
+    class ResizeObserverShim {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+    g.ResizeObserver = ResizeObserverShim;
+  }
+}

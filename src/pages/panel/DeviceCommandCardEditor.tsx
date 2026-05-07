@@ -9,11 +9,10 @@ import {
 import type {
   DeviceCommandBinding,
   DeviceCommandButton,
-  ActionStep,
+  DeviceCommandAction,
   DeviceListItem,
-  ExhibitListItem,
 } from '@/api/gen/client';
-import ActionStepListEditor from '@/pages/command/ActionStepListEditor';
+import DeviceCommandActionRow from './DeviceCommandActionRow';
 
 interface Props {
   /** 卡片当前 binding（可能是空 or 老结构）。null 时按新建初始化。 */
@@ -21,46 +20,29 @@ interface Props {
   onChange: (next: DeviceCommandBinding) => void;
   /** 当前 hall 的设备列表（用于 device_id select） */
   devices: DeviceListItem[];
-  /** 当前 hall 的展项列表（ADR-0020 起 content 类型 ActionStep 需要） */
-  exhibits: ExhibitListItem[];
 }
 
 const EMPTY_BUTTON: DeviceCommandButton = { label: '', actions: [] };
+const EMPTY_ACTION: DeviceCommandAction = { device_id: 0, command: '' };
 
 /**
  * 中控面板改版 P2 — device_command 卡的编辑器。
  *
- * ADR-0020 起每个按钮的 actions 是 ActionStep[]（共用场景编辑器同一个 ActionStepListEditor）。
+ * UI 复刻 PRD §5.4：
  *   - 按钮列表（可加可删可上下移）
  *   - 每按钮含 label / icon / actions[]
- *   - 每动作是完整 ActionStep：device 或 content + delay + 前置
+ *   - 每动作含 device / command / params 三选（DeviceCommandActionRow，复用 SceneActionRow 模式）
  *
  * 提交（onChange）时序列化为 DeviceCommandBinding；调用方挂到 buffer.card.binding。
  */
-export default function DeviceCommandCardEditor({ value, onChange, devices, exhibits }: Props) {
+export default function DeviceCommandCardEditor({ value, onChange, devices }: Props) {
   const buttons: DeviceCommandButton[] = useMemo(() => value?.buttons ?? [], [value]);
 
   const setButtons = (next: DeviceCommandButton[]) => {
     onChange({ buttons: next });
   };
 
-  const addButton = () =>
-    setButtons([
-      ...buttons,
-      {
-        ...EMPTY_BUTTON,
-        actions: [
-          {
-            type: 'device',
-            command: '',
-            params: {},
-            sort_order: 0,
-            delay_from_start_ms: 0,
-            precondition_block: false,
-          },
-        ],
-      },
-    ]);
+  const addButton = () => setButtons([...buttons, { ...EMPTY_BUTTON, actions: [{ ...EMPTY_ACTION }] }]);
 
   const updateButton = (idx: number, patch: Partial<DeviceCommandButton>) => {
     setButtons(buttons.map((b, i) => (i === idx ? { ...b, ...patch } : b)));
@@ -78,15 +60,32 @@ export default function DeviceCommandCardEditor({ value, onChange, devices, exhi
     setButtons(next);
   };
 
-  const updateActions = (btnIdx: number, nextActions: ActionStep[]) => {
-    updateButton(btnIdx, { actions: nextActions });
+  const addAction = (btnIdx: number) => {
+    updateButton(btnIdx, {
+      actions: [...(buttons[btnIdx].actions ?? []), { ...EMPTY_ACTION }],
+    });
+  };
+
+  const updateAction = (
+    btnIdx: number,
+    actIdx: number,
+    patch: Partial<DeviceCommandAction>,
+  ) => {
+    const acts = [...(buttons[btnIdx].actions ?? [])];
+    acts[actIdx] = { ...acts[actIdx], ...patch };
+    updateButton(btnIdx, { actions: acts });
+  };
+
+  const deleteAction = (btnIdx: number, actIdx: number) => {
+    const acts = (buttons[btnIdx].actions ?? []).filter((_a: DeviceCommandAction, i: number) => i !== actIdx);
+    updateButton(btnIdx, { actions: acts });
   };
 
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
         <span style={{ color: 'var(--ant-color-text-secondary)', fontSize: 13 }}>
-          按钮列表（每按钮可绑 N 个 step；触发时由 RunbookEngine 按 sort_order + delay 派发，可掺 device / content）
+          按钮列表（每按钮可绑 N 个动作；触发时按顺序依次发送，前一个 ack 后再发下一个）
         </span>
         <Button icon={<PlusOutlined />} onClick={addButton} size="small">
           添加按钮
@@ -159,16 +158,41 @@ export default function DeviceCommandCardEditor({ value, onChange, devices, exhi
           }
         >
           <div style={{ margin: '8px 0', fontSize: 12, color: 'var(--ant-color-text-tertiary)' }}>
-            动作列表（ActionStep）
+            动作列表
           </div>
           <Divider style={{ margin: '4px 0 8px' }} />
 
-          <ActionStepListEditor
-            value={btn.actions ?? []}
-            onChange={(next) => updateActions(btnIdx, next)}
-            devices={devices}
-            exhibits={exhibits}
-          />
+          {(btn.actions ?? []).length === 0 && (
+            <div
+              style={{
+                color: 'var(--ant-color-text-tertiary)',
+                fontSize: 12,
+                padding: '4px 0 8px',
+              }}
+            >
+              至少需要 1 个动作。
+            </div>
+          )}
+
+          {(btn.actions ?? []).map((act, actIdx) => (
+            <DeviceCommandActionRow
+              key={actIdx}
+              action={act}
+              devices={devices}
+              onChange={(p) => updateAction(btnIdx, actIdx, p)}
+              onRemove={() => deleteAction(btnIdx, actIdx)}
+            />
+          ))}
+
+          <Button
+            size="small"
+            type="dashed"
+            icon={<PlusOutlined />}
+            onClick={() => addAction(btnIdx)}
+            style={{ marginTop: 4 }}
+          >
+            添加动作
+          </Button>
         </Card>
       ))}
     </div>
