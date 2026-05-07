@@ -18,6 +18,7 @@ const HallDetailPage = lazy(() => import('@/pages/hall/HallDetailPage'));
 const ContentGroupListPage = lazy(() => import('@/pages/content/ContentGroupListPage'));
 const ContentGroupDetailPage = lazy(() => import('@/pages/content/ContentGroupDetailPage'));
 const SceneListPage = lazy(() => import('@/pages/command/SceneListPage'));
+const SceneEditPage = lazy(() => import('@/pages/command/SceneEditPage'));
 const ShowListPage = lazy(() => import('@/pages/show/ShowListPage'));
 const ShowDetailPage = lazy(() => import('@/pages/show/ShowDetailPage'));
 const ShowTimelinePage = lazy(() => import('@/pages/show/ShowTimelinePage'));
@@ -322,6 +323,11 @@ export const router = createBrowserRouter([
       {
         path: 'scenes',
         element: <HallRoute><SceneListPage /></HallRoute>,
+      },
+      /* ADR-0020-v2 Stage 5 admin Phase B：场景编辑页 v2 host */
+      {
+        path: 'halls/:hallId/scenes/:sceneId/edit',
+        element: <HallRoute><SceneEditPage /></HallRoute>,
       },
       {
         path: 'shows',
