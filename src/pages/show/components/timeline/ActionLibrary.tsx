@@ -114,7 +114,7 @@ function DeviceCommandPanelBody({ device, search, active }: DeviceCommandPanelPr
     );
   }, [commands, search]);
 
-  /** 按 category 二级分组（参考 DeviceCommandActionRow） */
+  /** 按 category 二级分组 */
   const grouped = useMemo(() => {
     const map = new Map<string, EffectiveCommand[]>();
     for (const c of filtered) {

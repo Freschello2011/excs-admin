@@ -6,7 +6,7 @@
  *
  * 仅"新建场景"仍保留 Modal —— 创建后立即跳到编辑页继续编排动作。
  *
- * 过渡保留：SceneActionRow.tsx 不删（v1 回退通道；待 Phase D 默认开 + 4 周后清理）。
+ * S5-10 Phase D：v1 SceneActionRow / DeviceCommandCardEditor / DeviceCommandActionRow 已下架。
  */
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';

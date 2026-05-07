@@ -5065,20 +5065,113 @@ export interface components {
             action_count: number;
             is_current: boolean;
         };
-        SceneAction: {
+        /**
+         * @description `device` = 设备动作（device_id / command / params 必填）；
+         *     `content` = 数字内容动作（exhibit_id / content_intent / content_params 必填）。
+         *     分支必填校验在 application 层（OpenAPI 层全 nullable optional）。
+         * @enum {string}
+         */
+        ActionStepType: "device" | "content";
+        /**
+         * @description `exhibit_app_online` 目标字段 exhibit_id；`device_online` 目标字段 device_id；
+         *     `hall_master_ready` 无目标字段（按 runbook hall 评估）；
+         *     `scene_state` 目标字段 scene_id（等 hall.current_scene == scene_id）；
+         *     `action_done` 目标字段 action_step_index（等本 runbook 第 N 步完成；0-based；不能引用前向）。
+         * @enum {string}
+         */
+        PreCondType: "exhibit_app_online" | "device_online" | "hall_master_ready" | "scene_state" | "action_done";
+        /**
+         * @description 前置条件 VO；每步可选 0-N 条；按声明顺序短路评估。
+         *     `block_on_fail=false`（默认）= 不满足时本步标 warn 但仍发命令；
+         *     `block_on_fail=true` = 不满足时本步**不发命令**、标 fail。
+         *     各类目标字段按 type 分支必填一组（OpenAPI 层全 nullable optional，校验在 application 层）。
+         */
+        PreCond: {
+            type: components["schemas"]["PreCondType"];
+            /** @description 默认 false = 仅警告；true = 阻断本步发命令 */
+            block_on_fail: boolean;
+            /**
+             * Format: int64
+             * @description type=exhibit_app_online 时必填
+             */
+            exhibit_id?: number | null;
+            /**
+             * Format: int64
+             * @description type=device_online 时必填
+             */
+            device_id?: number | null;
+            /**
+             * Format: int64
+             * @description type=scene_state 时必填
+             */
+            scene_id?: number | null;
+            /** @description type=action_done 时必填；0-based；< 当前 step index（admin 配置期校验前向引用） */
+            action_step_index?: number | null;
+            /** @description 评估超时（秒）；空缺省按引擎全局 default_precond_timeout_seconds */
+            timeout_seconds?: number | null;
+        };
+        /**
+         * @description server 在 RunbookEngine 内做 `ContentIntent + ContentParams` → `play_cmd` envelope
+         *     的最后一公里翻译；部署人员永远不见 play_cmd 名。content_params schema 见 DDD §3.3 表。
+         *     高级旁路 RawPlayCmd 设计待 Stage 4 ADR（本 schema v2 暂不暴露）。
+         * @enum {string}
+         */
+        ContentIntent: "play_video" | "slideshow_goto" | "show_screen_image" | "clear_screen_image" | "pause_resume" | "stop" | "seek" | "set_volume";
+        /**
+         * @description 场景与 device_command 按钮共用的执行步 VO。同一数组内可混合 device/content 两类、
+         *     按数组下标顺序串行执行。Step 0 强制 delay=0；后续步 delay 是相对前一步 **StartedAt**
+         *     （非 CompletedAt）—— 长 ack 不拖累后续。
+         *
+         *     持久化：excs_scene_actions（v2 加 8 列 + nullable 化老 3 列；S5-1 已落地）。
+         *     runbook 触发时整组深拷贝快照入 excs_runbook_executions.steps_snapshot；
+         *     source 后续变更不影响本 exec。
+         *
+         *     分支字段必填校验（application 层，非 OpenAPI required）：
+         *     - type=device  → device_id + command 必填；exhibit_id / content_intent / content_params 必空
+         *     - type=content → exhibit_id + content_intent 必填；device_id / command / params 必空
+         */
+        ActionStep: {
+            type: components["schemas"]["ActionStepType"];
+            /** @description ≥0；=0 与前一步同时；Step 0 强制 0 */
+            delay_seconds_after_prev_start: number;
+            /** @description 默认 0 条；按声明顺序短路评估 */
+            preconditions?: components["schemas"]["PreCond"][] | null;
+            /** @description 部署人员填，中控 RunbookDialog 显示；空则由 server 按结构 fallback 生成 */
+            friendly_description?: string | null;
+            /**
+             * Format: int64
+             * @description 必属当前 hall（hall.devices ∪ hall.exhibits[*].devices）
+             */
+            device_id?: number | null;
+            /** @description 必存在于 device 的 effective-commands */
+            command?: string | null;
+            /** @description 由设备 params_schema 校验；shape 因 command 而异 */
+            params?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Format: int64
+             * @description 目标展项屏幕（决定播放对象）；slideshow_goto 还要求已配 SlideshowConfig
+             */
+            exhibit_id?: number | null;
+            /** @description type=content 时必填；type=device 时必空 */
+            content_intent?: (string & components["schemas"]["ContentIntent"]) | null;
+            /**
+             * @description 按 content_intent schema（DDD §3.3 表）；不出 JSON，由 admin 表单生成。
+             *     play_video/show_screen_image: {content_id: uint64}；
+             *     slideshow_goto: {index: int}（0-based）；seek: {position_ms: int}；
+             *     set_volume: {volume: int 0-100}；clear_screen_image/pause_resume/stop: {}。
+             */
+            content_params?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        SceneAction: components["schemas"]["ActionStep"] & {
             /**
              * Format: int64
              * @description 动作 id；新建场景时不传，更新时全量替换可不带（后端按位置重建）
              */
             id?: number;
-            /** Format: int64 */
-            device_id: number;
-            /** @description 设备指令名（如 power_on / set_brightness） */
-            command: string;
-            /** @description 指令参数 JSON；shape 由具体设备 command 决定 */
-            params?: {
-                [key: string]: unknown;
-            } | null;
         };
         CreateSceneRequest: {
             /** Format: int64 */

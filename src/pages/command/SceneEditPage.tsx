@@ -1,5 +1,5 @@
 /**
- * SceneEditPage v2 — ADR-0020-v2 Stage 5 admin Phase B host
+ * SceneEditPage v2 — ADR-0020-v2 Stage 5 admin Phase B host（Phase D 解锁 · S5-10）
  *
  * 路由：/halls/:hallId/scenes/:sceneId/edit
  * SSOT：admin-UI §4.20.4 + mockup M1（07-ui/mockup/runbook-v2/M1-admin-scene-editor.html）
@@ -11,14 +11,11 @@
  *     ├─ 左 268px sticky：场景列表卡（icon + 名 + 步数 + 切换 + 新建）
  *     └─ 右 编辑区：基本信息卡 + 动作列表卡（host <ActionStepListEditor>）
  *
- * Save schema 决策（S5-8 调研记录）：
- *   - 当前 PUT /scenes/:id 的 yaml 仅接 v1 SceneAction[] (device_id+command+params)
- *     （01-docs/03-api/openapi/components/schemas/command.yaml#SceneAction）
- *   - server typed-handler `command_handler_typed.go` 的 sceneActionsToDTO 也只搬这 3 字段
- *   - 因此 save 时把 ActionStep[] → v1 SceneAction[]：仅 type=device 步入选；
- *     如有 type=content 步则 toast warning 阻止保存（待 S5-9 yaml v2 后解锁）
- *   - read 时 GET /scenes/:id 返回 v1 actions[] → 转成 ActionStep[]（每条 = 1 个 device 步，
- *     delay=0，无 preconds，无 friendly）
+ * Save schema（S5-10 解锁后）：
+ *   - command.yaml#SceneAction 已升级为 allOf [ActionStep, {id}]；server typed-handler
+ *     sceneActionsToDTO 全字段映射（device + content 分支 + delay + preconditions + friendly）
+ *   - admin save 直接送 ActionStep[]（无 v1 降级）；type=content 步亦能落库
+ *   - read 时 GET /scenes/:id 直接返 ActionStep[]，本地 ActionStep === gen.SceneAction（去 id）
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -64,42 +61,20 @@ import SceneBasicInfoCard, {
 import SceneKpiStrip from './components/SceneKpiStrip';
 
 // ============================================================
-// v1 SceneAction[] ↔ ActionStep[] 转换（S5-8 决策见文件头注释）
+// SceneAction (gen) ↔ ActionStep (本地) 转换
+//
+// S5-10 yaml 解锁后 SceneAction === ActionStep + {id?}，本地 ActionStep 是同形子集
+// （不含 id，所有字段名/类型一致）。两个方向只是 cast + 补/剥 id；不再有 device-only 限制。
 // ============================================================
 
-function v1ActionsToSteps(actions: SceneAction[]): ActionStep[] {
-  return actions.map((a) => ({
-    type: 'device',
-    delay_seconds_after_prev_start: 0,
-    device_id: a.device_id,
-    command: a.command,
-    params: (a.params ?? null) as Record<string, unknown> | null,
-    preconditions: null,
-    friendly_description: null,
-  }));
+function sceneActionsToSteps(actions: SceneAction[]): ActionStep[] {
+  return actions.map(
+    ({ id, ...rest }) => rest as ActionStep, // eslint-disable-line @typescript-eslint/no-unused-vars
+  );
 }
 
-interface StepsToV1Result {
-  ok: boolean;
-  actions: SceneAction[];
-  blockedReason?: string;
-}
-
-function stepsToV1Actions(steps: ActionStep[]): StepsToV1Result {
-  const contentSteps = steps.filter((s) => s.type === 'content');
-  if (contentSteps.length > 0) {
-    return {
-      ok: false,
-      actions: [],
-      blockedReason: `当前 server 尚未支持数字内容步（共 ${contentSteps.length} 步）。请删除后再保存，或等待 S5-9 升级。`,
-    };
-  }
-  const actions: SceneAction[] = steps.map((s) => ({
-    device_id: typeof s.device_id === 'number' ? s.device_id : 0,
-    command: s.command ?? '',
-    params: (s.params as Record<string, unknown> | null) ?? null,
-  }));
-  return { ok: true, actions };
+function stepsToSceneActions(steps: ActionStep[]): SceneAction[] {
+  return steps as SceneAction[];
 }
 
 // ============================================================
@@ -173,7 +148,7 @@ export default function SceneEditPage() {
       scene_type: sceneDetail.scene_type,
       sort_order: sceneDetail.sort_order,
     });
-    setSteps(v1ActionsToSteps(sceneDetail.actions ?? []));
+    setSteps(sceneActionsToSteps(sceneDetail.actions ?? []));
     setDirty(false);
     setErrors({});
   }, [sceneDetail]);
@@ -221,7 +196,6 @@ export default function SceneEditPage() {
   function validate(): {
     basicErrors: Record<string, string>;
     stepErrors: Record<string, string>;
-    blocked?: string;
   } {
     const be: Record<string, string> = {};
     if (!basic.name.trim()) be.name = '场景名称必填';
@@ -238,34 +212,23 @@ export default function SceneEditPage() {
         if (!s.content_intent) se[`${i}.content_intent`] = '请选择动作';
       }
     });
-    const conv = stepsToV1Actions(steps);
-    const blocked = conv.ok ? undefined : conv.blockedReason;
-    return { basicErrors: be, stepErrors: se, blocked };
+    return { basicErrors: be, stepErrors: se };
   }
 
   function handleSave() {
-    const { basicErrors, stepErrors, blocked } = validate();
+    const { basicErrors, stepErrors } = validate();
     const merged: Record<string, string> = { ...basicErrors, ...stepErrors };
     setErrors(merged);
     if (Object.keys(merged).length > 0) {
       message.error('表单存在错误，请修正后再保存');
       return;
     }
-    if (blocked) {
-      modal.warning({
-        title: '暂不能保存数字内容步',
-        content: blocked,
-      });
-      return;
-    }
-    const conv = stepsToV1Actions(steps);
-    if (!conv.ok) return;
     updateMutation.mutate({
       name: basic.name.trim(),
       icon: basic.icon,
       sort_order: basic.sort_order,
       scene_type: basic.scene_type,
-      actions: conv.actions,
+      actions: stepsToSceneActions(steps),
     });
   }
 

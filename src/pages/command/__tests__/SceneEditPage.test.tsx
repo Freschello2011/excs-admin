@@ -97,7 +97,14 @@ const sceneDetail: SceneDetail = {
   action_count: 1,
   is_current: false,
   actions: [
-    { id: 1, device_id: 10, command: 'power_on', params: null },
+    {
+      id: 1,
+      type: 'device',
+      delay_seconds_after_prev_start: 0,
+      device_id: 10,
+      command: 'power_on',
+      params: null,
+    },
   ],
 };
 

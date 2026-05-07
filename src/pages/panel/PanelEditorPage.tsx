@@ -12,9 +12,7 @@ import {
 } from '@ant-design/icons';
 import PreviewPanel from './preview/PreviewPanel';
 import PanelVersionDrawer from './PanelVersionDrawer';
-import DeviceCommandCardEditor from './DeviceCommandCardEditor';
 import DeviceCommandButtonEditorV2 from './DeviceCommandButtonEditorV2';
-import { isFeatureEnabled } from '@/lib/featureFlags';
 import {
   bufferFromPanel,
   bufferFromSnapshot,
@@ -58,7 +56,6 @@ import { queryKeys } from '@/api/queryKeys';
 import { useCan } from '@/lib/authz/can';
 import type {
   CardType,
-  DeviceCommandBinding,
   PanelVersionDetailDTO,
 } from '@/api/gen/client';
 import {
@@ -457,27 +454,24 @@ export default function PanelEditorPage() {
   const [cardSectionId, setCardSectionId] = useState<number>(0);
   const [cardForm] = Form.useForm();
   const cardTypeValue: CardType | undefined = Form.useWatch('card_type', cardForm);
-  const [deviceCommandBinding, setDeviceCommandBinding] = useState<DeviceCommandBinding | null>(null);
 
   const openCreateCard = (sectionId: number) => {
     setEditingCard(null);
     setCardSectionId(sectionId);
     cardForm.resetFields();
     cardForm.setFieldsValue({ card_type: 'scene_group' });
-    setDeviceCommandBinding(null);
     setCardModalOpen(true);
   };
 
-  /* device_command 卡 v2 编辑器 Drawer 状态（runbook_v2_admin flag 开后启用）。
-     —— 同 session 切换 flag 不生效（页面级单次读取，避免跨 component 状态飘移）。 */
-  const runbookV2Enabled = useMemo(() => isFeatureEnabled('runbook_v2_admin'), []);
+  /* device_command 卡 v2 编辑器 Drawer 状态（ADR-0020-v2 Stage 5 S5-10 起默认启用 · runbook_v2_admin
+     flag 已下架）；非 device_command 卡走传统 Modal。 */
   const [v2EditorOpen, setV2EditorOpen] = useState(false);
   const [v2EditorCard, setV2EditorCard] = useState<BufferCard | null>(null);
   const [v2EditorSectionId, setV2EditorSectionId] = useState<number | null>(null);
 
   const openEditCard = (card: BufferCard, sectionId: number) => {
-    if (runbookV2Enabled && card.card_type === 'device_command') {
-      // v2 三栏壳路径
+    if (card.card_type === 'device_command') {
+      // device_command 卡始终走 v2 三栏壳（Phase D 默认开 · S5-10）
       setV2EditorCard(card);
       setV2EditorSectionId(sectionId);
       setV2EditorOpen(true);
@@ -493,11 +487,6 @@ export default function PanelEditorPage() {
       binding_ids: b.ids,
       config_json: card.config ? JSON.stringify(card.config, null, 2) : '',
     });
-    if (card.card_type === 'device_command') {
-      setDeviceCommandBinding((card.binding as DeviceCommandBinding | null) ?? { buttons: [] });
-    } else {
-      setDeviceCommandBinding(null);
-    }
     setCardModalOpen(true);
   };
 
@@ -520,20 +509,10 @@ export default function PanelEditorPage() {
     cardForm.validateFields().then((values) => {
       let binding: Record<string, unknown> | null;
       if (values.card_type === 'device_command') {
-        if (!deviceCommandBinding || (deviceCommandBinding.buttons ?? []).length === 0) {
-          message.error('device_command 卡至少需要 1 个按钮');
-          return;
-        }
-        const invalid = deviceCommandBinding.buttons.some(
-          (b: import('@/api/gen/client').DeviceCommandButton) =>
-            !b.label || !b.actions || b.actions.length === 0 ||
-            b.actions.some((a) => !a.device_id || !a.command),
-        );
-        if (invalid) {
-          message.error('请检查按钮：label / device / command 不能为空');
-          return;
-        }
-        binding = deviceCommandBinding as unknown as Record<string, unknown>;
+        // S5-10 Phase D：device_command 卡只通过专属编辑器配置。
+        // 创建路径 = 落空种子 binding（schema_version=2, buttons=[]）；
+        // 用户保存后立刻打开 v2 Drawer 配置具体按钮。
+        binding = { schema_version: 2, buttons: [] };
       } else {
         binding = buildBinding(values.card_type, values.binding_id, values.binding_ids);
       }
@@ -964,14 +943,20 @@ export default function PanelEditorPage() {
             </Form.Item>
           )}
 
-          {/* device_command 编辑器（按钮 → 动作 → device + command + params 三选） */}
+          {/* device_command 卡：S5-10 Phase D 起仅通过专属编辑器配置按钮（提示文案） */}
           {cardTypeValue === 'device_command' && (
-            <Form.Item label="按钮列表" required>
-              <DeviceCommandCardEditor
-                value={deviceCommandBinding}
-                onChange={setDeviceCommandBinding}
-                devices={devices ?? []}
-              />
+            <Form.Item label="按钮列表">
+              <div
+                style={{
+                  padding: '12px 16px',
+                  background: 'var(--ant-color-info-bg)',
+                  borderRadius: 8,
+                  fontSize: 13,
+                  color: 'var(--ant-color-text)',
+                }}
+              >
+                创建空卡后，在卡片右上角点【编辑】打开 v2 编辑器配置按钮（Phase D · ADR-0020-v2）。
+              </div>
             </Form.Item>
           )}
 
