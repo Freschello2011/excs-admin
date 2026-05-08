@@ -229,7 +229,7 @@ export default function ExhibitDetailPage() {
             )
           }
           gradient={false}
-          onClick={() => navigate(`/halls/${hallId}/ai/avatars`)}
+          onClick={() => navigate('/ai/avatars')}
           ariaLabel="去 AI 数字人配置"
         />
       </div>
