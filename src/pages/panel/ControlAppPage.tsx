@@ -32,7 +32,7 @@ export default function ControlAppPage() {
 
   return (
     <div>
-      <PageHeader title="中控 App" description="面板卡片布局与中控 App 配对码管理" />
+      <PageHeader title="中控管理" description="面板卡片布局与中控 App 配对码管理" />
       <Tabs
         activeKey={activeTab}
         onChange={(k) => setActiveTab(k as 'panel' | 'pairing')}

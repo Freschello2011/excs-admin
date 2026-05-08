@@ -166,6 +166,7 @@ export default function ContentGroupListPage() {
     onSuccess: () => {
       message.success('绑定成功');
       queryClient.invalidateQueries({ queryKey: ['admin', 'contents'] });
+      queryClient.invalidateQueries({ queryKey: ['contents'] });
       closeBind();
     },
     onError: () => message.error('绑定失败'),
@@ -176,6 +177,7 @@ export default function ContentGroupListPage() {
     onSuccess: () => {
       message.success('已解绑');
       queryClient.invalidateQueries({ queryKey: ['admin', 'contents'] });
+      queryClient.invalidateQueries({ queryKey: ['contents'] });
     },
     onError: () => message.error('解绑失败'),
   });
@@ -186,6 +188,7 @@ export default function ContentGroupListPage() {
     onSuccess: () => {
       message.success('文件已删除');
       queryClient.invalidateQueries({ queryKey: ['admin', 'contents'] });
+      queryClient.invalidateQueries({ queryKey: ['contents'] });
     },
     onError: () => message.error('删除失败'),
   });
@@ -197,6 +200,7 @@ export default function ContentGroupListPage() {
       message.success('已驳回，供应商将收到通知');
       setRejectItem(null);
       queryClient.invalidateQueries({ queryKey: ['admin', 'contents'] });
+      queryClient.invalidateQueries({ queryKey: ['contents'] });
     },
     onError: (err: Error) => message.error(err.message || '驳回失败'),
   });

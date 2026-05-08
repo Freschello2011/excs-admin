@@ -45,7 +45,6 @@ interface PairingCodeTabProps {
 }
 
 const MAX_DEBUG_INSTANCES = 3;
-const CONTROL_SESSION_STALE_MINUTES = 5;
 
 /* ── 状态文案 ── */
 
@@ -532,12 +531,10 @@ export default function PairingCodeTab({ hallId, isAdmin, mode, exhibitId }: Pai
       return true;
     });
 
-  // 中控会话：5min 未活跃即离线（兜底）
-  const sessionOfflineCount = controlSessions.filter((sess) => {
-    if (sess.status !== 'online') return true;
-    return dayjs().diff(dayjs(sess.last_active_at), 'minute') >= CONTROL_SESSION_STALE_MINUTES;
-  }).length;
-  const sessionOnlineCount = controlSessions.length - sessionOfflineCount;
+  // 中控会话：直接读服务端权威 is_online（HTTP 被动续期模型，详见 02-server
+  // hall/service.go IsControlSessionOnline；前端不再做客户端 5min stale 兜底）。
+  const sessionOnlineCount = controlSessions.filter((sess) => sess.is_online).length;
+  const sessionOfflineCount = controlSessions.length - sessionOnlineCount;
 
   /* ── Sub-renders ── */
 
@@ -892,8 +889,7 @@ export default function PairingCodeTab({ hallId, isAdmin, mode, exhibitId }: Pai
   };
 
   const renderControlSession = (session: ControlAppSessionItem) => {
-    const staleMin = dayjs().diff(dayjs(session.last_active_at), 'minute');
-    const isOnline = session.status === 'online' && staleMin < CONTROL_SESSION_STALE_MINUTES;
+    const isOnline = session.is_online;
     return (
       <div key={session.id} className={`${s.sessionRow} ${!isOnline ? s.offline : ''}`}>
         <span className={s.sessionUser}>
@@ -975,10 +971,7 @@ export default function PairingCodeTab({ hallId, isAdmin, mode, exhibitId }: Pai
             {sessionOfflineCount > 0 && (
               <div className={`${s.statusSummary} ${s.warn}`}>
                 <span className={`material-symbols-outlined ${s.icon}`}>cleaning_services</span>
-                <span>
-                  检测到 {sessionOfflineCount} 条"幽灵在线"会话（后端未实时处理断连）·
-                  以最近活跃时间兜底为离线 · 建议清理
-                </span>
+                <span>{sessionOfflineCount} 条离线会话 · 长期不再使用可清理</span>
               </div>
             )}
 

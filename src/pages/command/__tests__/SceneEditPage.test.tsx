@@ -43,19 +43,22 @@ vi.mock('@/api/gen/client', async () => {
     ...actual,
     commandClient: {
       getScene: vi.fn(),
-      listScenes: vi.fn(),
       updateScene: vi.fn(),
       switchScene: vi.fn(),
-    },
-    hallClient: {
-      listExhibits: vi.fn(),
     },
   };
 });
 
+vi.mock('@/api/command', () => ({
+  commandApi: {
+    getScenes: vi.fn(),
+  },
+}));
+
 vi.mock('@/api/hall', () => ({
   hallApi: {
     getDevices: vi.fn(),
+    getExhibits: vi.fn(),
     getEffectiveCommands: vi.fn().mockResolvedValue({
       data: { code: 0, message: '', data: [] },
       status: 200,
@@ -81,7 +84,8 @@ vi.mock('@/lib/authz/can', () => ({
   useCan: () => true,
 }));
 
-import { commandClient, hallClient } from '@/api/gen/client';
+import { commandClient } from '@/api/gen/client';
+import { commandApi } from '@/api/command';
 import { hallApi } from '@/api/hall';
 import SceneEditPage from '../SceneEditPage';
 
@@ -163,10 +167,27 @@ function renderPage() {
 describe('<SceneEditPage>', () => {
   beforeEach(() => {
     (commandClient.getScene as ReturnType<typeof vi.fn>).mockResolvedValue(sceneDetail);
-    (commandClient.listScenes as ReturnType<typeof vi.fn>).mockResolvedValue(sceneList);
-    (hallClient.listExhibits as ReturnType<typeof vi.fn>).mockResolvedValue([
-      { id: 100, name: '序厅', description: '', sort_order: 1, display_mode: 'standard', enable_ai_tag: false, device_count: 1, content_count: 0, has_ai_avatar: false, script_count: 0 },
-    ]);
+    // commandApi.getScenes / hallApi.getExhibits 与其他页面共享 react-query 缓存，统一 AxiosResponse 包壳形态
+    (commandApi.getScenes as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: { code: 0, message: '', data: sceneList },
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config: {},
+    });
+    (hallApi.getExhibits as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: {
+        code: 0,
+        message: '',
+        data: [
+          { id: 100, name: '序厅', description: '', sort_order: 1, display_mode: 'standard', enable_ai_tag: false, device_count: 1, content_count: 0, has_ai_avatar: false, script_count: 0 },
+        ],
+      },
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config: {},
+    });
     (hallApi.getDevices as ReturnType<typeof vi.fn>).mockResolvedValue({
       data: {
         code: 0,

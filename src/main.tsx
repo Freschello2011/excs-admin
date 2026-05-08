@@ -5,6 +5,7 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { App as AntApp } from 'antd';
 import AntdConfigProvider from './providers/AntdConfigProvider';
 import { MessageBridge } from './components/MessageBridge';
+import { LogoutBlockBridge } from './components/LogoutBlockBridge';
 import App from './App';
 import './styles/global.scss';
 import './styles/field-mode-tokens.scss';
@@ -25,6 +26,7 @@ function Root() {
       <AntdConfigProvider>
         <AntApp>
           <MessageBridge />
+          <LogoutBlockBridge />
           <App />
         </AntApp>
       </AntdConfigProvider>

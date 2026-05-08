@@ -122,6 +122,7 @@ export default function VendorUploadsTab({ vendorId }: Props) {
     onSuccess: () => {
       message.success('绑定成功');
       queryClient.invalidateQueries({ queryKey: ['admin', 'contents'] });
+      queryClient.invalidateQueries({ queryKey: ['contents'] });
       setBindTarget(null);
       setBindHallId(null);
       setBindExhibitId(null);
@@ -134,6 +135,7 @@ export default function VendorUploadsTab({ vendorId }: Props) {
     onSuccess: () => {
       message.success('已解绑');
       queryClient.invalidateQueries({ queryKey: ['admin', 'contents'] });
+      queryClient.invalidateQueries({ queryKey: ['contents'] });
     },
     onError: (err: Error) => message.error(err.message || '解绑失败'),
   });
@@ -144,6 +146,7 @@ export default function VendorUploadsTab({ vendorId }: Props) {
     onSuccess: () => {
       message.success('已删除');
       queryClient.invalidateQueries({ queryKey: ['admin', 'contents'] });
+      queryClient.invalidateQueries({ queryKey: ['contents'] });
     },
     onError: (err: Error) => message.error(err.message || '删除失败'),
   });
@@ -155,6 +158,7 @@ export default function VendorUploadsTab({ vendorId }: Props) {
       message.success('已驳回，供应商将收到通知');
       setRejectTarget(null);
       queryClient.invalidateQueries({ queryKey: ['admin', 'contents'] });
+      queryClient.invalidateQueries({ queryKey: ['contents'] });
     },
     onError: (err: Error) => message.error(err.message || '驳回失败'),
   });

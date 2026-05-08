@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback, useMemo, useState } from 'react';
 import { useParams, useNavigate, useBlocker } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import {
-  Button, Space, Tag, Slider, Spin, Modal, InputNumber, Tooltip,
+  Button, Space, Tag, Slider, Spin, Modal, InputNumber, Tooltip, Popover,
 } from 'antd';
 import type { TrackType as TrackTypeEnum } from '@/api/gen/client';
 import { useMessage } from '@/hooks/useMessage';
@@ -14,6 +14,7 @@ import {
   ThunderboltOutlined, StopOutlined,
   VideoCameraOutlined, WarningFilled,
   CompressOutlined, ExpandAltOutlined,
+  SettingOutlined,
 } from '@ant-design/icons';
 import {
   DndContext, PointerSensor, useSensor, useSensors,
@@ -37,11 +38,16 @@ import {
 
 /* ==================== Constants ==================== */
 
-/** Ruler + Sprite + Waveform heights */
+/** Ruler + Sprite + Ruler2（贴近轨道的秒数刻度）+ Waveform heights
+ *  Bug 3：用户期望雪碧图下方紧挨一条秒数刻度尺，作为下方各业务轨道（机灯/通道/etc）
+ *  的对齐参照；原布局只有顶部一条 Ruler，雪碧图与轨道之间只有 Waveform，
+ *  导致拖动 action 时无法精确对齐到秒。 */
 const REF_RULER_H = 20;
 const REF_SPRITE_H = 32;
+/** 与 TimeRuler 组件内部 HEIGHT 常量保持一致（20px） */
+const REF_RULER2_H = 20;
 const REF_WAVE_H = 32;
-const REF_TOTAL_H = REF_RULER_H + REF_SPRITE_H + REF_WAVE_H;
+const REF_TOTAL_H = REF_RULER_H + REF_SPRITE_H + REF_RULER2_H + REF_WAVE_H;
 const PROP_PANEL_W = 260;
 
 /** Format milliseconds to mm:ss */
@@ -69,6 +75,15 @@ const PREVIEW_RATIO_KEY = 'excs.timeline.previewRatio';
 const MINIMAP_VISIBLE_KEY = 'excs.timeline.minimapVisible';
 /** pre/post roll 节流（ms） — 输入后 500ms 才发请求 */
 const ROLL_THROTTLE_MS = 500;
+/** Bug 5a autosave：dirty 后等待 ms 自动落盘；用户连续编辑会持续重置 timer。 */
+const AUTOSAVE_DEBOUNCE_MS = 30_000;
+/** 本地草稿 localStorage key 前缀 — `${prefix}${showId}` 一对一存。 */
+const DRAFT_KEY_PREFIX = 'excs.timeline.draft.';
+/** Bug 6 轨道名称栏宽度：localStorage key + clamp 范围 */
+const LABEL_W_KEY = 'excs.timeline.labelWidth';
+const LABEL_W_MIN = 80;
+const LABEL_W_MAX = 320;
+const LABEL_W_DEFAULT = 100;
 
 /**
  * Batch C P14：动作类型 → 推荐轨道类型。
@@ -167,8 +182,11 @@ export default function ShowTimelinePage() {
   /* Rehearsal controls */
   const rehearsal = useRehearsal(showId);
 
-  /* Keyboard shortcuts — single hook handles all keys */
-  useTimelineKeyboard(toggle);
+  /* Keyboard shortcuts — single hook handles all keys.
+   * handleSave 在此 hook 之后才声明（依赖 useMutation 与 tracks），
+   * 用 ref 间接拿最新引用，避免循环依赖。 */
+  const handleSaveRef = useRef<() => void>(() => {});
+  useTimelineKeyboard(toggle, () => handleSaveRef.current());
 
   /* Derived total duration */
   const totalDurationMs = show
@@ -192,7 +210,10 @@ export default function ShowTimelinePage() {
   /* Wheel → 锚点缩放 (Ctrl/⌘) 或 虚拟横向滚动
      React 17+ onWheel 是 passive listener，preventDefault 被忽略——
      用 addEventListener('wheel', { passive: false }) + stopPropagation
-     防止 Ctrl+wheel 冒泡到 admin layout 把整页横向滚出。 */
+     防止 Ctrl+wheel 冒泡到 admin layout 把整页横向滚出。
+     Bug 4 修复：把单次步长从 ±10% 加大到 ±15%，锚点效果更明显；
+     anchorPx 用 clientX - rect.left（rect 是 ruler/sprite/waveform 区，
+     已剔除左侧 100px label 列），保证鼠标位置缩放后维持原像素位。 */
   useEffect(() => {
     const el = refPanelRef.current;
     if (!el) return;
@@ -201,7 +222,7 @@ export default function ShowTimelinePage() {
         if (e.deltaY === 0) return;
         e.preventDefault();
         e.stopPropagation();
-        const factor = e.deltaY < 0 ? 1.1 : 0.9;
+        const factor = e.deltaY < 0 ? 1.15 : 0.87;
         const rect = el.getBoundingClientRect();
         const anchorPx = e.clientX - rect.left;
         setZoomLevelAnchored(view.zoomLevel * factor, anchorPx, refVpWidth, totalDurationMs);
@@ -342,17 +363,26 @@ export default function ShowTimelinePage() {
     switch (data.type) {
       case 'device': {
         // Batch C P21：用 deviceId/deviceName 直接填；按 params_schema.required + widget.default 预填
-        const initialParams = buildInitialParams(data.command);
+        // ADR-0024：source=command_preset 的"现场别名"卡（code 形如 "preset:<name>"）落卡时
+        // 用 resolved_code/resolved_params 展开为标准 device_action，让 ShowEngine /
+        // 展厅 / 中控协议路径不需要识别 "preset:" 前缀。
+        const cmd = data.command;
+        const isPresetCard =
+          cmd.source === 'command_preset' && !!cmd.resolved_code;
+        const command = isPresetCard ? cmd.resolved_code! : cmd.code;
+        const params = isPresetCard
+          ? (cmd.resolved_params ?? {})
+          : buildInitialParams(cmd);
         newAction = {
           id: tempId,
           device_id: data.deviceId,
           device_name: data.deviceName,
-          name: data.command.name,
+          name: cmd.name,
           action_type: 'device',
           start_time_ms: dropTimeMs,
           duration_ms: 2000,
-          command: data.command.code,
-          params: initialParams,
+          command,
+          params,
         };
         break;
       }
@@ -416,6 +446,58 @@ export default function ShowTimelinePage() {
   }, [showData, loadShow]);
 
   useEffect(() => () => { reset(); }, [reset]);
+
+  /* ── Bug 6：轨道名称栏宽度（左侧 reference label 列 + TrackArea label 列共享） ── */
+  const [labelWidth, setLabelWidth] = useState<number>(() => {
+    try {
+      const raw = localStorage.getItem(LABEL_W_KEY);
+      const v = raw ? Number(raw) : NaN;
+      if (!Number.isFinite(v)) return LABEL_W_DEFAULT;
+      return Math.max(LABEL_W_MIN, Math.min(LABEL_W_MAX, v));
+    } catch { return LABEL_W_DEFAULT; }
+  });
+  /** 当前是否在拖动调宽：拖动期间让全局 cursor=col-resize + 禁用文本选中 */
+  const [resizingLabel, setResizingLabel] = useState(false);
+  const handleLabelResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = labelWidth;
+    setResizingLabel(true);
+    const onMove = (ev: MouseEvent) => {
+      const next = Math.max(LABEL_W_MIN, Math.min(LABEL_W_MAX, startW + (ev.clientX - startX)));
+      setLabelWidth(next);
+    };
+    const onUp = () => {
+      setResizingLabel(false);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      // 仅在 mouseup 落盘 — 避免每像素写一次 localStorage
+      try {
+        // 用闭包当时的 next 不可得，直接读 state；此函数已被 setLabelWidth 调用，
+        // setState 是异步，这里 read 可能拿到旧值。改成读 DOM data attribute 不优雅 —
+        // 用 setLabelWidth 的回调拿到 next 写盘。
+      } catch { /* ignore */ }
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [labelWidth]);
+  // labelWidth 变化时持久化（mouseup 时也走这里 — useEffect 是异步的，等止住 mousemove 风暴后再写）
+  useEffect(() => {
+    if (resizingLabel) return; // 拖动中不写盘
+    try { localStorage.setItem(LABEL_W_KEY, String(labelWidth)); } catch { /* ignore */ }
+  }, [labelWidth, resizingLabel]);
+  // 拖动期间锁住光标 + 禁选（防止跨子元素时光标闪烁/选中文本）
+  useEffect(() => {
+    if (!resizingLabel) return;
+    const prevCursor = document.body.style.cursor;
+    const prevUserSel = document.body.style.userSelect;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    return () => {
+      document.body.style.cursor = prevCursor;
+      document.body.style.userSelect = prevUserSel;
+    };
+  }, [resizingLabel]);
 
   /* ── Batch D：Minimap 显隐（默认展开），localStorage 持久化 ── */
   const [minimapVisible, setMinimapVisible] = useState<boolean>(() => {
@@ -505,41 +587,126 @@ export default function ShowTimelinePage() {
     if (rollTimerRef.current.post) clearTimeout(rollTimerRef.current.post);
   }, []);
 
-  /* ── Save mutation ── */
+  /* ── Save mutation ──
+   * Bug 5a：本次保存来源（manual / auto）通过 saveSourceRef 区分，
+   * autosave 不抢用户注意力（小提示），manual 给绿勾 success。
+   * 失败两种都报错，但 autosave 失败提示语区别（提醒用户手动救一次）。 */
+  const saveSourceRef = useRef<'manual' | 'auto'>('manual');
   const saveMutation = useMutation({
     mutationFn: (body: SaveTimelineBody) => showApi.saveTimeline(showId, body),
     onSuccess: (res) => {
-      message.success('时间轴已保存');
+      if (saveSourceRef.current === 'auto') {
+        // autosave 静默落盘 — 用更小的 info 提示，不打扰
+        message.info({ content: '已自动保存', duration: 1.2 });
+      } else {
+        message.success('时间轴已保存');
+      }
       markClean();
       const newShow = res.data.data;
       if (newShow) loadShow(newShow);
+      // 落盘成功 → 清掉本地草稿
+      try { localStorage.removeItem(DRAFT_KEY_PREFIX + showId); } catch { /* ignore */ }
     },
-    onError: () => { message.error('保存失败'); },
+    onError: () => {
+      message.error(
+        saveSourceRef.current === 'auto'
+          ? '自动保存失败，请手动点保存'
+          : '保存失败',
+      );
+    },
   });
 
   /* ── Save handler — build body from store tracks ── */
+  const buildSaveBody = useCallback((): SaveTimelineBody => ({
+    tracks: tracks.map((t) => ({
+      id: t.id > 0 ? t.id : undefined,
+      name: t.name,
+      track_type: t.track_type,
+      sort_order: t.sort_order,
+      actions: t.actions.map((a) => ({
+        id: a.id > 0 ? a.id : undefined,
+        device_id: a.device_id,
+        name: a.name,
+        action_type: a.action_type,
+        start_time_ms: a.start_time_ms,
+        duration_ms: a.duration_ms,
+        command: a.command,
+        params: a.params ?? {},
+      })),
+    })),
+  }), [tracks]);
+
   const handleSave = useCallback(() => {
     if (!show) return;
-    const body: SaveTimelineBody = {
-      tracks: tracks.map((t) => ({
-        id: t.id > 0 ? t.id : undefined,
-        name: t.name,
-        track_type: t.track_type,
-        sort_order: t.sort_order,
-        actions: t.actions.map((a) => ({
-          id: a.id > 0 ? a.id : undefined,
-          device_id: a.device_id,
-          name: a.name,
-          action_type: a.action_type,
-          start_time_ms: a.start_time_ms,
-          duration_ms: a.duration_ms,
-          command: a.command,
-          params: a.params ?? {},
-        })),
-      })),
-    };
-    saveMutation.mutate(body);
-  }, [show, tracks, saveMutation]);
+    saveSourceRef.current = 'manual';
+    saveMutation.mutate(buildSaveBody());
+  }, [show, buildSaveBody, saveMutation]);
+
+  /* Bug 1 / Ctrl+S：把最新 handleSave 写入 ref，让 useTimelineKeyboard 拿到 */
+  useEffect(() => { handleSaveRef.current = handleSave; }, [handleSave]);
+
+  /* ── Bug 5a：autosave — dirty 后 30s 防抖落盘 ── */
+  useEffect(() => {
+    if (!dirty || !show) return;
+    if (saveMutation.isPending) return;
+    const id = setTimeout(() => {
+      saveSourceRef.current = 'auto';
+      saveMutation.mutate(buildSaveBody());
+    }, AUTOSAVE_DEBOUNCE_MS);
+    return () => clearTimeout(id);
+    // tracks 在依赖里 → 用户继续编辑时 effect 重跑 → 上一个 timer 被清，重新计时
+  }, [dirty, show, tracks, buildSaveBody, saveMutation]);
+
+  /* ── Bug 5a：本地草稿 ──
+   * 每次 dirty 变化 / tracks 变化都写一份到 localStorage；
+   * 落盘成功时由 onSuccess 清掉。
+   * 进入页面时若发现有该 show 的草稿且与服务端不同 → 弹 Modal 让用户选恢复/丢弃。 */
+  useEffect(() => {
+    if (!show || !dirty) return;
+    try {
+      localStorage.setItem(
+        DRAFT_KEY_PREFIX + showId,
+        JSON.stringify({ savedAt: Date.now(), body: buildSaveBody() }),
+      );
+    } catch { /* quota exceed 等忽略，不阻塞编辑 */ }
+  }, [show, dirty, tracks, showId, buildSaveBody]);
+
+  /* 进入页面 → 检查是否有未落盘草稿（仅在 show 加载完且 store 非 dirty 时检查，
+   * 避免和 loadShow 的 reset dirty=false 竞态弹两次）。 */
+  const draftCheckedRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!show) return;
+    if (draftCheckedRef.current === show.id) return; // 同 show 只检查一次
+    draftCheckedRef.current = show.id;
+    let raw: string | null = null;
+    try { raw = localStorage.getItem(DRAFT_KEY_PREFIX + showId); } catch { /* ignore */ }
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw) as { savedAt: number };
+      const ageMin = Math.round((Date.now() - parsed.savedAt) / 60000);
+      Modal.confirm({
+        title: '发现未保存草稿',
+        content: `检测到 ${ageMin} 分钟前在本浏览器有一份该演出的未保存编辑（可能因登出/崩溃丢失）。是否查看草稿数据？`,
+        okText: '导出草稿 JSON',
+        cancelText: '丢弃',
+        onOk: () => {
+          // 导出文件让用户人工对比 — 不直接覆盖 store，避免误盖服务端最新数据
+          const blob = new Blob([raw!], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `timeline-draft-show-${showId}-${parsed.savedAt}.json`;
+          a.click();
+          URL.revokeObjectURL(url);
+        },
+        onCancel: () => {
+          try { localStorage.removeItem(DRAFT_KEY_PREFIX + showId); } catch { /* ignore */ }
+        },
+      });
+    } catch { /* 解析失败直接清掉 */
+      try { localStorage.removeItem(DRAFT_KEY_PREFIX + showId); } catch { /* ignore */ }
+    }
+  }, [show, showId]);
 
   /* ── Track callbacks ── */
   const handleAddTrack = useCallback((name: string, trackType: TrackType) => {
@@ -568,9 +735,22 @@ export default function ShowTimelinePage() {
     }
   }, [toggleActionSelection, clearSelection, selectAction]);
 
-  const handleDoubleClickAction = useCallback((_id: number) => {
-    // Double-click focuses the property panel (selection is already handled by mousedown)
-  }, []);
+  /** PropertyPanel 高亮触发时间戳；每次值变就跑一次 0.6s flash 动画 */
+  const [panelFlashAt, setPanelFlashAt] = useState(0);
+
+  /**
+   * 双击 / 右键「编辑属性」入口：
+   * - 选中目标 action（覆盖原选区，单选）；
+   * - 触发 PropertyPanel 高亮 1 次（panelFlashAt 时间戳变化驱动 CSS 动画），
+   *   让用户能注意到右栏切到了该 action。
+   * 老版本是 no-op（注释说"selection 已在 mousedown 处理"），
+   * 但右键菜单 'edit' 也走这条路 → 导致点击无反应（Bug 7）。
+   */
+  const handleDoubleClickAction = useCallback((id: number) => {
+    clearSelection();
+    selectAction(id);
+    setPanelFlashAt(Date.now());
+  }, [clearSelection, selectAction]);
 
   const handleDragMoveAction = useCallback((id: number, newStartMs: number, shift: boolean) => {
     if (shift) {
@@ -702,91 +882,104 @@ export default function ShowTimelinePage() {
       onDragCancel={handleDragCancel}
     >
       <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 64px)', overflow: 'hidden', minWidth: 0, margin: '-32px', width: 'calc(100% + 64px)' }}>
-        {/* ── Top Bar ── */}
+        {/* ── Top Bar ──
+         * Bug 1：原版顶栏左侧塞了 8 项（返回/标题/dirty/总时长/前导/尾声/视频Tag/详情页），
+         * 父容器 overflow:hidden 在窄屏会把右侧 Space（含保存按钮）裁出可视区。
+         * 重排后：左侧只保留必看（返回 + 标题 + dirty + 总时长），
+         * 前导/尾声折进「演出参数」Popover；右侧 Space 加 flexShrink: 0 永远可见；
+         * 标题 flex-shrink + ellipsis 长名也不挤掉右侧。 */}
         <div
           style={{
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
             padding: '6px 12px', borderBottom: '1px solid var(--ant-color-border-secondary)',
             background: 'var(--ant-color-bg-container)', flexShrink: 0,
+            gap: 8, minWidth: 0,
           }}
         >
-          <Space size={8}>
+          <Space size={8} style={{ minWidth: 0, flex: '1 1 auto', overflow: 'hidden' }}>
             <Button size="small" icon={<ArrowLeftOutlined />} onClick={() => navigate(`/shows/${showId}`)}>返回</Button>
-            <span style={{ fontWeight: 600, fontSize: 15 }}>{show.name}</span>
+            <Tooltip title={show.name}>
+              <span
+                style={{
+                  fontWeight: 600, fontSize: 15,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  maxWidth: 200, display: 'inline-block', verticalAlign: 'middle',
+                }}
+              >
+                {show.name}
+              </span>
+            </Tooltip>
             <span
               style={{
                 fontSize: 11,
                 color: dirty ? '#faad14' : 'var(--ant-color-text-tertiary)',
                 fontWeight: dirty ? 500 : 400,
+                whiteSpace: 'nowrap',
               }}
             >
               {dirty ? '● ' : '○ '}
               {formatSavedAgo(now, lastSavedAt, dirty)}
             </span>
             <Tag style={{ fontSize: 11 }}>{formatMs(totalDurationMs)}</Tag>
-            {/* Batch C P11：pre/post roll inline 编辑（节流 500ms 写库） */}
-            <Tooltip title="前导（视频前留白时长，秒）">
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <span style={{ fontSize: 11, color: 'var(--ant-color-text-tertiary)' }}>前导</span>
-                <InputNumber
-                  size="small"
-                  min={0}
-                  step={0.5}
-                  precision={1}
-                  value={(show.pre_roll_ms ?? 0) / 1000}
-                  onChange={handlePreRollChange}
-                  style={{ width: 60 }}
-                  controls={false}
-                />
-                <span style={{ fontSize: 11, color: 'var(--ant-color-text-tertiary)' }}>s</span>
-              </span>
-            </Tooltip>
-            <Tooltip title="尾声（视频后留白时长，秒）">
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <span style={{ fontSize: 11, color: 'var(--ant-color-text-tertiary)' }}>尾声</span>
-                <InputNumber
-                  size="small"
-                  min={0}
-                  step={0.5}
-                  precision={1}
-                  value={(show.post_roll_ms ?? 0) / 1000}
-                  onChange={handlePostRollChange}
-                  style={{ width: 60 }}
-                  controls={false}
-                />
-                <span style={{ fontSize: 11, color: 'var(--ant-color-text-tertiary)' }}>s</span>
-              </span>
-            </Tooltip>
-            {show.base_content_name || show.base_content_id ? (
-              <>
-                <Tag
-                  icon={<VideoCameraOutlined />}
-                  color="blue"
-                  style={{ fontSize: 11 }}
-                >
-                  {show.base_content_name || `视频 #${show.base_content_id}`}
-                </Tag>
-                <Button
-                  type="link"
-                  size="small"
-                  style={{ fontSize: 11, padding: 0, height: 'auto' }}
-                  onClick={() => navigate(`/shows/${showId}`)}
-                >
-                  在详情页修改
-                </Button>
-              </>
-            ) : (
-              <Button
-                size="small"
-                icon={<VideoCameraOutlined />}
-                onClick={() => navigate(`/shows/${showId}`)}
-              >
-                前往详情页选择基准视频
+            {/* 演出参数 Popover：折叠 pre/post roll + 基准视频，腾出顶栏空间 */}
+            <Popover
+              trigger="click"
+              placement="bottomLeft"
+              content={(
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 220 }}>
+                  <div>
+                    <div style={{ fontSize: 11, color: 'var(--ant-color-text-tertiary)', marginBottom: 4 }}>前导（秒）</div>
+                    <InputNumber
+                      size="small"
+                      min={0} step={0.5} precision={1}
+                      value={(show.pre_roll_ms ?? 0) / 1000}
+                      onChange={handlePreRollChange}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: 'var(--ant-color-text-tertiary)', marginBottom: 4 }}>尾声（秒）</div>
+                    <InputNumber
+                      size="small"
+                      min={0} step={0.5} precision={1}
+                      value={(show.post_roll_ms ?? 0) / 1000}
+                      onChange={handlePostRollChange}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                  <div style={{ borderTop: '1px solid var(--ant-color-border-secondary)', paddingTop: 8 }}>
+                    <div style={{ fontSize: 11, color: 'var(--ant-color-text-tertiary)', marginBottom: 4 }}>基准视频</div>
+                    {show.base_content_name || show.base_content_id ? (
+                      <Space size={4} wrap>
+                        <Tag icon={<VideoCameraOutlined />} color="blue" style={{ fontSize: 11 }}>
+                          {show.base_content_name || `视频 #${show.base_content_id}`}
+                        </Tag>
+                        <Button type="link" size="small" style={{ fontSize: 11, padding: 0, height: 'auto' }} onClick={() => navigate(`/shows/${showId}`)}>
+                          在详情页修改
+                        </Button>
+                      </Space>
+                    ) : (
+                      <Button size="small" icon={<VideoCameraOutlined />} onClick={() => navigate(`/shows/${showId}`)}>
+                        前往详情页选择
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
+            >
+              <Button size="small" icon={<SettingOutlined />} type="text" title="演出参数（前导/尾声/基准视频）">
+                参数
               </Button>
+            </Popover>
+            {/* 基准视频缺失时给一个独立警示色 Tag 直接可见，避免折进 popover 后用户察觉不到 */}
+            {!(show.base_content_name || show.base_content_id) && (
+              <Tag color="warning" style={{ fontSize: 11 }} onClick={() => navigate(`/shows/${showId}`)}>
+                未选基准视频
+              </Tag>
             )}
           </Space>
 
-          <Space size={4}>
+          <Space size={4} style={{ flexShrink: 0 }}>
             {rehearsal.status === 'idle' ? (
               <Button size="small" icon={<ThunderboltOutlined />} onClick={rehearsal.start} loading={rehearsal.loading}>排练</Button>
             ) : (
@@ -851,13 +1044,25 @@ export default function ShowTimelinePage() {
             {/* Reference Strip (ruler + sprite + waveform + cursor) */}
             <div style={{ display: 'flex', borderTop: '1px solid var(--ant-color-border-secondary)', flexShrink: 0 }}>
               <div style={{
-                width: 100, flexShrink: 0,
+                width: labelWidth, flexShrink: 0,
                 borderRight: '1px solid var(--ant-color-border-secondary)',
                 background: 'var(--ant-color-bg-layout)',
+                position: 'relative',
               }}>
                 <div style={{ height: REF_RULER_H, display: 'flex', alignItems: 'center', padding: '0 6px', fontSize: 10, color: '#999' }}>时间</div>
                 <div style={{ height: REF_SPRITE_H, display: 'flex', alignItems: 'center', padding: '0 6px', fontSize: 10, color: '#999', borderTop: '1px solid var(--ant-color-border)' }}>帧参考</div>
+                <div style={{ height: REF_RULER2_H, display: 'flex', alignItems: 'center', padding: '0 6px', fontSize: 10, color: '#999', borderTop: '1px solid var(--ant-color-border)' }}>秒数</div>
                 <div style={{ height: REF_WAVE_H, display: 'flex', alignItems: 'center', padding: '0 6px', fontSize: 10, color: '#999', borderTop: '1px solid var(--ant-color-border)' }}>波形</div>
+                {/* Bug 6：宽度拖拽手柄（reference 列与 TrackArea label 列共宽，拖任一即同步） */}
+                <div
+                  onMouseDown={handleLabelResizeStart}
+                  title="拖动调整轨道名称栏宽度"
+                  style={{
+                    position: 'absolute', top: 0, right: -2, bottom: 0, width: 4,
+                    cursor: 'col-resize', zIndex: 5,
+                    background: resizingLabel ? 'var(--ant-color-primary)' : 'transparent',
+                  }}
+                />
               </div>
 
               <div
@@ -882,6 +1087,18 @@ export default function ShowTimelinePage() {
                     width={refVpWidth}
                     scrollLeft={view.scrollLeft}
                     zoomLevel={view.zoomLevel}
+                  />
+                </div>
+                {/* Bug 3：雪碧图下方第二条秒数刻度尺，紧贴各业务轨道作对齐参考 */}
+                <div style={{ borderTop: '1px solid var(--ant-color-border)' }}>
+                  <TimeRuler
+                    totalTimeMs={totalTimeMs}
+                    preRollMs={preRollMs}
+                    postRollMs={postRollMs}
+                    width={refVpWidth}
+                    scrollLeft={view.scrollLeft}
+                    zoomLevel={view.zoomLevel}
+                    onClick={handleRulerClick}
                   />
                 </div>
                 <div style={{ borderTop: '1px solid var(--ant-color-border)' }}>
@@ -935,6 +1152,9 @@ export default function ShowTimelinePage() {
                 onDeleteSelected={handleDeleteSelected}
                 currentTimeMs={currentTimeMs}
                 snapHintMs={snapHintMs}
+                labelWidth={labelWidth}
+                onLabelResizeStart={handleLabelResizeStart}
+                labelResizing={resizingLabel}
               />
               </div>
               {minimapVisible && (
@@ -958,6 +1178,8 @@ export default function ShowTimelinePage() {
 
           {/* Right: Property Panel */}
           <div
+            key={panelFlashAt /* key 变 → 重挂 → 重跑 flash 动画 */}
+            className={panelFlashAt > 0 ? 'excs-panel-flash' : undefined}
             style={{
               width: PROP_PANEL_W, flexShrink: 0,
               borderLeft: '1px solid var(--ant-color-border-secondary)',
@@ -1004,7 +1226,7 @@ export default function ShowTimelinePage() {
             </span>
           )}
           <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--ant-color-text-quaternary)' }}>
-            Space 播放 · Del 删除 · Ctrl+Z 撤销 · Ctrl+C/V 复制粘贴 · Ctrl+滚轮 锚点缩放 · Shift 临时关 Snap
+            Space 播放 · Ctrl+S 保存 · Del 删除 · Ctrl+Z 撤销 · Ctrl+C/V 复制粘贴 · Ctrl+滚轮 锚点缩放 · Shift 临时关 Snap
           </span>
           <Tooltip title={minimapVisible ? '折叠总览' : '展开总览'}>
             <Button

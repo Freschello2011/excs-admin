@@ -108,6 +108,9 @@ export default function InlineCommandsTab({ deviceId, initial, onCountChange }: 
     onSuccess: () => {
       message.success('命令清单已保存');
       queryClient.invalidateQueries({ queryKey: ['device-debug-bundle', deviceId] });
+      // 演出时间线编辑器 ActionLibrary 用 effectiveCommands(deviceId)/devices({hall_id})
+      // 走 ['devices', ...] 前缀；inline_commands 改完不刷新 → Bug 2 根因
+      queryClient.invalidateQueries({ queryKey: ['devices'] });
     },
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : '保存失败';

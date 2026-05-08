@@ -621,3 +621,12 @@ html[data-theme="dark"] {
   0%, 100% { box-shadow: 0 0 0 0 rgba(250, 173, 20, 0); }
   50%      { box-shadow: 0 0 0 4px rgba(250, 173, 20, 0.35); }
 }
+
+/* ---------- Timeline editor: 右键编辑属性后属性面板高亮一帧 ---------- */
+.excs-panel-flash {
+  animation: excsPanelFlash 0.6s ease-out;
+}
+@keyframes excsPanelFlash {
+  0%   { background-color: rgba(22, 119, 255, 0.18); }
+  100% { background-color: transparent; }
+}

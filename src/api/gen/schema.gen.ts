@@ -1687,6 +1687,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/control-app/sessions/{sessionId}/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 中控会话当前权威状态（reconcile 兜底）
+         * @description hall_switch envelope retained=false，App 离线期间错过推送时，重连后调一次
+         *     此端点比对本地 pairInfo.hallId。返回 session.current_hall_id + 当前订阅 topic。
+         */
+        get: operations["getControlAppSessionState"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/shows": {
         parameters: {
             query?: never;
@@ -4811,6 +4832,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/runbook/{exec_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 查询 runbook 执行实例（含 steps / step_results / 时间线 / 触发者）
+         * @description 运维 / admin 监控页查 runbook 执行实例的最终态（aggregate_status terminal 后）
+         *     或运行态快照（rolling 中也可查，本端点不订阅 MQTT envelope）。
+         *
+         *     鉴权：bearerAuth + 业务 hall 级 Can（router 层 NoResource，handler 按 exec_id
+         *     反查 hall_id 后用 ActionSceneView 校验 —— 与 /commands/device-command-button
+         *     同 Domain，权限模板可复用）。
+         *
+         *     短期主要给 admin 监控页 + 运维 cookbook curl 用；中控 App 现期不调
+         *     （runbook_progress envelope 已带运行态，dialog 不需查终态）。
+         */
+        get: operations["getRunbook"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -4923,21 +4972,17 @@ export interface components {
             created_by?: number | null;
             hall_permissions: components["schemas"]["HallPermission"][];
         };
-        /** @description 登录后下发的 MQTT 凭据；中控 App 用于订阅状态 topic */
-        MqttInfo: {
-            /** @example wss://mqtt.crossovercg.com.cn/mqtt */
-            broker_url: string;
-            /** @example user-1 */
-            username: string;
-            password: string;
-        };
+        /**
+         * @description 登录响应。**ADR-0022 起不再下发 MQTT 凭据**——中控 App 的 MQTT 凭据由
+         *     /control-app/pair（PairControlAppResp.mqtt）唯一下发，避免同一 user_id 多设备
+         *     登录时 user-{id} 凭据互覆造成 BAD_USERNAME_OR_PASSWORD（含笑事件 2026-05-08）。
+         */
         LoginResponse: {
             access_token: string;
             refresh_token: string;
             /** @example 7200 */
             expires_in: number;
             user: components["schemas"]["LoginUser"];
-            mqtt: components["schemas"]["MqttInfo"];
         };
         RefreshTokenRequest: {
             refresh_token: string;
@@ -6099,9 +6144,12 @@ export interface components {
          * @description EffectiveCommandDTO.source ——
          *     v1: baseline / model / instance / override（三层合并结果，"override" 是历史 admin UI 用值）
          *     v2: preset / protocol / plugin / inline（按 device.connector_kind 直接分类，DDD-v2 §八）
+         *     ADR-0024: command_preset —— device.command_presets 合流的"现场别名"卡，
+         *     code 形如 "preset:<name>"；resolved_code/resolved_params 给 admin 落卡展开用，
+         *     展厅 / ShowEngine 仍按 catalog 真 code 渲染。
          * @enum {string}
          */
-        EffectiveCommandSource: "baseline" | "model" | "instance" | "override" | "preset" | "protocol" | "plugin" | "inline";
+        EffectiveCommandSource: "baseline" | "model" | "instance" | "override" | "preset" | "protocol" | "plugin" | "inline" | "command_preset";
         EffectiveCommandDTO: {
             code: string;
             name: string;
@@ -6127,6 +6175,17 @@ export interface components {
                 [key: string]: unknown;
             } | null;
             source: components["schemas"]["EffectiveCommandSource"];
+            /**
+             * @description ADR-0024：source=command_preset 时填，指向 catalog 真实 command_code。
+             *     admin 演出编辑器落卡时用 resolved_code/resolved_params 展开为标准 device_action，
+             *     故 ShowEngine / 展厅 App / 中控 App 协议路径不需要识别 "preset:" 前缀。
+             *     其它 source 一律为 null。
+             */
+            resolved_code?: string | null;
+            /** @description ADR-0024：source=command_preset 时填，preset 已预填的参数（落卡时直接落到 device_action.params）。 */
+            resolved_params?: {
+                [key: string]: unknown;
+            } | null;
         };
         GeneratePairingCodeRequest: {
             target_type: components["schemas"]["PairingTargetType"];
@@ -6220,6 +6279,11 @@ export interface components {
             allow_hall_switch: boolean;
             device_uuid: string;
             status: components["schemas"]["ControlAppSessionStatus"];
+            /**
+             * @description 服务端权威在线判定。综合 status='online' AND last_active_at >= now - ControlSessionOnlineTTL（90s）。
+             *     前端不要再做客户端兜底（移除前的逻辑见 git history 2026-05-08 之前）。
+             */
+            is_online: boolean;
             /** Format: date-time */
             connected_at: string;
             /** Format: date-time */
@@ -6363,10 +6427,18 @@ export interface components {
             pairing_code: string;
             device_uuid: string;
         };
+        /**
+         * @description 中控 App 配对响应。ADR-0022 起 `hall_id` 字段语义为 **当前展厅**
+         *     （`session.current_hall_id`）——重 pair 后能拿到 admin 切厅后的真实 hall。
+         *     pair 时冻结的初始 hall 见 ControlAppSessionDTO.original_hall_id（admin 视图用）。
+         */
         PairControlAppResp: {
             /** Format: int64 */
             session_id: number;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 当前展厅 ID（session.current_hall_id）
+             */
             hall_id: number;
             hall_name: string;
             allow_hall_switch: boolean;
@@ -6502,6 +6574,24 @@ export interface components {
             /** Format: int64 */
             hall_id: number;
             subscribe: string[];
+        };
+        /**
+         * @description 中控会话当前服务端权威状态（ADR-0022）。App 重连后调一次比对本地 pairInfo，
+         *     发现 current_hall_id 与本地不一致时自行触发 hall_switch 流程
+         *     （updatePairInfo + clear state + switchHall topics + syncHall）。
+         */
+        ControlSessionState: {
+            /** Format: int64 */
+            session_id: number;
+            /** Format: int64 */
+            current_hall_id: number;
+            current_hall_name: string;
+            allow_hall_switch: boolean;
+            /**
+             * @description 当前 hall 应订阅的 MQTT topic 列表（含 session 私有 hall_switch topic）。
+             *     与 hall_switch envelope.new_subscribe_topics 同源，App reconcile 时直接复用。
+             */
+            subscribe_topics?: string[];
         };
         /** @description 演出列表项（不含 tracks，列表轻量化） */
         ShowListItemDTO: {
@@ -7496,11 +7586,52 @@ export interface components {
             } | null;
             tags: components["schemas"]["AppSyncTag"][];
         };
+        /**
+         * @description 场景动作 DTO（C2 升 v2 ActionStep 后）。
+         *
+         *     向后兼容：v1 三元组 device_id+command+params 保持 required（老中控 App
+         *     v2.3.x 仍按 v1 解，新字段忽略），新增字段全 nullable optional 由新 App
+         *     （v2.4.0+）按 v2 ActionStep 视图展开。
+         *
+         *     type=content 步暂不通过 /app/sync 下发——service 层仍按 step_type=device 过滤
+         *     （DDD §3.3 已写明：v2 演出 / 内容步走 RunbookEngine MQTT envelope 推送，
+         *     /app/sync 只下发 device 步用于本地命令快速派发）。因此本 schema 出现的所有
+         *     动作 type 必为 "device"，content 分支字段（exhibit_id / content_intent /
+         *     content_params）目前永远 null；保留字段是为下一期去掉过滤后零迁移成本。
+         */
         AppSyncSceneAction: {
             /** Format: int64 */
             device_id: number;
             command: string;
             params?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * @description ActionStepType；当前固定 "device"（content 步不下发）。null 时中控按
+             *     device 兜底，与 server scene_action.step_type=NULL 的 v1 兼容路径一致。
+             */
+            type?: string | null;
+            /**
+             * @description 部署人员配置的友好描述；中控 RunbookDialog timeline 显示。null 时中控
+             *     按 "<device.name> · <command>" 自动 fallback。
+             */
+            friendly_description?: string | null;
+            /**
+             * @description 相对前一步 startedAt 的延时秒数；Step 0 强制 0；后续步 null = 现网历史
+             *     v1 行未填（中控按 "—" 显示）。
+             */
+            delay_seconds_after_prev_start?: number | null;
+            /**
+             * @description 前置条件原样透传（runbook.yaml#/PreCond[]）；中控 dialog 暂不渲染，
+             *     仅作为 advanced-fold 调试视图保留。
+             */
+            preconditions?: {
+                [key: string]: unknown;
+            }[] | null;
+            /** Format: int64 */
+            exhibit_id?: number | null;
+            content_intent?: string | null;
+            content_params?: {
                 [key: string]: unknown;
             } | null;
         };
@@ -9713,6 +9844,94 @@ export interface components {
         RunbookTriggerResult: {
             /** @description Runbook 执行实例 ID（ULID）；URL-safe；业务唯一键 */
             exec_id: string;
+        };
+        /**
+         * @description `scene` = 场景切换触发；origin_id = `scene:{scene_id}`。
+         *     `device_command_button` = 中控面板设备命令按钮触发；origin_id = `panel_card:{id}#button:{index}`。
+         * @enum {string}
+         */
+        RunbookOriginType: "scene" | "device_command_button";
+        /**
+         * @description `warn` = 前置条件 block_on_fail=false 不满足 / ack timeout 非致命；
+         *     `failed` = 前置条件 block_on_fail=true 不满足 / 命令发送失败 / 响应错误；
+         *     `skipped` = 预留（v2 暂不启用，全跑到底）。
+         * @enum {string}
+         */
+        RunbookStepStatus: "pending" | "running" | "succeeded" | "warn" | "failed" | "skipped";
+        /**
+         * @description 单步执行结果。与 MQTT runbook_progress envelope 的 step_status[] 元素同形（复用 schema）。
+         *     持久化为 excs_runbook_executions.step_results 内联 JSON 数组。
+         */
+        RunbookStepResult: {
+            /** @description 0-based 步下标 */
+            index: number;
+            status: components["schemas"]["RunbookStepStatus"];
+            /**
+             * Format: date-time
+             * @description 引擎实际开始执行时刻（出 pending 入 running）；RFC3339
+             */
+            started_at?: string | null;
+            /**
+             * Format: date-time
+             * @description 终止时刻（succeeded/warn/failed/skipped）；RFC3339
+             */
+            completed_at?: string | null;
+            /**
+             * @description warn/failed 时填。常见值：device_offline / ack_timeout / params_invalid /
+             *     precond_failed / play_cmd_error / exhibit_app_offline。
+             */
+            error_code?: string | null;
+            /** @description 给运维看的友好描述 */
+            error_message?: string | null;
+        };
+        /**
+         * @description `queued` 入队等 per-hall 锁；`running` 引擎执行中；
+         *     `succeeded` 全部 step 成功；`partial_failed` 至少 1 步 warn/failed 但有成功；
+         *     `failed` 全部 step failed 或引擎层错误；`timed_out` 超过 max_exec_seconds。
+         *     hall.current_scene 仅在 `succeeded / partial_failed` 时由 SceneSwitched 事件更新。
+         * @enum {string}
+         */
+        RunbookAggregateStatus: "queued" | "running" | "succeeded" | "partial_failed" | "failed" | "timed_out";
+        /**
+         * @description Runbook = **执行实例**（与 Scene / DeviceCommandButton 模板源解耦）。
+         *     每次中控 App 触发 → server 创建一条 → 入 RunbookEngine 调度。
+         *     持久化：excs_runbook_executions 表（S5-1 已落地）。
+         */
+        Runbook: {
+            /** @description ULID 或 snowflake；URL-safe；业务唯一键 */
+            exec_id: string;
+            /** Format: int64 */
+            hall_id: number;
+            origin_type: components["schemas"]["RunbookOriginType"];
+            /**
+             * @description origin=scene → "scene:{scene_id}"；
+             *     origin=device_command_button → "panel_card:{id}#button:{index}"。
+             */
+            origin_id: string;
+            /** @description 触发时从 source 整组深拷贝快照（持久化为 steps_snapshot 列） */
+            steps: components["schemas"]["ActionStep"][];
+            step_results: components["schemas"]["RunbookStepResult"][];
+            aggregate_status: components["schemas"]["RunbookAggregateStatus"];
+            /**
+             * Format: date-time
+             * @description 引擎实际开始执行时刻（出 queued 入 running）；RFC3339
+             */
+            started_at?: string | null;
+            /**
+             * Format: date-time
+             * @description 终止时刻；RFC3339
+             */
+            completed_at?: string | null;
+            /**
+             * Format: int64
+             * @description 触发用户（空表示系统/AI 触发）
+             */
+            triggered_by_user_id?: number | null;
+            /**
+             * @description 引擎层错误码（非业务步错误）。常见值：
+             *     hall_master_offline / exec_timeout / lock_lost / preflight_failed。
+             */
+            reason?: string | null;
         };
     };
     responses: {
@@ -12946,6 +13165,33 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    getControlAppSessionState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["ControlSessionState"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     listShows: {
@@ -19027,6 +19273,36 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ApiResponse"] & {
                         data?: components["schemas"]["RunbookTriggerResult"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getRunbook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description ULID（业务唯一键，URL-safe） */
+                exec_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 命中 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["Runbook"];
                     };
                 };
             };

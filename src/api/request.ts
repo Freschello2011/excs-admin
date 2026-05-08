@@ -286,8 +286,9 @@ request.interceptors.response.use(
       const originalConfig = response.config;
 
       // Prevent infinite loop on refresh endpoint
+      // refresh 端点自身 1002 = refresh token 已失效（>168h）— 这种是确定性失败，强踢
       if (originalConfig.url?.includes('/auth/refresh')) {
-        handleLogout();
+        forceLogout();
         return Promise.reject(res);
       }
 
@@ -295,8 +296,9 @@ request.interceptors.response.use(
         isRefreshing = true;
         const refreshToken = localStorage.getItem('excs-refresh-token');
 
+        // 没有 refresh token = 已 logout 状态，强踢（无救）
         if (!refreshToken) {
-          handleLogout();
+          forceLogout();
           return Promise.reject(res);
         }
 
@@ -308,17 +310,21 @@ request.interceptors.response.use(
               const { access_token, refresh_token } = refreshData.data;
               localStorage.setItem('excs-access-token', access_token);
               localStorage.setItem('excs-refresh-token', refresh_token);
+              // Bug 5b：refresh 成功 → 清零失败计数
+              noteRefreshSuccess();
               onTokenRefreshed(access_token);
 
               // Retry original request
               originalConfig.headers.Authorization = `Bearer ${access_token}`;
               return request(originalConfig);
             } else {
+              // Bug 5b：refresh 业务失败 — 走容忍 logout（连续 2 次才硬踢）
               handleLogout();
               return Promise.reject(refreshData);
             }
           })
           .catch((err) => {
+            // Bug 5b：refresh 网络/超时失败 — 走容忍 logout
             handleLogout();
             return Promise.reject(err);
           })
@@ -432,16 +438,114 @@ request.interceptors.response.use(
   },
 );
 
-function handleLogout(): void {
+/* ==================== Bug 5b：refresh 失败容忍 + dirty 阻断 ==================== *
+ * 单次 refresh 失败不立即踢回 SSO（典型场景：用户在编辑器停留 25-120 min 期间
+ * 网络抖动 / token 因 perm_ver bump 触发 1002）。连续 RAW_LOGOUT_THRESHOLD 次失败
+ * 才硬踢。
+ *
+ * 同时阻断含 timeline 草稿残留 / 编辑器 dirty 的硬踢（Bug 5a autosave 已落盘，
+ * 但极端时序 — 用户改完立即 1002 + dirty + autosave 30s 还没到 — 仍可能丢稿）。
+ *
+ * authStore 主动续期成功时调 `noteRefreshSuccess` 清零计数。
+ */
+const RAW_LOGOUT_THRESHOLD = 2;
+let refreshFailureCount = 0;
+let lastLogoutAttemptAt = 0;
+
+/** authStore 主动续期成功 / response 1002 走 refresh 成功后调用 — 清零失败计数 */
+export function noteRefreshSuccess(): void {
+  refreshFailureCount = 0;
+}
+
+/** authStore 主动续期失败 / response 1002 走 refresh 失败后调用 — 累加计数 */
+export function noteRefreshFailure(): void {
+  refreshFailureCount += 1;
+}
+
+/** 当前距上次"被阻断的 logout 尝试"是否在冷却期内（<5min）— 用于 dirty 阻断回弹 */
+export function isLogoutCoolingDown(): boolean {
+  return lastLogoutAttemptAt > 0 && Date.now() - lastLogoutAttemptAt < 5 * 60_000;
+}
+
+/**
+ * 触发硬踢（Bug 5b 守门）。容忍单次失败 + dirty 阻断。
+ * 调用方仍可主动 force=true 绕过（如 /logout 按钮）。
+ */
+function handleLogout(opts?: { force?: boolean }): void {
+  const force = !!opts?.force;
+  refreshFailureCount += 1;
+
+  // 守门 1：连续 < THRESHOLD 次失败仅警告，不立即踢（典型网络抖动）
+  if (!force && refreshFailureCount < RAW_LOGOUT_THRESHOLD) {
+    lastLogoutAttemptAt = Date.now();
+    messageBus.emit({
+      level: 'warning',
+      content: '会话刷新失败，正在重试…',
+    });
+    return;
+  }
+
+  // 守门 2：编辑器 dirty / 草稿残留时弹 Modal 阻断硬踢
+  if (!force && shouldBlockLogoutForDraft()) {
+    lastLogoutAttemptAt = Date.now();
+    showDraftRetentionModal();
+    return;
+  }
+
+  refreshFailureCount = 0;
   localStorage.removeItem('excs-access-token');
   localStorage.removeItem('excs-refresh-token');
   localStorage.removeItem('excs-user');
 
-  // Only redirect if not already on login callback
   if (!window.location.pathname.startsWith('/login')) {
-    // Redirect to SSO login
     redirectToSSO();
   }
+}
+
+/**
+ * 强制登出（用户主动点退出 / 真正必须重新登录）— 跳过容忍 + dirty 阻断。
+ */
+export function forceLogout(): void {
+  handleLogout({ force: true });
+}
+
+/** 检测是否需要阻断 logout — timeline 编辑器有 dirty 草稿 / 当前 URL 是编辑器 */
+function shouldBlockLogoutForDraft(): boolean {
+  try {
+    // 1. localStorage 残留草稿（Bug 5a 30s autosave 落盘）
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('excs.timeline.draft.')) {
+        return true;
+      }
+    }
+    // 2. 当前 URL 在 timeline 编辑器
+    if (/\/shows\/\d+\/timeline/.test(window.location.pathname)) {
+      return true;
+    }
+  } catch {
+    // localStorage 异常时不阻断
+  }
+  return false;
+}
+
+/** 弹 Modal 让用户先导出/保存草稿，再点确认才真踢 */
+function showDraftRetentionModal(): void {
+  // 用 messageBus 转发给 App 顶层 Modal 渲染（避免在 request.ts 直接引入 antd Modal —
+  // 那会让 request.ts 和 React 强耦合）。AppShell 监听 'logout-block' 事件后弹 Modal。
+  messageBus.emit({
+    level: 'warning',
+    content: '会话已过期但检测到未保存的演出草稿，请先导出或保存，再手动重登。',
+  });
+  // 派发自定义事件，由 AppShell 顶层 Modal 接管（detail.confirm 回调真正触发硬踢）
+  window.dispatchEvent(
+    new CustomEvent('excs:logout-blocked', {
+      detail: {
+        reason: 'timeline_draft',
+        confirm: () => forceLogout(),
+      },
+    }),
+  );
 }
 
 /** 根据当前访问域名选择对应的 SSO 域名 */

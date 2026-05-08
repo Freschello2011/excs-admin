@@ -22,6 +22,7 @@ import { commandPresetApi, type CommandPreset } from '@/api/commandPreset';
 import { deviceCommandApi } from '@/api/deviceCommand';
 import { deviceV2Api } from '@/api/deviceConnector';
 import { hallApi } from '@/api/hall';
+import { queryKeys } from '@/api/queryKeys';
 import { startEventStream, type SSEClient } from '@/api/diag';
 import type { DebugEvent, DeviceCommand as DeviceCommandView } from '@/types/deviceConnector';
 import ChannelMatrix, { type MatrixVariant } from './ChannelMatrix';
@@ -169,6 +170,7 @@ export default function DeviceDebugConsolePage() {
     onSuccess: () => {
       message.success('联级配置已更新');
       queryClient.invalidateQueries({ queryKey: ['device-debug-bundle', deviceId] });
+      queryClient.invalidateQueries({ queryKey: ['devices'] });
     },
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : '更新失败';
@@ -182,6 +184,7 @@ export default function DeviceDebugConsolePage() {
     onSuccess: () => {
       message.success('通道映射已更新');
       queryClient.invalidateQueries({ queryKey: ['device-debug-bundle', deviceId] });
+      queryClient.invalidateQueries({ queryKey: ['devices'] });
       setLabelPopoverIndexes(null);
     },
     onError: (err: unknown) => {
@@ -191,6 +194,9 @@ export default function DeviceDebugConsolePage() {
   });
 
   // CommandPreset upsert / delete
+  // ADR-0024：command_presets 已合流到 effective-commands 的"现场别名"卡。
+  // upsert/delete 必须 invalidate effectiveCommands(deviceId)（前缀 ['devices', id]）
+  // 让演出编辑器动作库立刻刷新；server 端也已联动失效 60s Redis 缓存。
   const upsertPresetMutation = useMutation({
     mutationFn: ({
       name,
@@ -202,6 +208,8 @@ export default function DeviceDebugConsolePage() {
     onSuccess: () => {
       message.success('指令组已保存');
       queryClient.invalidateQueries({ queryKey: ['device-debug-bundle', deviceId] });
+      queryClient.invalidateQueries({ queryKey: ['devices'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.effectiveCommands(deviceId) });
       setPresetEditor(null);
     },
     onError: (err: unknown) => {
@@ -215,6 +223,8 @@ export default function DeviceDebugConsolePage() {
     onSuccess: () => {
       message.success('指令组已删除');
       queryClient.invalidateQueries({ queryKey: ['device-debug-bundle', deviceId] });
+      queryClient.invalidateQueries({ queryKey: ['devices'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.effectiveCommands(deviceId) });
     },
   });
 

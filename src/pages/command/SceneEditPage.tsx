@@ -42,7 +42,8 @@ import {
   OrderedListOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { commandClient, hallClient } from '@/api/gen/client';
+import { commandClient } from '@/api/gen/client';
+import { commandApi } from '@/api/command';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
 import { useMessage } from '@/hooks/useMessage';
@@ -101,9 +102,14 @@ export default function SceneEditPage() {
     enabled: Number.isFinite(sceneId) && sceneId > 0,
   });
 
+  // 注意：与 SceneListPage 共享同一 queryKey；后者用 commandApi.getScenes（AxiosResponse 包壳）+
+  // select 解包。本页若直接走 commandClient.listScenes 拿到 unwrapped 数组，会和缓存里的
+  // AxiosResponse 对象形态错位 —— 从 /scenes 列表点编辑跳本页时 sceneList 会是 AxiosResponse
+  // 而非数组，导致 sceneList.map 抛 "scenes.map is not a function"。统一走 commandApi 包壳。
   const sceneListQuery = useQuery({
     queryKey: queryKeys.scenes(hallId),
-    queryFn: () => commandClient.listScenes(hallId),
+    queryFn: () => commandApi.getScenes(hallId),
+    select: (res) => res.data.data,
     enabled: Number.isFinite(hallId) && hallId > 0,
   });
 
@@ -114,9 +120,13 @@ export default function SceneEditPage() {
     enabled: Number.isFinite(hallId) && hallId > 0,
   });
 
+  // 同 sceneListQuery：与 AdminLayout 共享 queryKeys.exhibits(hallId) 缓存，AdminLayout 走
+  // hallApi.getExhibits（AxiosResponse 包壳）+ select 解包。统一形态，否则缓存命中时
+  // exhibitsQuery.data 会是 AxiosResponse 而非数组。
   const exhibitsQuery = useQuery({
     queryKey: queryKeys.exhibits(hallId),
-    queryFn: () => hallClient.listExhibits(hallId),
+    queryFn: () => hallApi.getExhibits(hallId),
+    select: (res) => res.data.data,
     enabled: Number.isFinite(hallId) && hallId > 0,
   });
 

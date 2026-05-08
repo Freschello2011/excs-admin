@@ -339,7 +339,19 @@ export default function PanelEditorPage() {
     editorCardRefs.current[cardId]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     setHoveredCardId(cardId);
     setTimeout(() => setHoveredCardId((prev) => prev === cardId ? null : prev), 2000);
-  }, []);
+    // device_command 卡：在预览里点等价于「编辑」——直接打开 v2 三栏壳（M2）。
+    // 其它卡型只做滚动 + 高亮（普通 Modal 由左栏铅笔触发）。
+    for (const sec of buffer.sections) {
+      const card = sec.cards.find((c) => c.id === cardId);
+      if (!card) continue;
+      if (card.card_type === 'device_command' && canEdit && viewVersionId == null) {
+        setV2EditorCard(card);
+        setV2EditorSectionId(sec.id);
+        setV2EditorOpen(true);
+      }
+      break;
+    }
+  }, [buffer, canEdit, viewVersionId]);
 
   /* ─── 生成默认面板（仍是真实 mutation——如果 panel 不存在，先 generate 才有 baseline）─── */
   const generateMutation = useMutation({

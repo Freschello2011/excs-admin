@@ -41,7 +41,6 @@ function mergeReasonBody<T extends Record<string, unknown> | undefined>(
 
 export type LoginUser = components['schemas']['LoginUser'];
 export type HallPermission = components['schemas']['HallPermission'];
-export type MqttInfo = components['schemas']['MqttInfo'];
 export type LoginResponse = components['schemas']['LoginResponse'];
 export type RefreshTokenResponse = components['schemas']['RefreshTokenResponse'];
 export type ChangePasswordResult = components['schemas']['ChangePasswordResult'];

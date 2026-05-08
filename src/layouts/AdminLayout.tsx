@@ -97,7 +97,7 @@ function buildMenuRegions(selectedHallId?: number): MenuRegion[] {
             {
               path: hallId ? `/halls/${hallId}/control-app` : '/control-app',
               icon: 'dashboard_customize',
-              label: '中控 App',
+              label: '中控管理',
               requireActions: ['panel.view', 'panel.edit'],
             },
             { path: '/contents', icon: 'folder_open', label: '内容总库', requireActions: ['content.view', 'content.edit', 'content.upload'] },
@@ -216,7 +216,7 @@ function resolveTitleFromPath(pathname: string): string {
   // Dynamic hall-level routes — check first (before /halls catches all)
   if (/^\/halls\/\d+\/exhibits/.test(pathname)) return '展项管理';
   if (/^\/halls\/\d+\/exhibit-management/.test(pathname)) return '展项管理';
-  if (/^\/halls\/\d+\/control-app/.test(pathname)) return '中控 App';
+  if (/^\/halls\/\d+\/control-app/.test(pathname)) return '中控管理';
   if (/^\/halls\/\d+\/triggers/.test(pathname)) return '触发器';
   if (/^\/halls\/\d+$/.test(pathname)) return '展厅详情';
   // Static titleMap

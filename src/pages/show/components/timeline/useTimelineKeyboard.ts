@@ -5,6 +5,7 @@ import { useTimelineStore } from '@/stores/timelineStore';
  * Comprehensive keyboard shortcuts for the timeline editor.
  *
  * Space        — play / pause
+ * Ctrl/Cmd+S   — save (Bug 1)
  * Delete/Bksp  — delete selected actions
  * Ctrl/Cmd+C   — copy selected actions
  * Ctrl/Cmd+V   — paste at playback cursor (to first track)
@@ -15,7 +16,7 @@ import { useTimelineStore } from '@/stores/timelineStore';
  * Left         — nudge selected actions left 100ms
  * Right        — nudge selected actions right 100ms
  */
-export function useTimelineKeyboard(toggle: () => void) {
+export function useTimelineKeyboard(toggle: () => void, save?: () => void) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       // Skip when typing in input fields
@@ -30,6 +31,14 @@ export function useTimelineKeyboard(toggle: () => void) {
       if (e.code === 'Space' && !e.repeat) {
         e.preventDefault();
         toggle();
+        return;
+      }
+
+      /* Ctrl/Cmd+S — save（Bug 1）
+       * 浏览器默认 Ctrl+S = 保存网页，必须 preventDefault 截掉。 */
+      if (isMeta && e.code === 'KeyS' && !e.shiftKey) {
+        e.preventDefault();
+        save?.();
         return;
       }
 
@@ -133,5 +142,5 @@ export function useTimelineKeyboard(toggle: () => void) {
 
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [toggle]);
+  }, [toggle, save]);
 }

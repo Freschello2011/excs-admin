@@ -90,8 +90,11 @@ export default function CommandPresetEditor({
     setParamsErr(null);
   }, [open, initial, defaultExpectedChannels, effectiveCommands]);
 
+  // ADR-0024：合流后 effective_commands 含 source=command_preset 的"现场别名"卡，
+  // 必须过滤——preset 必须指向 catalog/inline/protocol/plugin 的真实命令，禁止 preset 引用 preset。
+  // server 端 collectValidCommandCodes 也跳过同源，前端这里也加一道防护避免下拉选项里出现循环项。
   const controlOptions = useMemo(
-    () => effectiveCommands.filter((c) => c.category !== 'query'),
+    () => effectiveCommands.filter((c) => c.category !== 'query' && c.source !== 'command_preset'),
     [effectiveCommands],
   );
 

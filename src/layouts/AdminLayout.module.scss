@@ -235,6 +235,11 @@
   // ========== Main Area ==========
   &__main {
     flex: 1;
+    // Bug 1：默认 min-width: auto 会取子元素 min-content 宽度，
+    // 使得演出时间线页（轨道行可能 4000+ px 宽）整个 layout 横向溢出，
+    // 顶栏「保存」按钮被挤到视口外。改为 0 让 flex 正常 shrink。
+    // 子页若需要横向滚动应在自身容器加 overflow-x: auto，不该靠把 main 拽宽。
+    min-width: 0;
     margin-left: 256px;
     min-height: 100vh;
     background: transparent;

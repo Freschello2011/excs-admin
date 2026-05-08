@@ -235,6 +235,12 @@ interface TrackAreaProps {
   currentTimeMs: number;
   /** Snap hint ms（拖动时高亮）；null 不渲染 */
   snapHintMs: number | null;
+  /** Bug 6：左侧轨道名称栏宽度（与 reference label 列同步）。默认 100 */
+  labelWidth?: number;
+  /** Bug 6：在 label 列右边缘按下拖拽 → 触发宽度调整。父组件用 mousemove/mouseup 接管 */
+  onLabelResizeStart?: (e: React.MouseEvent) => void;
+  /** Bug 6：拖动期间 = true，给手柄加视觉反馈 */
+  labelResizing?: boolean;
 }
 
 /* ==================== Component ==================== */
@@ -246,6 +252,7 @@ export default function TrackArea({
   onClearSelection, onDragMoveAction, onResizeAction, onActionDragEnd, onAddAction,
   onScrollLeftChange, onZoomAtAnchor, onCopySelected, onPaste, onDeleteSelected,
   currentTimeMs, snapHintMs,
+  labelWidth = 100, onLabelResizeStart, labelResizing = false,
 }: TrackAreaProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -295,7 +302,8 @@ export default function TrackArea({
   /* ── Wheel：Ctrl/⌘+滚轮 = 锚点缩放；否则 = 横向滚动
      React 17+ 的 onWheel 是 passive listener，preventDefault() 会被忽略——
      必须用 addEventListener('wheel', handler, { passive: false }) 注册原生
-     listener，并 stopPropagation 阻止冒泡到 admin layout 触发横向滚出可视区。 */
+     listener，并 stopPropagation 阻止冒泡到 admin layout 触发横向滚出可视区。
+     Bug 4：步长 ±15%（原 ±10% 锚点视觉不明显）。 */
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -304,7 +312,7 @@ export default function TrackArea({
         if (e.deltaY === 0) return;
         e.preventDefault();
         e.stopPropagation();
-        const factor = e.deltaY < 0 ? 1.1 : 0.9;
+        const factor = e.deltaY < 0 ? 1.15 : 0.87;
         const rect = el.getBoundingClientRect();
         const anchorPx = e.clientX - rect.left;
         const vpWidth = el.clientWidth || rect.width;
@@ -419,12 +427,25 @@ export default function TrackArea({
       {/* ── Left: track labels ── */}
       <div
         style={{
-          width: 100, flexShrink: 0,
+          width: labelWidth, flexShrink: 0,
           borderRight: '1px solid var(--ant-color-border-secondary)',
           background: 'var(--ant-color-bg-layout)',
           display: 'flex', flexDirection: 'column',
+          position: 'relative',
         }}
       >
+        {/* Bug 6：宽度拖拽手柄（与 reference label 列共宽 — 父组件统一接管 mousemove） */}
+        {onLabelResizeStart && (
+          <div
+            onMouseDown={onLabelResizeStart}
+            title="拖动调整轨道名称栏宽度"
+            style={{
+              position: 'absolute', top: 0, right: -2, bottom: 0, width: 4,
+              cursor: 'col-resize', zIndex: 5,
+              background: labelResizing ? 'var(--ant-color-primary)' : 'transparent',
+            }}
+          />
+        )}
         {/* Track label rows — Batch C P10：dnd-kit Sortable 重排 */}
         <div style={{ flex: 1, overflow: 'auto' }}>
           <DndContext

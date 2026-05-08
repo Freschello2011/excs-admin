@@ -3,10 +3,11 @@ import { Tabs, Input, Empty, Spin, Button, Tooltip, Collapse, Tag } from 'antd';
 import {
   MenuFoldOutlined, MenuUnfoldOutlined, SearchOutlined,
   ThunderboltOutlined, AppstoreOutlined, PlaySquareOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
 import { useDraggable } from '@dnd-kit/core';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { commandApi } from '@/api/command';
 import { contentApi } from '@/api/content';
 import { hallApi } from '@/api/hall';
@@ -100,6 +101,7 @@ function DeviceCommandPanelBody({ device, search, active }: DeviceCommandPanelPr
     queryFn: () => hallApi.getEffectiveCommands(device.id),
     select: (res) => res.data.data,
     enabled: active && device.id > 0,
+    refetchOnMount: 'always',
   });
 
   /** 跨设备搜索时 panel 头侧也匹配，所以这里是命令级二次过滤（仅命令字段） */
@@ -190,6 +192,7 @@ function DeviceCommandsTab({ hallId, search }: { hallId: number; search: string 
     queryFn: () => hallApi.getDevices({ hall_id: hallId }),
     select: (res) => res.data.data,
     enabled: hallId > 0,
+    refetchOnMount: 'always',
   });
 
   const [activeKeys, setActiveKeys] = useState<string[]>([]);
@@ -260,6 +263,7 @@ function ScenesTab({ hallId, search }: { hallId: number; search: string }) {
     queryFn: () => commandApi.getScenes(hallId),
     select: (res) => res.data.data,
     enabled: hallId > 0,
+    refetchOnMount: 'always',
   });
 
   const filtered = useMemo(() => {
@@ -294,6 +298,7 @@ function MediaTab({ hallId, search }: { hallId: number; search: string }) {
     queryFn: () => contentApi.listContents({ hall_id: hallId, page: 1, page_size: 200, status: 'ready' }),
     select: (res) => res.data.data?.list ?? [],
     enabled: hallId > 0,
+    refetchOnMount: 'always',
   });
 
   const filtered = useMemo(() => {
@@ -332,6 +337,16 @@ interface ActionLibraryProps {
 export default function ActionLibrary({ hallId }: ActionLibraryProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [search, setSearch] = useState('');
+  const queryClient = useQueryClient();
+
+  // 兜底：手动刷新所有 4 类数据源（防其他 CRUD 端忘 invalidate）。
+  // 三个广义前缀正好覆盖 effectiveCommands(deviceId) / devices({hall_id}) /
+  // scenes(hallId) / contents({...}) 全部 4 个 useQuery key。
+  const handleRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['devices'] });
+    queryClient.invalidateQueries({ queryKey: ['scenes'] });
+    queryClient.invalidateQueries({ queryKey: ['contents'] });
+  };
 
   if (collapsed) {
     return (
@@ -368,13 +383,22 @@ export default function ActionLibrary({ hallId }: ActionLibraryProps) {
         borderBottom: '1px solid var(--ant-color-border)',
       }}>
         <span style={{ fontWeight: 600, fontSize: 13 }}>动作库</span>
-        <Tooltip title="收起">
-          <Button
-            type="text" size="small"
-            icon={<MenuFoldOutlined />}
-            onClick={() => setCollapsed(true)}
-          />
-        </Tooltip>
+        <span>
+          <Tooltip title="刷新动作库">
+            <Button
+              type="text" size="small"
+              icon={<ReloadOutlined />}
+              onClick={handleRefresh}
+            />
+          </Tooltip>
+          <Tooltip title="收起">
+            <Button
+              type="text" size="small"
+              icon={<MenuFoldOutlined />}
+              onClick={() => setCollapsed(true)}
+            />
+          </Tooltip>
+        </span>
       </div>
 
       {/* Search */}

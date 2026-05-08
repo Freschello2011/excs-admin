@@ -88,6 +88,7 @@ export default function ExhibitContentTab({ hallId, exhibitId, exhibit, canManag
     onSuccess: () => {
       message.success('水印标记已更新');
       queryClient.invalidateQueries({ queryKey: queryKeys.exhibitContent(exhibitId) });
+      queryClient.invalidateQueries({ queryKey: ['contents'] });
     },
   });
 
@@ -97,6 +98,7 @@ export default function ExhibitContentTab({ hallId, exhibitId, exhibit, canManag
     onSuccess: () => {
       message.success('文件已删除');
       queryClient.invalidateQueries({ queryKey: queryKeys.exhibitContent(exhibitId) });
+      queryClient.invalidateQueries({ queryKey: ['contents'] });
     },
     onError: (err: Error) => message.error(err.message || '删除失败'),
   });
@@ -108,6 +110,7 @@ export default function ExhibitContentTab({ hallId, exhibitId, exhibit, canManag
       message.success('名称已更新');
       setRenamingContentId(null);
       queryClient.invalidateQueries({ queryKey: queryKeys.exhibitContent(exhibitId) });
+      queryClient.invalidateQueries({ queryKey: ['contents'] });
     },
     onError: () => message.error('重命名失败'),
   });
@@ -194,6 +197,8 @@ export default function ExhibitContentTab({ hallId, exhibitId, exhibit, canManag
       setUploadTasks((prev) => prev.map((t, i) => i === index ? { ...t, status: 'done' } : t));
       message.success(`${task.file.name} 上传成功`);
       queryClient.invalidateQueries({ queryKey: queryKeys.exhibitContent(exhibitId) });
+      // 演出时间线 ActionLibrary MediaTab 用 ['contents', params]，需广义前缀失活
+      queryClient.invalidateQueries({ queryKey: ['contents'] });
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : '上传失败';
       setUploadTasks((prev) => prev.map((t, i) => i === index ? { ...t, status: 'error', error: errMsg } : t));
