@@ -3167,18 +3167,45 @@ export const authzClient = {
   getRoleTemplate(id: number): Promise<RoleTemplate> {
     return unwrap(request.get<ApiEnvelope<RoleTemplate>>(`/api/v1/authz/role-templates/${id}`));
   },
-  createRoleTemplate(body: CreateRoleTemplateRequest): Promise<RoleTemplate> {
-    return unwrap(request.post<ApiEnvelope<RoleTemplate>>('/api/v1/authz/role-templates', body));
-  },
-  updateRoleTemplate(id: number, body: UpdateRoleTemplateRequest): Promise<IDResult> {
-    return unwrap(request.put<ApiEnvelope<IDResult>>(`/api/v1/authz/role-templates/${id}`, body));
-  },
-  deleteRoleTemplate(id: number): Promise<IDResult> {
-    return unwrap(request.delete<ApiEnvelope<IDResult>>(`/api/v1/authz/role-templates/${id}`));
-  },
-  copyRoleTemplate(id: number, body: CopyRoleTemplateRequest): Promise<RoleTemplate> {
+  /* user.grant 标了 RequireReason: true（critical），下列写端点必须带 reason ≥5 字
+     （走 body.reason，middleware extractReason 兜底）。 */
+  createRoleTemplate(body: CreateRoleTemplateRequest, reason?: string): Promise<RoleTemplate> {
     return unwrap(
-      request.post<ApiEnvelope<RoleTemplate>>(`/api/v1/authz/role-templates/${id}/copy`, body),
+      request.post<ApiEnvelope<RoleTemplate>>(
+        '/api/v1/authz/role-templates',
+        mergeReasonBody(body as unknown as Record<string, unknown>, reason),
+      ),
+    );
+  },
+  updateRoleTemplate(
+    id: number,
+    body: UpdateRoleTemplateRequest,
+    reason?: string,
+  ): Promise<IDResult> {
+    return unwrap(
+      request.put<ApiEnvelope<IDResult>>(
+        `/api/v1/authz/role-templates/${id}`,
+        mergeReasonBody(body as unknown as Record<string, unknown>, reason),
+      ),
+    );
+  },
+  deleteRoleTemplate(id: number, reason?: string): Promise<IDResult> {
+    return unwrap(
+      request.delete<ApiEnvelope<IDResult>>(`/api/v1/authz/role-templates/${id}`, {
+        data: mergeReasonBody(undefined, reason),
+      }),
+    );
+  },
+  copyRoleTemplate(
+    id: number,
+    body: CopyRoleTemplateRequest,
+    reason?: string,
+  ): Promise<RoleTemplate> {
+    return unwrap(
+      request.post<ApiEnvelope<RoleTemplate>>(
+        `/api/v1/authz/role-templates/${id}/copy`,
+        mergeReasonBody(body as unknown as Record<string, unknown>, reason),
+      ),
     );
   },
 

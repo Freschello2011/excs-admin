@@ -8,18 +8,20 @@ import dayjs from 'dayjs';
 import PageHeader from '@/components/common/PageHeader';
 import { useMessage } from '@/hooks/useMessage';
 import Can from '@/components/authz/Can';
+import RiskyActionButton from '@/components/authz/RiskyActionButton';
 import { authzApi } from '@/api/authz';
 import type { RoleTemplate, CopyRoleTemplateBody } from '@/api/gen/client';
 
 const queryKey = ['authz', 'role-templates'];
 
 export default function RoleTemplateListPage() {
-  const { message, modal } = useMessage();
+  const { message } = useMessage();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const [copySource, setCopySource] = useState<RoleTemplate | null>(null);
-  const [copyForm] = Form.useForm<CopyRoleTemplateBody>();
+  // copy form 包含 CopyRoleTemplateBody（new_code/new_name）+ reason（审计必填，user.grant 是 critical action）
+  const [copyForm] = Form.useForm<CopyRoleTemplateBody & { reason: string }>();
 
   /* P2.3（2026-04-25）：URL 同步 ?keyword=&domain=&critical= */
   const [searchParams, setSearchParams] = useSearchParams();
@@ -76,7 +78,8 @@ export default function RoleTemplateListPage() {
   }, [data, criticalOnly, domainFilter, keyword]);
 
   const deleteMutation = useMutation({
-    mutationFn: (id: number) => authzApi.deleteTemplate(id),
+    mutationFn: (args: { id: number; reason: string }) =>
+      authzApi.deleteTemplate(args.id, args.reason),
     onSuccess: () => {
       message.success('模板已删除');
       queryClient.invalidateQueries({ queryKey });
@@ -86,9 +89,11 @@ export default function RoleTemplateListPage() {
     },
   });
 
+  // 后端 user.grant 是 critical action，调用 /role-templates 写端点必带 reason ≥5 字。
+  // 复制 Modal 收 reason，删除走 RiskyActionButton。
   const copyMutation = useMutation({
-    mutationFn: (args: { sourceId: number; body: CopyRoleTemplateBody }) =>
-      authzApi.copyTemplate(args.sourceId, args.body),
+    mutationFn: (args: { sourceId: number; body: CopyRoleTemplateBody; reason: string }) =>
+      authzApi.copyTemplate(args.sourceId, args.body, args.reason),
     onSuccess: (res) => {
       message.success('模板已复制');
       queryClient.invalidateQueries({ queryKey });
@@ -102,24 +107,11 @@ export default function RoleTemplateListPage() {
     },
   });
 
-  const handleDelete = (tpl: RoleTemplate) => {
-    if (tpl.is_builtin) {
-      message.warning('内置模板不能删除');
-      return;
-    }
-    modal.confirm({
-      title: `删除模板「${tpl.name_zh}」？`,
-      content: '删除后该模板产生的授权记录仍保留，但后续无法再基于此模板创建新授权。',
-      okText: '删除',
-      okButtonProps: { danger: true },
-      onOk: () => deleteMutation.mutateAsync(tpl.id),
-    });
-  };
-
   const handleCopy = (tpl: RoleTemplate) => {
     copyForm.setFieldsValue({
       new_code: `${tpl.code}_copy`,
       new_name: `${tpl.name_zh} 副本`,
+      reason: '',
     });
     setCopySource(tpl);
   };
@@ -127,7 +119,8 @@ export default function RoleTemplateListPage() {
   const submitCopy = async () => {
     const values = await copyForm.validateFields();
     if (copySource) {
-      copyMutation.mutate({ sourceId: copySource.id, body: values });
+      const { reason, ...body } = values as CopyRoleTemplateBody & { reason: string };
+      copyMutation.mutate({ sourceId: copySource.id, body, reason });
     }
   };
 
@@ -228,17 +221,45 @@ export default function RoleTemplateListPage() {
           </Can>
           <Can action="user.grant">
             <Tooltip title={record.is_builtin ? '内置模板不能删除' : ''}>
-              <Button
-                size="small"
-                type="link"
-                danger
-                icon={<DeleteOutlined />}
-                disabled={record.is_builtin}
-                onClick={() => handleDelete(record)}
-                loading={deleteMutation.isPending && deleteMutation.variables === record.id}
-              >
-                删除
-              </Button>
+              {record.is_builtin ? (
+                <Button
+                  size="small"
+                  type="link"
+                  danger
+                  icon={<DeleteOutlined />}
+                  disabled
+                >
+                  删除
+                </Button>
+              ) : (
+                <RiskyActionButton
+                  action="user.grant"
+                  forceRiskLevel="critical"
+                  size="small"
+                  type="link"
+                  danger
+                  icon={<DeleteOutlined />}
+                  loading={
+                    deleteMutation.isPending && deleteMutation.variables?.id === record.id
+                  }
+                  confirmTitle={`删除模板「${record.name_zh}」？`}
+                  confirmContent={
+                    <div>
+                      <div style={{ marginBottom: 8 }}>
+                        删除后该模板产生的授权记录仍保留，但后续无法再基于此模板创建新授权。
+                      </div>
+                      <div style={{ marginBottom: 12, color: 'var(--ant-color-text-secondary)' }}>
+                        请填写删除原因（审计必填，≥ 5 字）：
+                      </div>
+                    </div>
+                  }
+                  onConfirm={async (reason) => {
+                    await deleteMutation.mutateAsync({ id: record.id, reason: reason ?? '' });
+                  }}
+                >
+                  删除
+                </RiskyActionButton>
+              )}
             </Tooltip>
           </Can>
         </Space>
@@ -334,6 +355,21 @@ export default function RoleTemplateListPage() {
             rules={[{ required: true, message: '请输入中文名' }]}
           >
             <Input placeholder="例如：高级技术员" />
+          </Form.Item>
+          <Form.Item
+            name="reason"
+            label="操作原因（审计必填）"
+            rules={[
+              { required: true, message: '请输入原因' },
+              { min: 5, message: '至少 5 字' },
+            ]}
+          >
+            <Input.TextArea
+              rows={2}
+              placeholder="例如：基于 hall_admin 派生测试角色"
+              maxLength={500}
+              showCount
+            />
           </Form.Item>
         </Form>
       </Modal>

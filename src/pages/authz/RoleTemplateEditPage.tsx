@@ -28,45 +28,10 @@ import PageHeader from '@/components/common/PageHeader';
 import { useMessage } from '@/hooks/useMessage';
 import { authzApi } from '@/api/authz';
 import { useAuthzMetaStore } from '@/stores/authzMetaStore';
+import { DOMAIN_LABELS, RISK_META } from '@/lib/authz/actionMeta';
 import type { ActionDef, RiskLevel } from '@/api/gen/client';
 
 const { Text } = Typography;
-
-/** 域中文名映射（PRD §5 的分域标题） */
-const DOMAIN_LABELS: Record<string, string> = {
-  hall: '展厅',
-  exhibit: '展项',
-  device: '设备',
-  scene: '场景',
-  content: '内容库',
-  show: '演出',
-  ai: 'AI',
-  template: '形象模板',
-  knowledge: '知识库',
-  tts: 'TTS',
-  panel: '中控面板',
-  notification: '通知',
-  pairing: '配对',
-  app: '展厅 App',
-  smarthome: '智能家居',
-  analytics: '统计分析',
-  dashboard: '仪表盘',
-  catalog: '全局资产',
-  release: '版本发布',
-  config: '系统配置',
-  nas: 'NAS 归档',
-  user: '用户与授权',
-  vendor: '供应商',
-  audit: '审计',
-};
-
-const RISK_META: Record<RiskLevel, { label: string; color: string }> = {
-  info: { label: 'info', color: 'default' },
-  low: { label: 'low', color: 'blue' },
-  medium: { label: 'medium', color: 'gold' },
-  high: { label: 'high', color: 'orange' },
-  critical: { label: 'critical', color: 'red' },
-};
 
 /** 按 domain 分组 */
 function groupByDomain(actions: ActionDef[]): Array<{ domain: string; items: ActionDef[] }> {
@@ -144,14 +109,19 @@ export default function RoleTemplateEditPage() {
     }
   }, [template, form]);
 
+  // 后端 user.grant 是 critical action，create / update 必带 reason ≥5 字
+  // （middleware 走 body.reason / X-Action-Reason 任一兜底）。
   const createMutation = useMutation({
-    mutationFn: (body: FormValues) =>
-      authzApi.createTemplate({
-        code: body.code,
-        name_zh: body.name_zh,
-        description: body.description,
-        action_codes: body.action_codes,
-      }),
+    mutationFn: (args: { body: FormValues; reason: string }) =>
+      authzApi.createTemplate(
+        {
+          code: args.body.code,
+          name_zh: args.body.name_zh,
+          description: args.body.description,
+          action_codes: args.body.action_codes,
+        },
+        args.reason,
+      ),
     onSuccess: () => {
       message.success('模板已创建');
       queryClient.invalidateQueries({ queryKey: ['authz', 'role-templates'] });
@@ -161,12 +131,16 @@ export default function RoleTemplateEditPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: (body: FormValues) =>
-      authzApi.updateTemplate(templateId!, {
-        name_zh: body.name_zh,
-        description: body.description,
-        action_codes: body.action_codes,
-      }),
+    mutationFn: (args: { body: FormValues; reason: string }) =>
+      authzApi.updateTemplate(
+        templateId!,
+        {
+          name_zh: args.body.name_zh,
+          description: args.body.description,
+          action_codes: args.body.action_codes,
+        },
+        args.reason,
+      ),
     onSuccess: () => {
       message.success('模板已保存');
       queryClient.invalidateQueries({ queryKey: ['authz', 'role-templates'] });
@@ -229,69 +203,87 @@ export default function RoleTemplateEditPage() {
       return;
     }
 
-    const doSubmit = async () => {
-      if (isNew) {
-        await createMutation.mutateAsync(values);
-        return;
-      }
-
-      let affectedUsers = 0;
-      if (template && template.is_builtin) {
-        const orig = new Set(template.action_codes ?? []);
-        const next = new Set(selectedActions);
-        const changed =
-          orig.size !== next.size ||
-          Array.from(orig).some((c) => !next.has(c)) ||
-          Array.from(next).some((c) => !orig.has(c));
-        if (changed) {
-          try {
-            affectedUsers = await authzApi.getAffectedUserCount(template.id);
-          } catch {
-            affectedUsers = 0;
-          }
+    // 内置模板 actions 改动会影响在线用户：先算受影响数（仅 update 路径需要）。
+    let affectedUsers = 0;
+    if (!isNew && template && template.is_builtin) {
+      const orig = new Set(template.action_codes ?? []);
+      const next = new Set(selectedActions);
+      const changed =
+        orig.size !== next.size ||
+        Array.from(orig).some((c) => !next.has(c)) ||
+        Array.from(next).some((c) => !orig.has(c));
+      if (changed) {
+        try {
+          affectedUsers = await authzApi.getAffectedUserCount(template.id);
+        } catch {
+          affectedUsers = 0;
         }
       }
+    }
 
-      const confirmModify = () => updateMutation.mutateAsync(values);
+    // 后端 user.grant 是 critical：必收 reason ≥5 字。把风险摘要 + reason 输入合进同一 modal。
+    const REASON_MIN = 5;
+    let reasonVal = '';
+    const title = isNew
+      ? '创建模板（高风险，需填写原因）'
+      : criticalTurnedOn
+        ? '模板将变为含 critical action'
+        : affectedUsers > 0
+          ? `${affectedUsers} 个用户将受影响`
+          : '保存模板（高风险，需填写原因）';
 
-      if (criticalTurnedOn) {
-        modal.confirm({
-          title: '模板将变为含 critical action',
-          content:
-            '保存后，被授予此模板的用户将拥有高风险操作权限，系统会强制要求过期时间。确认继续？',
-          okText: '确认保存',
-          okButtonProps: { danger: true },
-          onOk: async () => {
-            if (affectedUsers > 0) {
-              modal.confirm({
-                title: `${affectedUsers} 个用户将受影响`,
-                content: '这些用户下次刷新 action-set 后将获得新权限。确认继续？',
-                okText: '仍然保存',
-                okButtonProps: { danger: true },
-                onOk: confirmModify,
-              });
-            } else {
-              await confirmModify();
-            }
-          },
-        });
-        return;
-      }
-
-      if (affectedUsers > 0) {
-        modal.confirm({
-          title: `${affectedUsers} 个用户将受影响`,
-          content: '修改内置模板的 action_codes 后，这些用户的权限会在下次刷新时同步更新。',
-          okText: '保存',
-          onOk: confirmModify,
-        });
-        return;
-      }
-
-      await confirmModify();
-    };
-
-    doSubmit();
+    modal.confirm({
+      title,
+      width: 520,
+      content: (
+        <div>
+          {criticalTurnedOn && (
+            <Alert
+              type="error"
+              showIcon
+              style={{ marginBottom: 12 }}
+              message="保存后将含 critical action"
+              description="被授予此模板的用户将获得高风险权限，授权将强制带过期时间。"
+            />
+          )}
+          {affectedUsers > 0 && (
+            <Alert
+              type="warning"
+              showIcon
+              style={{ marginBottom: 12 }}
+              message={`${affectedUsers} 个用户当前持有此模板`}
+              description="这些用户下次刷新 action-set 后将获得新权限。"
+            />
+          )}
+          <div style={{ marginBottom: 8, color: 'var(--ant-color-text-secondary)' }}>
+            请填写操作原因（审计必填，≥ {REASON_MIN} 字）：
+          </div>
+          <Input.TextArea
+            rows={3}
+            autoFocus
+            placeholder="例如：新增『发布经理测试角色』用于 release 灰度测试"
+            maxLength={500}
+            showCount
+            onChange={(e) => {
+              reasonVal = e.target.value;
+            }}
+          />
+        </div>
+      ),
+      okText: isNew ? '创建' : criticalTurnedOn ? '确认保存' : '保存',
+      cancelText: '取消',
+      okButtonProps: criticalTurnedOn ? { danger: true } : undefined,
+      onOk: () => {
+        const r = reasonVal.trim();
+        if (r.length < REASON_MIN) {
+          message.warning(`请输入至少 ${REASON_MIN} 字的操作原因（审计用）`);
+          return Promise.reject(new Error('reason too short'));
+        }
+        return isNew
+          ? createMutation.mutateAsync({ body: values, reason: r })
+          : updateMutation.mutateAsync({ body: values, reason: r });
+      },
+    });
   }
 
   if (!isNew && isLoading) {

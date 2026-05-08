@@ -76,26 +76,34 @@ export const authzApi = {
 
   createTemplate(
     body: CreateRoleTemplateBody,
+    reason?: string,
   ): Promise<AxiosResponse<ApiResponse<RoleTemplate>>> {
-    return authzClient.createRoleTemplate(body).then(envelope);
+    return authzClient.createRoleTemplate(body, reason).then(envelope);
   },
 
   updateTemplate(
     id: number,
     body: UpdateRoleTemplateBody,
+    reason?: string,
   ): Promise<AxiosResponse<ApiResponse<{ id: number }>>> {
-    return authzClient.updateRoleTemplate(id, body).then((r: IDResult) => envelope({ id: r.id }));
+    return authzClient
+      .updateRoleTemplate(id, body, reason)
+      .then((r: IDResult) => envelope({ id: r.id }));
   },
 
-  deleteTemplate(id: number): Promise<AxiosResponse<ApiResponse<{ id: number }>>> {
-    return authzClient.deleteRoleTemplate(id).then((r: IDResult) => envelope({ id: r.id }));
+  deleteTemplate(
+    id: number,
+    reason?: string,
+  ): Promise<AxiosResponse<ApiResponse<{ id: number }>>> {
+    return authzClient.deleteRoleTemplate(id, reason).then((r: IDResult) => envelope({ id: r.id }));
   },
 
   copyTemplate(
     sourceId: number,
     body: CopyRoleTemplateBody,
+    reason?: string,
   ): Promise<AxiosResponse<ApiResponse<RoleTemplate>>> {
-    return authzClient.copyRoleTemplate(sourceId, body).then(envelope);
+    return authzClient.copyRoleTemplate(sourceId, body, reason).then(envelope);
   },
 
   /**
