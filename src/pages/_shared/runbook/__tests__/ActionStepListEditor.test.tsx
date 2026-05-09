@@ -6,22 +6,30 @@
  */
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import {
+  render,
+  screen,
+  cleanup,
+  fireEvent,
+  waitFor,
+} from '@testing-library/react';
 import { ConfigProvider } from 'antd';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ActionStepListEditor, { resolveCommandPick } from '../ActionStepListEditor';
 import type { ActionStep } from '../types';
 import type { EffectiveCommand } from '@/api/gen/client';
 
+const getEffectiveCommandsMock = vi.fn().mockResolvedValue({
+  data: { code: 0, message: '', data: [] },
+  status: 200,
+  statusText: 'OK',
+  headers: {},
+  config: {},
+});
+
 vi.mock('@/api/hall', () => ({
   hallApi: {
-    getEffectiveCommands: vi.fn().mockResolvedValue({
-      data: { code: 0, message: '', data: [] },
-      status: 200,
-      statusText: 'OK',
-      headers: {},
-      config: {},
-    }),
+    getEffectiveCommands: (...args: unknown[]) => getEffectiveCommandsMock(...args),
   },
 }));
 
@@ -173,6 +181,97 @@ describe('<ActionStepListEditor>', () => {
     );
     const wrap = screen.getByTestId('device-step-device-select');
     expect(wrap.querySelector('.ant-select-status-error')).toBeInTheDocument();
+  });
+
+  // ADR-0024 自愈回归（5d-2 修）：5d 修之前 admin 落卡漏展开 preset:* 留下的脏 binding，
+  // 进编辑器后 effective-commands 加载完应自动 onChange 展开，不需要用户重选命令。
+  it('库里仍是 "preset:135" → effective-commands 加载完后 onChange 自动展开为 channels_on + params', async () => {
+    getEffectiveCommandsMock.mockResolvedValueOnce({
+      data: {
+        code: 0,
+        message: '',
+        data: [
+          {
+            code: 'preset:135',
+            name: '135',
+            kind: 'control',
+            category: '🔖 现场别名',
+            source: 'command_preset',
+            resolved_code: 'channels_on',
+            resolved_params: { channels: [1, 3, 5] },
+          },
+          {
+            code: 'channels_on',
+            name: '通道开',
+            kind: 'control',
+            category: '通道',
+            source: 'preset',
+          },
+        ],
+      },
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config: {},
+    });
+
+    const onChange = vi.fn();
+    const initial: ActionStep[] = [
+      {
+        type: 'device',
+        delay_seconds_after_prev_start: 0,
+        device_id: 1,
+        command: 'preset:135',
+        params: null,
+        preconditions: null,
+        friendly_description: null,
+      },
+    ];
+    renderUI(initial, onChange);
+
+    await waitFor(() => expect(onChange).toHaveBeenCalled(), { timeout: 2000 });
+    const next = onChange.mock.calls[0][0] as ActionStep[];
+    expect(next[0].command).toBe('channels_on');
+    expect(next[0].command).not.toMatch(/^preset:/);
+    expect(next[0].params).toEqual({ channels: [1, 3, 5] });
+  });
+
+  it('库里 command 已是 channels_on（非 preset:）→ 不触发自愈，onChange 不被多余调用', async () => {
+    getEffectiveCommandsMock.mockResolvedValueOnce({
+      data: {
+        code: 0,
+        message: '',
+        data: [
+          {
+            code: 'channels_on',
+            name: '通道开',
+            kind: 'control',
+            source: 'preset',
+          },
+        ],
+      },
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config: {},
+    });
+
+    const onChange = vi.fn();
+    const initial: ActionStep[] = [
+      {
+        type: 'device',
+        delay_seconds_after_prev_start: 0,
+        device_id: 1,
+        command: 'channels_on',
+        params: { channels: [1] },
+        preconditions: null,
+        friendly_description: null,
+      },
+    ];
+    renderUI(initial, onChange);
+    // 给 useQuery + useEffect 一拍机会
+    await new Promise((r) => setTimeout(r, 100));
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it('content step + intent=set_volume → 渲染音量 Slider 默认 80', () => {

@@ -16,7 +16,7 @@
  *      slideshow_goto 走自带 <SlideshowImagePicker>）。
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Button,
   Card,
@@ -572,6 +572,22 @@ function DeviceStepBody({
     () => (commands ?? []).find((c) => c.code === step.command),
     [commands, step.command],
   );
+
+  // ADR-0024 自愈：发现库里仍是旧 "preset:<name>" 的步（5d 修之前 admin 落卡漏展开
+  // 留下的脏数据），在 effective-commands 加载完后自动展开为标准 device_action 并打 dirty。
+  // 老用户只需"打开编辑器 → 应用到草稿"就能批量修，不用对每个按钮重选命令。
+  useEffect(() => {
+    if (!commands || commands.length === 0) return;
+    if (!step.command || !step.command.startsWith('preset:')) return;
+    const repaired = resolveCommandPick(step.command, commands);
+    if (
+      repaired.command &&
+      repaired.command !== step.command &&
+      !repaired.command.startsWith('preset:')
+    ) {
+      onPatch({ command: repaired.command, params: repaired.params });
+    }
+  }, [commands, step.command, onPatch]);
 
   // ADR-0024：source=command_preset 的"现场别名"卡（code 形如 "preset:<name>"）落卡时
   // 用 resolved_code/resolved_params 展开为标准 device_action，让 ShowEngine /
