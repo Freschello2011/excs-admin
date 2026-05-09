@@ -1,9 +1,14 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Tooltip } from 'antd';
 import styles from '../DashboardPage.module.scss';
 import { fmtNum, fmtShortDateTime } from './formatters';
 import { useAuditFeed } from '../hooks/useAuditFeed';
 import StatusTag from '@/components/common/StatusTag';
+import { useActionsMap } from '@/lib/authz/useActionsMap';
+import { DOMAIN_LABELS } from '@/lib/authz/actionMeta';
+import { formatResourceText } from '@/lib/authz/resourceMeta';
+import { formatActionDisplay, formatActorText } from '@/lib/authz/auditFormatters';
 import type { AppOpItemDTO, AuthzAuditItemDTO } from '@/api/gen/client';
 import type { RecentContentItem } from '@/api/gen/client';
 
@@ -17,6 +22,7 @@ interface AuditTabProps {
 export default function AuditTab({ active }: AuditTabProps) {
   const { summary, authz, appOps, legacy } = useAuditFeed(active, 10);
   const [filter, setFilter] = useState<AuditFilter>('all');
+  const actionsMap = useActionsMap();
 
   return (
     <>
@@ -40,7 +46,7 @@ export default function AuditTab({ active }: AuditTabProps) {
           iconCls={styles.icWarning}
           title="授权变更"
           value={summary.data?.authz_changes}
-          sub="user.grant · vendor.manage"
+          sub="授权 / 撤销 / 供应商管理"
           pill={
             summary.data?.authz_changes
               ? { cls: 'warn', label: `${summary.data.authz_changes} 条` }
@@ -50,9 +56,9 @@ export default function AuditTab({ active }: AuditTabProps) {
         <SummaryCard
           icon="🖥"
           iconCls={styles.icInfo}
-          title="设备 / 展厅"
+          title="展厅运营"
           value={summary.data?.device_hall_ops}
-          sub="device / hall / scene / app"
+          sub="展厅 / 设备 / 场景 / App"
         />
       </div>
 
@@ -69,7 +75,11 @@ export default function AuditTab({ active }: AuditTabProps) {
       </div>
 
       {(filter === 'all' || filter === 'authz') && (
-        <AuthzAuditPanel items={authz.data?.items ?? []} loading={authz.isLoading && !authz.data} />
+        <AuthzAuditPanel
+          items={authz.data?.items ?? []}
+          loading={authz.isLoading && !authz.data}
+          actionsMap={actionsMap}
+        />
       )}
 
       <div className={styles.twoCol}>
@@ -77,7 +87,11 @@ export default function AuditTab({ active }: AuditTabProps) {
           <RecentContentPanel items={legacy.data?.recent_contents ?? []} loading={legacy.isLoading && !legacy.data} />
         )}
         {(filter === 'all' || filter === 'app') && (
-          <RecentAppOpsPanel items={appOps.data?.items ?? []} loading={appOps.isLoading && !appOps.data} />
+          <RecentAppOpsPanel
+            items={appOps.data?.items ?? []}
+            loading={appOps.isLoading && !appOps.data}
+            actionsMap={actionsMap}
+          />
         )}
       </div>
     </>
@@ -158,18 +172,20 @@ function FilterBtn({
 function AuthzAuditPanel({
   items,
   loading,
+  actionsMap,
 }: {
   items: AuthzAuditItemDTO[];
   loading: boolean;
+  actionsMap: ReturnType<typeof useActionsMap>;
 }) {
   return (
     <div className={`${styles.panel} ${styles.panelAccentWarn}`}>
       <div className={styles.panelTitle}>
         <span>
-          <span style={{ marginRight: 6 }}>🔑</span>授权审计 · authz_audit_log
+          <span style={{ marginRight: 6 }}>🔑</span>授权审计
         </span>
         <Link to="/platform/authz/audit" className={styles.sectionLink}>
-          查看完整审计（Phase 11）→
+          查看完整审计 →
         </Link>
       </div>
       {loading ? (
@@ -180,8 +196,8 @@ function AuthzAuditPanel({
         <table className={styles.auditTable}>
           <thead>
             <tr>
-              <th style={{ width: 90 }}>操作人</th>
-              <th style={{ width: 140 }}>操作</th>
+              <th style={{ width: 130 }}>操作人</th>
+              <th style={{ width: 160 }}>操作</th>
               <th style={{ width: 150 }}>资源</th>
               <th>详情 · 变更摘要</th>
               <th style={{ width: 72 }}>状态</th>
@@ -189,22 +205,37 @@ function AuthzAuditPanel({
             </tr>
           </thead>
           <tbody>
-            {items.map((it) => (
-              <tr key={it.id}>
-                <td>{it.actor_name || `user#${it.actor_user_id}`}</td>
-                <td>
-                  <span className={`${styles.tag} ${actionTagCls(it)}`}>{it.action_code}</span>
-                </td>
-                <td>{formatResource(it)}</td>
-                <td>{it.reason || '—'}</td>
-                <td>
-                  <span className={`${styles.pill} ${it.status === 'success' ? styles.ok : styles.err}`}>
-                    {it.status === 'success' ? '成功' : '失败'}
-                  </span>
-                </td>
-                <td className={styles.mono}>{fmtShortDateTime(it.occurred_at)}</td>
-              </tr>
-            ))}
+            {items.map((it) => {
+              const display = formatActionDisplay(it.action_code, actionsMap, DOMAIN_LABELS);
+              const tooltipText = display.label !== it.action_code ? it.action_code : '';
+              return (
+                <tr key={it.id}>
+                  <td>
+                    {formatActorText({
+                      actorName: it.actor_name,
+                      actorUserId: it.actor_user_id,
+                    })}
+                  </td>
+                  <td>
+                    {tooltipText ? (
+                      <Tooltip title={`代码：${tooltipText}`}>
+                        <span className={`${styles.tag} ${actionTagCls(it)}`}>{display.label}</span>
+                      </Tooltip>
+                    ) : (
+                      <span className={`${styles.tag} ${actionTagCls(it)}`}>{display.label}</span>
+                    )}
+                  </td>
+                  <td>{formatResourceText(it.resource_type, it.resource_id)}</td>
+                  <td>{it.reason || '—'}</td>
+                  <td>
+                    <span className={`${styles.pill} ${it.status === 'success' ? styles.ok : styles.err}`}>
+                      {it.status === 'success' ? '成功' : '失败'}
+                    </span>
+                  </td>
+                  <td className={styles.mono}>{fmtShortDateTime(it.occurred_at)}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}
@@ -218,11 +249,6 @@ function actionTagCls(it: AuthzAuditItemDTO): string {
   if (it.action_code.startsWith('vendor.')) return styles.tagVendor;
   if (it.action_code.startsWith('audit.')) return styles.tagAudit;
   return '';
-}
-
-function formatResource(it: AuthzAuditItemDTO): string {
-  if (!it.resource_type && !it.resource_id) return '—';
-  return `${it.resource_type}${it.resource_id ? `#${it.resource_id}` : ''}`;
 }
 
 // ============================================================================
@@ -274,9 +300,11 @@ function RecentContentPanel({
 function RecentAppOpsPanel({
   items,
   loading,
+  actionsMap,
 }: {
   items: AppOpItemDTO[];
   loading: boolean;
+  actionsMap: ReturnType<typeof useActionsMap>;
 }) {
   const rows = useMemo(() => items.slice(0, 10), [items]);
   return (
@@ -290,21 +318,38 @@ function RecentAppOpsPanel({
         <table className={styles.auditTable}>
           <thead>
             <tr>
-              <th style={{ width: 80 }}>用户</th>
-              <th style={{ width: 128 }}>操作</th>
+              <th style={{ width: 100 }}>用户</th>
+              <th style={{ width: 140 }}>操作</th>
               <th>描述</th>
               <th style={{ width: 110 }}>时间</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((it) => (
-              <tr key={it.id}>
-                <td>{it.user_name || `user#${it.user_id}`}</td>
-                <td><span className={styles.tag}>{it.action}</span></td>
-                <td style={{ fontSize: 13, color: 'var(--color-on-surface)' }}>{it.detail}</td>
-                <td className={styles.mono}>{fmtShortDateTime(it.created_at)}</td>
-              </tr>
-            ))}
+            {rows.map((it) => {
+              const display = formatActionDisplay(it.action, actionsMap, DOMAIN_LABELS);
+              const tooltipText = display.label !== it.action ? it.action : '';
+              return (
+                <tr key={it.id}>
+                  <td>
+                    {formatActorText({
+                      actorName: it.user_name,
+                      actorUserId: it.user_id,
+                    })}
+                  </td>
+                  <td>
+                    {tooltipText ? (
+                      <Tooltip title={`代码：${tooltipText}`}>
+                        <span className={styles.tag}>{display.label}</span>
+                      </Tooltip>
+                    ) : (
+                      <span className={styles.tag}>{display.label}</span>
+                    )}
+                  </td>
+                  <td style={{ fontSize: 13, color: 'var(--color-on-surface)' }}>{it.detail}</td>
+                  <td className={styles.mono}>{fmtShortDateTime(it.created_at)}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}

@@ -9,8 +9,9 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { ConfigProvider } from 'antd';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import ActionStepListEditor from '../ActionStepListEditor';
+import ActionStepListEditor, { resolveCommandPick } from '../ActionStepListEditor';
 import type { ActionStep } from '../types';
+import type { EffectiveCommand } from '@/api/gen/client';
 
 vi.mock('@/api/hall', () => ({
   hallApi: {
@@ -189,5 +190,56 @@ describe('<ActionStepListEditor>', () => {
     renderUI(initial, vi.fn());
     expect(screen.getByTestId('intent-form-set_volume')).toBeInTheDocument();
     expect(screen.getByTestId('intent-form-volume-slider')).toBeInTheDocument();
+  });
+});
+
+// ============================================================
+// resolveCommandPick — 落卡 (command, params) 的纯函数单测
+// ADR-0024 回归：source=command_preset 必须展开为 resolved_code/resolved_params,
+// 否则 server 拿到 "preset:<name>" 派给 plugin 会 cmd_send_failed
+// （2026-05-09 prod bug 5d / 闪优测试135）。
+// ============================================================
+
+describe('resolveCommandPick', () => {
+  const presetCmd = {
+    code: 'preset:测试135',
+    name: '闪优测试135',
+    source: 'command_preset',
+    resolved_code: 'channels_on',
+    resolved_params: { channels: [1, 3, 5] },
+  } as unknown as EffectiveCommand;
+
+  const catalogCmd = {
+    code: 'channels_on',
+    name: '通道开',
+    source: 'preset',
+  } as unknown as EffectiveCommand;
+
+  it('选 source=command_preset → 展开为 resolved_code + resolved_params, 不再保留 "preset:" 前缀', () => {
+    const out = resolveCommandPick('preset:测试135', [presetCmd, catalogCmd]);
+    expect(out.command).toBe('channels_on');
+    expect(out.command).not.toMatch(/^preset:/);
+    expect(out.params).toEqual({ channels: [1, 3, 5] });
+  });
+
+  it('选普通 catalog 命令 → 保留原 code, params 重置 null（让 widget 走默认）', () => {
+    const out = resolveCommandPick('channels_on', [presetCmd, catalogCmd]);
+    expect(out.command).toBe('channels_on');
+    expect(out.params).toBeNull();
+  });
+
+  it('preset 命令缺 resolved_code（数据异常）→ 走兜底分支保持原 code', () => {
+    const broken = {
+      ...presetCmd,
+      resolved_code: undefined,
+    } as unknown as EffectiveCommand;
+    const out = resolveCommandPick('preset:测试135', [broken]);
+    expect(out.command).toBe('preset:测试135');
+    expect(out.params).toBeNull();
+  });
+
+  it('入参非字符串（清空选择）→ 输出 (null, null)', () => {
+    expect(resolveCommandPick(undefined, [])).toEqual({ command: null, params: null });
+    expect(resolveCommandPick(null, [])).toEqual({ command: null, params: null });
   });
 });

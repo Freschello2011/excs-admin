@@ -104,6 +104,37 @@ interface ParamsSchemaShape {
   properties?: Record<string, ParamsSchemaProperty>;
 }
 
+/**
+ * 落卡时把 admin 选中的 EffectiveCommand 翻译成 ActionStep 的 (command, params) 对。
+ *
+ * ADR-0024：source=command_preset 的"现场别名"卡（code 形如 "preset:<name>"）必须
+ * 用 resolved_code/resolved_params 展开为标准 device_action，否则 server 会拿到
+ * "preset:" 前缀派给 plugin → smyoo: 未知 command_code（2026-05-09 prod bug 5d）。
+ *
+ * 其它 source（preset/protocol/plugin/inline 等）保持原 code，params 重置为 null
+ * 让 widget 跑 schema.required 默认值。
+ */
+export function resolveCommandPick(
+  v: unknown,
+  commands: ReadonlyArray<EffectiveCommand>,
+): { command: string | null; params: Record<string, unknown> | null } {
+  const code = typeof v === 'string' ? v : null;
+  if (code == null) return { command: null, params: null };
+  const picked = commands.find((c) => c.code === code);
+  if (
+    picked &&
+    picked.source === 'command_preset' &&
+    typeof picked.resolved_code === 'string' &&
+    picked.resolved_code !== ''
+  ) {
+    return {
+      command: picked.resolved_code,
+      params: (picked.resolved_params ?? null) as Record<string, unknown> | null,
+    };
+  }
+  return { command: code, params: null };
+}
+
 export default function ActionStepListEditor({
   value,
   onChange,
@@ -542,6 +573,13 @@ function DeviceStepBody({
     [commands, step.command],
   );
 
+  // ADR-0024：source=command_preset 的"现场别名"卡（code 形如 "preset:<name>"）落卡时
+  // 用 resolved_code/resolved_params 展开为标准 device_action，让 ShowEngine /
+  // 展厅 / 中控协议路径不需要识别 "preset:" 前缀。同 ShowTimelinePage 的落卡逻辑。
+  function handleCommandPick(v: unknown) {
+    onPatch(resolveCommandPick(v, commands ?? []));
+  }
+
   const commandOptions = useMemo(() => {
     const list = commands ?? [];
     const byCategory = new Map<string, EffectiveCommand[]>();
@@ -639,7 +677,7 @@ function DeviceStepBody({
               size="small"
               placeholder={step.device_id ? '选择命令' : '先选设备'}
               value={step.command ?? undefined}
-              onChange={(v) => onPatch({ command: v as string, params: null })}
+              onChange={handleCommandPick}
               options={commandOptions}
               disabled={disabled || !step.device_id}
               status={errorPaths.command ? 'error' : undefined}

@@ -6,7 +6,7 @@
  * 功能（PRD §8.3）：
  *   - 用户基本信息 + 当前生效 Grant 列表（并排，每条独立续期 / 撤销）
  *   - "能做什么"汇总：按 scope 聚合展示（去重后的 action 集合）
- *   - 审计快照：最近 10 条与该用户相关的事件（Phase 11 审计 API 上线后填充）
+ *   - 审计快照：最近 10 条以该用户为 actor 的事件（走 Phase 11.4 audit-logs API · actor_user_id 过滤）
  *
  * 撤销 / 续期走 `RiskyActionButton`（Phase 7.4 替换 Phase 6 手写 modal.confirm）。
  */
@@ -39,6 +39,7 @@ import {
   WarningFilled,
 } from '@ant-design/icons';
 import Can from '@/components/authz/Can';
+import { useCan } from '@/lib/authz/can';
 import RiskyActionButton from '@/components/authz/RiskyActionButton';
 import ExpiryTag from '@/components/authz/common/ExpiryTag';
 import ScopeTag from '@/components/authz/common/ScopeTag';
@@ -51,9 +52,12 @@ import { queryKeys } from '@/api/queryKeys';
 import { useAuthStore } from '@/stores/authStore';
 import { useAuthzMetaStore } from '@/stores/authzMetaStore';
 import { useDomainGroups, type DomainGrantedAction } from '@/lib/authz/useDomainGroups';
-import { RISK_META } from '@/lib/authz/actionMeta';
+import { DOMAIN_LABELS, RISK_META } from '@/lib/authz/actionMeta';
+import { formatResourceText } from '@/lib/authz/resourceMeta';
+import { formatActionDisplay } from '@/lib/authz/auditFormatters';
 import { resolveScopeText } from '@/components/authz/common/ScopeTag';
 import type {
+  AuditLogRow,
   Grant,
   GrantStatusType,
   RiskLevel,
@@ -68,6 +72,9 @@ const STATUS_META: Record<GrantStatusType, { label: string; color: string }> = {
   expired: { label: '已过期', color: 'default' },
   revoked: { label: '已撤销', color: 'red' },
 };
+
+/** 审计快照（最近 10 条）状态色，与 AuditLogListPage 一致 */
+const AUDIT_STATUS_COLOR: Record<string, string> = { success: 'green', failure: 'red' };
 
 /** 一个 action 的彩色风险标签（critical/high 显式标注；medium/低风险仅 hover tip 显示） */
 function RiskBadge({ risk }: { risk: RiskLevel }) {
@@ -86,20 +93,48 @@ function RiskBadge({ risk }: { risk: RiskLevel }) {
   return null;
 }
 
-/** 单条 action 行：name_zh + 风险徽章 + scope 列表 + 元数据小标 + tooltip 显示 code/API */
+/** 单条 action 行：name_zh + 风险徽章 + scope 列表 + 元数据小标 + tooltip 显示 code/API/来源 */
 function ActionRow({
   item,
   hallNameMap,
+  templateMap,
 }: {
   item: DomainGrantedAction;
   hallNameMap: Map<number, string>;
+  templateMap: Map<number, RoleTemplate>;
 }) {
   const tooltipContent = (
     <div style={{ maxWidth: 360 }}>
       <div style={{ fontFamily: 'monospace', marginBottom: 4 }}>{item.code}</div>
       {item.coveredApis.length > 0 && (
-        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>
+        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', marginBottom: 4 }}>
           覆盖：{item.coveredApis.join(' / ')}
+        </div>
+      )}
+      {item.sources.length > 0 && (
+        <div
+          style={{
+            fontSize: 12,
+            color: 'rgba(255,255,255,0.85)',
+            borderTop: '1px solid rgba(255,255,255,0.2)',
+            paddingTop: 4,
+            marginTop: 4,
+          }}
+        >
+          📌 来源：
+          {item.sources.map((s, i) => {
+            // 通过 template_code 反查 templateMap（templateMap 是按 id 索引，需要遍历）
+            const tpl = Array.from(templateMap.values()).find(
+              (t) => t.code === s.template_code,
+            );
+            const label = tpl?.name_zh ?? s.template_code;
+            return (
+              <span key={s.grant_id}>
+                {i === 0 ? ' ' : '、'}
+                {label}（#{s.grant_id}）
+              </span>
+            );
+          })}
         </div>
       )}
     </div>
@@ -174,7 +209,7 @@ export default function UserAuthzPanel({ userId, onNavigateGrantWizard }: Props)
   const [extendValue, setExtendValue] = useState<Dayjs | null>(null);
   const [quickGrantOpen, setQuickGrantOpen] = useState(false);
   // 默认只看 active —— revoked/expired 是历史变更，按需展示，避免长尾累积污染主视图。
-  // 历史动线由下方"审计快照"卡（Phase 11）和审计页承载。
+  // 历史动线由下方"审计快照"卡（最近 10 条 actor 事件）和「权限审计」全局页承载。
   const [viewMode, setViewMode] = useState<'active' | 'all'>('active');
 
   // 抓 user 摘要供 QuickGrantDrawer 决定 vendor 默认过期 + 抽屉标题展示
@@ -216,6 +251,24 @@ export default function UserAuthzPanel({ userId, onNavigateGrantWizard }: Props)
     select: (res) => res.data.data?.list ?? [],
   });
 
+  // 审计快照（最近 10 条以该用户为 actor 的事件）—— PRD §8.3 要求
+  // 仅持 audit.view 才取，避免普通账号触发 403；非授权时整张卡藏掉
+  const canViewAudit = useCan('audit.view');
+  const {
+    data: auditSnapshot,
+    isFetching: auditFetching,
+    refetch: refetchAudit,
+  } = useQuery({
+    queryKey: ['authz', 'user-audit-snapshot', userId],
+    queryFn: () =>
+      authzApi.queryAuditLogs({ actor_user_id: userId, page_size: 10, offset: 0 }),
+    select: (res) => res.data.data,
+    enabled: userId > 0 && canViewAudit,
+    staleTime: 30_000,
+  });
+  const auditList: AuditLogRow[] = auditSnapshot?.list ?? [];
+  const auditArchiveUsed = auditSnapshot?.archive_used ?? false;
+
   const templateMap = useMemo(() => {
     const m = new Map<number, RoleTemplate>();
     (templates ?? []).forEach((t) => m.set(t.id, t));
@@ -249,6 +302,13 @@ export default function UserAuthzPanel({ userId, onNavigateGrantWizard }: Props)
 
   // 按业务域聚合（替代之前的"按 scope 聚合"，更贴合操作员心智）。
   const domainGroups = useDomainGroups(view?.action_set?.entries, actionDefs);
+
+  // Audit 行 code → ActionDef 映射，给"审计快照"卡的「操作」列做中文化用
+  const actionDefsMap = useMemo(() => {
+    const m = new Map<string, NonNullable<typeof actionDefs>[number]>();
+    (actionDefs ?? []).forEach((a) => m.set(a.code, a));
+    return m;
+  }, [actionDefs]);
 
   // 一句话画像：active grants 摘要 + 最早到期 + 高危统计
   const personaSummary = useMemo(() => {
@@ -609,46 +669,57 @@ export default function UserAuthzPanel({ userId, onNavigateGrantWizard }: Props)
             <Empty description="无生效 action" />
           )
         ) : (
-          <Space direction="vertical" style={{ width: '100%' }} size={12}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
+              gap: 10,
+              alignItems: 'start',
+            }}
+          >
             {domainGroups.map((dg) => (
               <div
                 key={dg.domain}
                 style={{
-                  padding: 12,
+                  padding: '8px 10px',
                   border: '1px solid var(--ant-color-border-secondary)',
                   borderRadius: 6,
                 }}
               >
                 <Space
-                  style={{
-                    width: '100%',
-                    justifyContent: 'space-between',
-                    marginBottom: 8,
-                  }}
+                  size={6}
                   align="center"
+                  style={{ marginBottom: 4, rowGap: 2 }}
+                  wrap
                 >
-                  <Space size={8} align="center">
-                    <strong style={{ fontSize: 14 }}>{dg.domainLabel}</strong>
-                    <Text type="secondary" style={{ fontSize: 12 }}>
-                      {dg.granted.length} 项
-                    </Text>
-                    {dg.highRiskCount > 0 && (
-                      <Tag color="orange" style={{ marginInlineEnd: 0 }}>
-                        含 {dg.highRiskCount} 项高危
-                      </Tag>
-                    )}
-                  </Space>
+                  <strong style={{ fontSize: 13 }}>{dg.domainLabel}</strong>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    {dg.granted.length} 项
+                  </Text>
+                  {dg.highRiskCount > 0 && (
+                    <Tag
+                      color="orange"
+                      style={{ marginInlineEnd: 0, fontSize: 11, lineHeight: '16px' }}
+                    >
+                      含 {dg.highRiskCount} 项高危
+                    </Tag>
+                  )}
                 </Space>
                 <div>
                   {dg.granted.map((it) => (
-                    <ActionRow key={it.code} item={it} hallNameMap={hallMap} />
+                    <ActionRow
+                      key={it.code}
+                      item={it}
+                      hallNameMap={hallMap}
+                      templateMap={templateMap}
+                    />
                   ))}
                 </div>
                 {dg.missingHighRisk.length > 0 && (
                   <Collapse
                     ghost
                     size="small"
-                    style={{ marginTop: 4 }}
+                    style={{ marginTop: 2 }}
                     items={[
                       {
                         key: 'missing',
@@ -680,37 +751,143 @@ export default function UserAuthzPanel({ userId, onNavigateGrantWizard }: Props)
                 )}
               </div>
             ))}
-          </Space>
+          </div>
         )}
       </Card>
 
-      {/* 审计快照（Phase 11 审计 API 上线前先留占位 + 刷新 stub） */}
-      <Card
-        size="small"
-        title="审计快照（最近 10 条）"
-        extra={
-          <Button
-            size="small"
-            icon={<ReloadOutlined />}
-            disabled
-            title="Phase 11 审计 API 上线后启用"
-          >
-            刷新最近事件
-          </Button>
-        }
-      >
-        <Alert
-          type="info"
-          showIcon
-          message="审计日志 UI 将在 Phase 11 上线"
-          description={
-            <span>
-              届时此处展示与该用户相关的授权变更、关键操作最近 10 条；现阶段可去
-              <Link to="/platform/authz/audit"> 权限审计</Link> 用 actor_user_id 过滤查看。
-            </span>
+      {/* 审计快照 —— Phase 11.4 audit-logs API · actor_user_id 过滤 · 最近 10 条
+          非 audit.view 持有者整张卡藏起来，避免下拉看到一张 403 红卡 */}
+      {canViewAudit && (
+        <Card
+          size="small"
+          title="审计快照（最近 10 条）"
+          extra={
+            <Space size={4}>
+              <Link to={`/platform/authz/audit?actor_user_id=${userId}`}>查看全部 →</Link>
+              <Button
+                size="small"
+                icon={<ReloadOutlined />}
+                loading={auditFetching}
+                onClick={() => refetchAudit()}
+              >
+                刷新
+              </Button>
+            </Space>
           }
-        />
-      </Card>
+        >
+          {auditArchiveUsed && (
+            <Alert
+              type="info"
+              showIcon
+              message="本次结果合并了 OSS 冷读"
+              style={{ marginBottom: 8 }}
+            />
+          )}
+          {auditList.length === 0 ? (
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description={auditFetching ? '加载中…' : '近期暂无以该用户为操作者的审计事件'}
+            />
+          ) : (
+            <Table<AuditLogRow>
+              size="small"
+              rowKey="id"
+              pagination={false}
+              dataSource={auditList}
+              columns={[
+                {
+                  title: '时间',
+                  dataIndex: 'occurred_at',
+                  width: 170,
+                  render: (v: string) => (
+                    <Tooltip title={dayjs(v).format('YYYY-MM-DD HH:mm:ss.SSS')}>
+                      <span style={{ fontSize: 12 }}>
+                        {dayjs(v).format('MM-DD HH:mm:ss')}
+                      </span>
+                    </Tooltip>
+                  ),
+                },
+                {
+                  title: '操作',
+                  dataIndex: 'action_code',
+                  render: (v: string) => {
+                    const display = formatActionDisplay(v, actionDefsMap, DOMAIN_LABELS);
+                    return (
+                      <Tooltip title={display.label !== v ? `代码：${v}` : ''}>
+                        <span style={{ display: 'inline-flex', flexDirection: 'column', lineHeight: 1.25 }}>
+                          <span style={{ fontSize: 12 }}>{display.label}</span>
+                          {display.label !== v && (
+                            <Text type="secondary" style={{ fontSize: 10 }}>
+                              <code>{v}</code>
+                            </Text>
+                          )}
+                        </span>
+                      </Tooltip>
+                    );
+                  },
+                },
+                {
+                  title: '资源',
+                  width: 140,
+                  render: (_, row) => {
+                    if (!row.resource_type) {
+                      return <Text type="secondary">—</Text>;
+                    }
+                    return (
+                      <Tooltip
+                        title={`代码：${row.resource_type}${row.resource_id ? `#${row.resource_id}` : ''}`}
+                      >
+                        <span style={{ fontSize: 12 }}>
+                          {formatResourceText(row.resource_type, row.resource_id)}
+                        </span>
+                      </Tooltip>
+                    );
+                  },
+                },
+                {
+                  title: '状态',
+                  dataIndex: 'status',
+                  width: 70,
+                  render: (v: string) => (
+                    <Tag
+                      color={AUDIT_STATUS_COLOR[v] ?? 'default'}
+                      style={{ marginInlineEnd: 0 }}
+                    >
+                      {v === 'failure' ? '失败' : '成功'}
+                    </Tag>
+                  ),
+                },
+                {
+                  title: '原因 / 错误',
+                  render: (_, row) => {
+                    const text = row.status === 'failure' ? row.error_msg : row.reason;
+                    if (!text) {
+                      return <Text type="secondary">—</Text>;
+                    }
+                    return (
+                      <Tooltip title={text}>
+                        <span
+                          style={{
+                            display: 'inline-block',
+                            maxWidth: 240,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            verticalAlign: 'middle',
+                            fontSize: 12,
+                          }}
+                        >
+                          {text}
+                        </span>
+                      </Tooltip>
+                    );
+                  },
+                },
+              ]}
+            />
+          )}
+        </Card>
+      )}
 
       {/* 续期 modal（沿用 Phase 6 的 DatePicker 简单入口；非风险操作） */}
       <Modal

@@ -375,8 +375,19 @@ export default function PairingCodeTab({ hallId, isAdmin, mode, exhibitId }: Pai
   const switchHallMutation = useMutation({
     mutationFn: ({ sessionId, newHallId }: { sessionId: number; newHallId: number }) =>
       hallApi.switchControlAppHall(hallId, sessionId, { new_hall_id: newHallId }),
-    onSuccess: () => {
-      message.success('展厅切换成功');
+    onSuccess: (res) => {
+      // ADR-0026：后端可能返 warning 表示 envelope 链路降级（DB/ACL 已对，但 broker
+      // 视角 session 私有 topic 0 订阅者）。warning 非空时弹 warning toast 8s，
+      // 让用户知道 App 端会有 60s 内的兜底延迟；空时弹常规 success。
+      const data = res.data.data;
+      if (data?.warning) {
+        message.warning({
+          content: data.hint ?? '切换已落库，App 端将通过 reconcile 兜底（60 秒内）',
+          duration: 8,
+        });
+      } else {
+        message.success('展厅切换成功');
+      }
       invalidate();
       setSwitchModalOpen(false);
     },

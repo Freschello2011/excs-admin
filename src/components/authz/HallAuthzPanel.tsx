@@ -22,12 +22,14 @@ import {
   Spin,
   Table,
   Tag,
+  Tooltip,
   Typography,
 } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import RiskyActionButton from '@/components/authz/RiskyActionButton';
+import ExpiryTag from '@/components/authz/common/ExpiryTag';
 import { useMessage } from '@/hooks/useMessage';
 import { authzApi } from '@/api/authz';
 import { userApi } from '@/api/user';
@@ -153,10 +155,11 @@ export default function HallAuthzPanel({ hallId, hallName }: Props) {
           {grouped.map((group) => (
             <div key={group.templateId}>
               <Space style={{ marginBottom: 8 }}>
-                <strong>{group.template?.name_zh ?? `模板 #${group.templateId}`}</strong>
-                <Tag>{group.template?.code ?? ''}</Tag>
+                <Tooltip title={group.template?.code ? `模板代码：${group.template.code}` : ''}>
+                  <strong>{group.template?.name_zh ?? `模板 #${group.templateId}`}</strong>
+                </Tooltip>
                 <Text type="secondary">{group.grants.length} 位成员</Text>
-                {group.template?.has_critical && <Tag color="red">含 critical</Tag>}
+                {group.template?.has_critical && <Tag color="red">含极危</Tag>}
               </Space>
               <Table<Grant>
                 size="small"
@@ -190,9 +193,10 @@ export default function HallAuthzPanel({ hallId, hallName }: Props) {
                   {
                     title: '到期',
                     dataIndex: 'expires_at',
-                    width: 140,
-                    render: (v?: string | null) =>
-                      v ? dayjs(v).format('YYYY-MM-DD') : <Tag>永久</Tag>,
+                    width: 180,
+                    render: (v?: string | null) => (
+                      <ExpiryTag expiresAt={v ?? null} variant="compact" />
+                    ),
                   },
                   {
                     title: '操作',

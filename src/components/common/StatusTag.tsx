@@ -1,7 +1,7 @@
 import { Tag } from 'antd';
 
 type StatusType =
-  | 'normal' | 'grace' | 'expired'
+  | 'normal' | 'grace' | 'expired' | 'archived'
   | 'online' | 'offline'
   | 'running' | 'draft' | 'published' | 'active' | 'disabled'
   | 'empty' | 'processing' | 'ready' | 'error' | 'uploading'
@@ -25,6 +25,7 @@ const STATUS_CONFIG: Record<StatusType, { kind: SemanticKind; label: string }> =
   normal:      { kind: 'success',    label: '正常' },
   grace:       { kind: 'warning',    label: '宽限期' },
   expired:     { kind: 'error',      label: '已过期' },
+  archived:    { kind: 'neutral',    label: '已停用' },
   online:      { kind: 'success',    label: '在线' },
   offline:     { kind: 'neutral',    label: '离线' },
   running:     { kind: 'info',       label: '运行中' },

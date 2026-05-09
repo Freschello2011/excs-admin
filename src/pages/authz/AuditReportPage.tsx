@@ -10,8 +10,9 @@
  *
  * 图表库：echarts-for-react（全局已引；analytics 页也用）。
  */
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Card, Col, Empty, Row, Statistic, Table, Tag } from 'antd';
+import { Card, Col, Empty, Row, Statistic, Table, Tag, Tooltip } from 'antd';
 import dayjs from 'dayjs';
 import ReactECharts from 'echarts-for-react';
 import PageHeader from '@/components/common/PageHeader';
@@ -21,6 +22,11 @@ import {
   type KeyCount,
   type DatePointInt,
 } from '@/api/authz';
+import type { RoleTemplate, ScopeType } from '@/api/gen/client';
+import { useActionsMap } from '@/lib/authz/useActionsMap';
+import ScopeTag from '@/components/authz/common/ScopeTag';
+import { hallApi } from '@/api/hall';
+import { queryKeys } from '@/api/queryKeys';
 
 const DAYS = 30;
 
@@ -95,6 +101,32 @@ function BarCard({ title, data }: { title: string; data?: KeyCount[] }) {
 }
 
 export default function AuditReportPage() {
+  const actionsMap = useActionsMap();
+
+  const { data: templates } = useQuery({
+    queryKey: ['authz', 'role-templates'],
+    queryFn: () => authzApi.listTemplates(),
+    select: (res) => res.data.data?.list ?? [],
+  });
+
+  const { data: halls } = useQuery({
+    queryKey: queryKeys.halls({ page: 1, page_size: 200 }),
+    queryFn: () => hallApi.getHalls({ page: 1, page_size: 200 }),
+    select: (res) => res.data.data?.list ?? [],
+  });
+
+  const templateCodeMap = useMemo(() => {
+    const m = new Map<string, RoleTemplate>();
+    (templates ?? []).forEach((t) => m.set(t.code, t));
+    return m;
+  }, [templates]);
+
+  const hallNameMap = useMemo(() => {
+    const m = new Map<number, string>();
+    (halls ?? []).forEach((h) => m.set(h.id, h.name));
+    return m;
+  }, [halls]);
+
   const grantChangesQ = useQuery({
     queryKey: ['authz', 'reports', 'grant-changes', DAYS],
     queryFn: () => authzApi.reportGrantChanges(DAYS),
@@ -120,6 +152,24 @@ export default function AuditReportPage() {
     queryFn: () => authzApi.reportGrantsExpiring(DAYS),
     select: (r) => r.data.data,
   });
+
+  // 把 risky 饼图的 key（action_code）映射为业主可读的中文名
+  const riskyPretty = useMemo<KeyCount[] | undefined>(() => {
+    if (!riskyQ.data?.per_kind) return undefined;
+    return riskyQ.data.per_kind.map((d) => {
+      const def = actionsMap.get(d.key);
+      return { key: def?.name_zh ? `${def.name_zh}` : d.key, count: d.count };
+    });
+  }, [riskyQ.data?.per_kind, actionsMap]);
+
+  // 把模板分布柱图的 key（template_code）映射为模板中文名
+  const distPretty = useMemo<KeyCount[] | undefined>(() => {
+    if (!distQ.data?.per_template) return undefined;
+    return distQ.data.per_template.map((d) => {
+      const t = templateCodeMap.get(d.key);
+      return { key: t?.name_zh ? t.name_zh : d.key, count: d.count };
+    });
+  }, [distQ.data?.per_template, templateCodeMap]);
 
   return (
     <div>
@@ -158,18 +208,18 @@ export default function AuditReportPage() {
         </Col>
 
         <Col xs={24} md={12}>
-          <PieCard title="风险操作分布（按 Action）" data={riskyQ.data?.per_kind} />
+          <PieCard title="风险操作分布" data={riskyPretty} />
         </Col>
         <Col xs={24} md={12}>
           <LineCard title="供应商上传趋势（按天）" data={uploadsQ.data?.per_day} />
         </Col>
 
         <Col xs={24} md={12}>
-          <BarCard title="授权模板分布（当前 Active Grant）" data={distQ.data?.per_template} />
+          <BarCard title="授权模板分布（当前生效授权）" data={distPretty} />
         </Col>
         <Col xs={24} md={12}>
           <Card
-            title={`快到期 Grant（未来 ${DAYS} 天）共 ${expiringQ.data?.total ?? 0} 条`}
+            title={`即将到期的授权（未来 ${DAYS} 天）共 ${expiringQ.data?.total ?? 0} 条`}
             loading={expiringQ.isLoading}
           >
             <Table<GrantExpiringSummary>
@@ -179,20 +229,29 @@ export default function AuditReportPage() {
               dataSource={expiringQ.data?.list ?? []}
               scroll={{ y: 230 }}
               columns={[
-                { title: 'Grant ID', dataIndex: 'id', width: 90 },
+                { title: '授权编号', dataIndex: 'id', width: 90 },
                 { title: '用户', dataIndex: 'user_id', width: 90, render: (v) => `#${v}` },
                 {
-                  title: '模板',
+                  title: '角色模板',
                   dataIndex: 'template_code',
-                  render: (v: string) => <Tag color="blue">{v}</Tag>,
+                  render: (v: string) => {
+                    const t = templateCodeMap.get(v);
+                    const label = t?.name_zh ?? v;
+                    return (
+                      <Tooltip title={label !== v ? `代码：${v}` : ''}>
+                        <Tag color="blue">{label}</Tag>
+                      </Tooltip>
+                    );
+                  },
                 },
                 {
-                  title: 'Scope',
+                  title: '授权范围',
                   render: (_, row) => (
-                    <span>
-                      {row.scope_type}
-                      {row.scope_id ? `#${row.scope_id}` : ''}
-                    </span>
+                    <ScopeTag
+                      scopeType={row.scope_type as ScopeType}
+                      scopeId={row.scope_id}
+                      hallNameMap={hallNameMap}
+                    />
                   ),
                 },
                 {

@@ -7,15 +7,17 @@ interface TodoBannerProps {
   loading?: boolean;
 }
 
-/** 业务看板置顶"今日待办"条。空时变绿背景。PRD §4.3.1。 */
+/** 业务看板置顶"今日告警"条。空时变绿背景。PRD §4.3.1。
+ *  仅承载需要关注/处置的项：设备离线 / NAS 同步异常 / 费用预算超限。
+ *  日常状态指标（如本月费用 < 80%）不入条，避免噪音。 */
 export default function TodoBanner({ items, loading }: TodoBannerProps) {
   const hasItems = items.length > 0;
   const urgentCount = items.filter((i) => i.Severity === 'urgent').length;
 
   const title = loading
-    ? '今日待办 · 加载中…'
+    ? '今日告警 · 加载中…'
     : hasItems
-      ? `今日待办（${items.length} 项）${urgentCount > 0 ? ` · 含 ${urgentCount} 紧急` : ''}`
+      ? `今日告警（${items.length} 项）${urgentCount > 0 ? ` · 含 ${urgentCount} 紧急` : ''}`
       : '今日无异常，状态良好';
 
   return (

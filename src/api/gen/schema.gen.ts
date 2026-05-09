@@ -4077,7 +4077,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 今日待办 chip 列表（无 period） */
+        /** 今日告警 chip 列表（无 period；仅承载需要关注/处置的项） */
         get: operations["getPlatformBusinessTodos"];
         put?: never;
         post?: never;
@@ -5729,7 +5729,17 @@ export interface components {
             broker_url?: string;
             topic_prefix?: string;
         };
-        /** @enum {string} */
+        /**
+         * @description 展厅服务期 4 态（admin 列表/详情 status 字段、HallStatusDTO.service_status 共用）。
+         *     服务端在 ListHalls / GetHall / CreateHallViaMDM 装配 DTO 时由 deriveServiceStatus(h)
+         *     派生填入，不直接透传 DB lifecycle，避免管理端"过期但仍显示正常"。
+         *       active   服务期内（now ≤ service_end）
+         *       grace    宽限期内（service_end < now ≤ service_end + grace_days）
+         *       expired  超过宽限（now > service_end + grace_days）
+         *       archived DB lifecycle Hall.Status='inactive'（MDM 已删 / admin 软删）。优先级最高
+         *     与展厅 App 端 checkServicePeriod 共享 service_end 当天 0:00 起即视为 grace 的语义。
+         * @enum {string}
+         */
         HallStatus: "active" | "grace" | "expired" | "archived";
         ServicePeriod: {
             /** @description ISO 日期（YYYY-MM-DD），可能为空字符串 */
@@ -6292,6 +6302,15 @@ export interface components {
         SwitchControlHallRequest: {
             /** Format: int64 */
             new_hall_id: number;
+        };
+        SwitchControlHallResponse: {
+            /**
+             * @description best-effort 链路降级类型；空表示全链路成功
+             * @enum {string}
+             */
+            warning?: "envelope_no_subscriber";
+            /** @description 给 admin UI 显示的提示文案 */
+            hint?: string;
         };
         CleanupStaleSessionsResult: {
             deleted: number;
@@ -8976,7 +8995,7 @@ export interface components {
             backups: components["schemas"]["BackupStatusResult"][];
             certs: components["schemas"]["CertInfoDTO"][];
         };
-        /** @description 业务看板今日待办 chip（domain value object，无 json tag） */
+        /** @description 业务看板今日告警 chip（domain value object，无 json tag） */
         TodoItem: {
             /** @description device.offline / nas.pending / nas.failed / cost.budget */
             Code: string;
@@ -12769,13 +12788,17 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 成功 */
+            /** @description 成功（可能含 warning 表示 best-effort 链路降级，详见 ADR-0026） */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse"];
+                    "application/json": {
+                        code?: number;
+                        message?: string;
+                        data?: components["schemas"]["SwitchControlHallResponse"];
+                    };
                 };
             };
             400: components["responses"]["BadRequest"];

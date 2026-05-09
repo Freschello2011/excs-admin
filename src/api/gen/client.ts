@@ -661,6 +661,7 @@ export type MdmCustomer = components['schemas']['MdmCustomer'];
 // ---- Control App Session ----
 export type ControlAppSessionDTO = components['schemas']['ControlAppSessionDTO'];
 export type SwitchControlHallRequest = components['schemas']['SwitchControlHallRequest'];
+export type SwitchControlHallResponse = components['schemas']['SwitchControlHallResponse'];
 export type CleanupStaleSessionsResult = components['schemas']['CleanupStaleSessionsResult'];
 
 // ---- App Pairing / Verify / Announce ----
@@ -928,9 +929,15 @@ export const hallClient = {
       request.get<ApiEnvelope<ControlAppSessionDTO[]>>(`/api/v1/halls/${hallId}/control-app-sessions`),
     );
   },
-  switchControlAppHall(hallId: number, sessionId: number, body: SwitchControlHallRequest): Promise<void> {
+  switchControlAppHall(
+    hallId: number,
+    sessionId: number,
+    body: SwitchControlHallRequest,
+  ): Promise<SwitchControlHallResponse | null> {
+    // ADR-0023：响应 data 可能含 warning（envelope 链路降级），admin UI 据此
+    // 弹兜底提示。后端无 warning 时返 data:null，向后兼容旧客户端。
     return unwrap(
-      request.post<ApiEnvelope<void>>(
+      request.post<ApiEnvelope<SwitchControlHallResponse | null>>(
         `/api/v1/halls/${hallId}/control-app-sessions/${sessionId}/switch-hall`,
         body,
       ),

@@ -44,6 +44,7 @@ import type {
   PairingCodeListItem,
   ServicePeriodBody,
   SwitchControlHallBody,
+  SwitchControlHallResponse,
   SyncMdmBody,
   SyncMdmResultLegacy,
   UpdateDeviceRequest,
@@ -342,7 +343,7 @@ export const hallApi = {
     hallId: number,
     sessionId: number,
     data: SwitchControlHallBody,
-  ): Promise<AxiosResponse<ApiResponse<void>>> {
+  ): Promise<AxiosResponse<ApiResponse<SwitchControlHallResponse | null>>> {
     return asAxiosResp(hallClient.switchControlAppHall(hallId, sessionId, data));
   },
 
