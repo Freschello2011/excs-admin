@@ -44,6 +44,8 @@ import { useQuery } from '@tanstack/react-query';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
 import WidgetRenderer from '@/components/device-catalog/WidgetRenderer';
+import CommandLabel from '@/components/command/CommandLabel';
+import { commandSearchText } from '@/components/command/commandSearchText';
 import type { EffectiveCommand } from '@/api/gen/client';
 import type { ParamsSchemaProperty } from '@/types/deviceCatalog';
 import {
@@ -609,20 +611,8 @@ function DeviceStepBody({
       label: cat,
       options: cmds.map((c) => ({
         value: c.code,
-        label: (
-          <span>
-            {c.name}
-            <span
-              style={{
-                color: 'var(--ant-color-text-tertiary)',
-                marginLeft: 6,
-                fontSize: 11,
-              }}
-            >
-              {c.code}
-            </span>
-          </span>
-        ),
+        label: <CommandLabel command={c} />,
+        search: commandSearchText(c),
       })),
     }));
   }, [commands]);
@@ -698,7 +688,11 @@ function DeviceStepBody({
               disabled={disabled || !step.device_id}
               status={errorPaths.command ? 'error' : undefined}
               showSearch
-              optionFilterProp="value"
+              optionLabelProp="label"
+              filterOption={(input, option) => {
+                const opt = option as { search?: string } | undefined;
+                return (opt?.search ?? '').includes(input.toLowerCase());
+              }}
               style={{ width: '100%' }}
             />
           </span>

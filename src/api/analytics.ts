@@ -16,6 +16,7 @@ import {
   type AiStatsParams,
   type OssBrowserResult,
   type OssBrowserParams,
+  type PlatformOSSStatsResult,
 } from './gen/client';
 
 interface ApiResponse<T> {
@@ -55,5 +56,9 @@ export const analyticsApi = {
   },
   browseOSS(params: OssBrowserParams): Promise<AxiosResponse<ApiResponse<OssBrowserResult>>> {
     return analyticsClient.getAnalyticsOssBrowser(params).then((d) => ok(d));
+  },
+  // ADR-0001 + ADR-0027：平台公共桶聚合
+  getPlatformOssStats(): Promise<AxiosResponse<ApiResponse<PlatformOSSStatsResult>>> {
+    return analyticsClient.getAnalyticsOssStatsPlatform().then((d) => ok(d));
   },
 };

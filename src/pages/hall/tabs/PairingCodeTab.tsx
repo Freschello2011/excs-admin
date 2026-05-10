@@ -604,6 +604,15 @@ export default function PairingCodeTab({ hallId, isAdmin, mode, exhibitId }: Pai
               <span className={s.heartbeatDot} />
               {hb.text}
             </span>
+            {instance.current_version ? (
+              <Tooltip title="展厅 App 当前装版（升级状态上报刷新）">
+                <span className={s.appVersion}>v{instance.current_version}</span>
+              </Tooltip>
+            ) : (
+              <Tooltip title="展厅 App 未上报版本（v0.9.13 之前的版本不带版本上报）">
+                <span className={`${s.appVersion} ${s.appVersionUnknown}`}>版本未上报</span>
+              </Tooltip>
+            )}
           </div>
           {networkInfo && (
             <Tooltip title="点击复制">
@@ -655,7 +664,14 @@ export default function PairingCodeTab({ hallId, isAdmin, mode, exhibitId }: Pai
         <div className={s.deviceInfo} style={{ fontSize: 12 }}>
           <span className={`material-symbols-outlined ${s.platformIcon}`} style={{ fontSize: 14 }}>{icon}</span>
           <div className={s.deviceDetails}>
-            <span className={s.deviceText} style={{ fontSize: 12 }}>{hostname}</span>
+            <span className={s.deviceRow}>
+              <span className={s.deviceText} style={{ fontSize: 12 }}>{hostname}</span>
+              {di.current_version && (
+                <Tooltip title="调试实例当前装版">
+                  <span className={s.appVersion} style={{ fontSize: 10.5 }}>v{di.current_version}</span>
+                </Tooltip>
+              )}
+            </span>
             {info?.local_ip && <span className={s.deviceNetwork}>{info.local_ip}</span>}
           </div>
         </div>

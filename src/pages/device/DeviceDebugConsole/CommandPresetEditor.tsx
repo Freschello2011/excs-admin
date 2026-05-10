@@ -8,6 +8,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Form, Input, Modal, Select, Space } from 'antd';
 import type { CommandPreset } from '@/api/commandPreset';
 import type { components } from '@/api/gen/schema.gen';
+import CommandLabel from '@/components/command/CommandLabel';
+import { commandSearchText } from '@/components/command/commandSearchText';
 
 type EffectiveCommandDTO = components['schemas']['EffectiveCommandDTO'];
 
@@ -171,11 +173,14 @@ export default function CommandPresetEditor({
             placeholder="选 control 命令（query 不在此列）"
             options={controlOptions.map((c) => ({
               value: c.code,
-              label: `${c.name}（${c.code}）`,
+              label: <CommandLabel command={c} />,
+              search: commandSearchText(c),
             }))}
-            filterOption={(input, option) =>
-              (option?.label as string).toLowerCase().includes(input.toLowerCase())
-            }
+            optionLabelProp="label"
+            filterOption={(input, option) => {
+              const opt = option as { search?: string } | undefined;
+              return (opt?.search ?? '').includes(input.toLowerCase());
+            }}
           />
         </Form.Item>
         <Form.Item

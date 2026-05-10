@@ -2247,6 +2247,8 @@ export type AnalyticsAiKeywordStat = components['schemas']['AnalyticsAiKeywordSt
 export type AnalyticsAiStatsDTO = components['schemas']['AnalyticsAiStatsDTO'];
 export type AnalyticsOssObjectDTO = components['schemas']['AnalyticsOssObjectDTO'];
 export type AnalyticsOssBrowserResult = components['schemas']['AnalyticsOssBrowserResult'];
+// ADR-0001 + ADR-0027：平台公共桶聚合
+export type PlatformOSSStatsResult = components['schemas']['PlatformOSSStatsResult'];
 export type AnalyticsPlaybackReportRequest =
   components['schemas']['AnalyticsPlaybackReportRequest'];
 export type AnalyticsAiInteractionReportRequest =
@@ -2319,6 +2321,12 @@ export const analyticsClient = {
       request.get<ApiEnvelope<AnalyticsOssBrowserResult>>('/api/v1/analytics/oss-browser', {
         params,
       }),
+    );
+  },
+  // ADR-0001 + ADR-0027：平台公共桶聚合（releases / ai-assets-platform / recordings）
+  getAnalyticsOssStatsPlatform(): Promise<PlatformOSSStatsResult> {
+    return unwrap(
+      request.get<ApiEnvelope<PlatformOSSStatsResult>>('/api/v1/analytics/oss-stats/platform'),
     );
   },
   reportPlayback(body: AnalyticsPlaybackReportRequest): Promise<void> {

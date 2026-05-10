@@ -67,9 +67,14 @@ import DiscoveryStep, { type DiscoveryPrefill } from '@/components/device/Discov
 import PresetConnectionConfigForm from '@/components/device/PresetConnectionConfigForm';
 import InlineCommandsTable, {
   ensureRowKey,
-  validateInlineCommands,
+  prepareInlineCommandsForSave,
   type InlineCommandRow,
 } from '@/components/device/InlineCommandsTable';
+import {
+  isInlineCommandReferencedError,
+  showInlineCommandReferencedModal,
+} from '@/components/device/showInlineCommandReferencedModal';
+import { useInlineCommandCodeAutogenEnabled } from '@/components/device/useInlineCommandCodeAutogenEnabled';
 import { useDirectConnect } from '@/stores/directConnectStore';
 
 interface DeviceListItemV2 extends DeviceListItem {
@@ -845,8 +850,9 @@ interface DrawerProps {
 }
 
 function DeviceDrawer({ open, editing, hallId, exhibits, prefillExhibitId, onClose, onSaved }: DrawerProps) {
-  const { message } = useMessage();
+  const { message, modal } = useMessage();
   const directConnectMode = useDirectConnect((s) => s.mode);
+  const autogenEnabled = useInlineCommandCodeAutogenEnabled();
 
   // step state
   const [kind, setKind] = useState<ConnectorKind | undefined>(undefined);
@@ -866,6 +872,8 @@ function DeviceDrawer({ open, editing, hallId, exhibits, prefillExhibitId, onClo
 
   // ADR-0017 P-C：raw_transport inline_commands 行内编辑（保存前校验，保存时全量提交）
   const [inlineCommands, setInlineCommands] = useState<InlineCommandRow[]>([]);
+  /** baseline 中已有 code 的行 key —— 决定抽屉里 ID 字段是否锁死 */
+  const [inlinePersistedKeys, setInlinePersistedKeys] = useState<Set<string>>(() => new Set());
 
   // step 3 state
   const [form] = Form.useForm<{
@@ -912,6 +920,10 @@ function DeviceDrawer({ open, editing, hallId, exhibits, prefillExhibitId, onClo
           },
         );
       setInlineCommands(editingInline);
+      // 编辑已存设备：所有从 server 拉回的行都视作"已持久化"——code 锁死，rename 不动 code
+      setInlinePersistedKeys(
+        new Set(editingInline.filter((r) => r._row && r.code).map((r) => r._row as string)),
+      );
       form.setFieldsValue({
         name: editing.name,
         exhibit_id: editing.exhibit_id ?? null,
@@ -930,6 +942,7 @@ function DeviceDrawer({ open, editing, hallId, exhibits, prefillExhibitId, onClo
       setPluginDeviceKey(undefined);
       setConnectionConfig({});
       setInlineCommands([]);
+      setInlinePersistedKeys(new Set());
       form.resetFields();
       form.setFieldsValue({
         exhibit_id: prefillExhibitId ?? null,
@@ -954,12 +967,21 @@ function DeviceDrawer({ open, editing, hallId, exhibits, prefillExhibitId, onClo
       message.success('设备已更新');
       onSaved();
     },
+    onError: (err: unknown) => {
+      // PRD-inline-command-code-autogen P3.3：净减/重命名命中现存引用方 → 弹结构化 modal
+      if (isInlineCommandReferencedError(err)) {
+        showInlineCommandReferencedModal(modal, err.__inlineCommandReferenced);
+        return;
+      }
+      // 其它错误已由 request 拦截器全局 toast，无需重复
+    },
   });
 
-  const buildBody = (): CreateDeviceV2Body | null => {
+  const buildBody = async (): Promise<CreateDeviceV2Body | null> => {
     const v = form.getFieldsValue();
     if (!kind) return null;
     const ref: ConnectorRef = {};
+    let preparedInlineRows: InlineCommandRow[] | null = null;
     if (kind === 'preset') {
       if (!presetKey) {
         message.error('请选择预置型号');
@@ -982,11 +1004,16 @@ function DeviceDrawer({ open, editing, hallId, exhibits, prefillExhibitId, onClo
         message.error('raw_transport 设备必须至少 1 条 inline_command');
         return null;
       }
-      const issues = validateInlineCommands(inlineCommands);
-      if (issues.length > 0) {
-        message.error(`命令清单有 ${issues.length} 处错误：${issues[0].message}`);
+      // PRD-inline-command-code-autogen.md D2：保存前一次性把空 code 自动按名字生成
+      // P4 feature flag 关闭时跳过 autogen，空 code 走 issues 提示用户
+      const prepared = await prepareInlineCommandsForSave(inlineCommands, { autogenEnabled });
+      if (prepared.issues.length > 0) {
+        message.error(`命令清单有 ${prepared.issues.length} 处错误：${prepared.issues[0].message}`);
         return null;
       }
+      preparedInlineRows = prepared.rows;
+      // 把已生成的 code 同步回 state，让 UI 行立即显示锁定 ID（避免用户再点保存时又一次自动生成）
+      setInlineCommands(prepared.rows);
     } else if (kind === 'plugin') {
       if (!pluginId || !pluginDeviceKey) {
         message.error('请选择插件 + 子设备类型');
@@ -1006,9 +1033,9 @@ function DeviceDrawer({ open, editing, hallId, exhibits, prefillExhibitId, onClo
       notes: v.notes,
       serial_no: v.serial_no,
     };
-    if (kind === 'raw_transport') {
-      // 剥离 UI 临时 _row key
-      body.inline_commands = inlineCommands.map(({ _row: _drop, ...rest }) => rest);
+    if (kind === 'raw_transport' && preparedInlineRows) {
+      // 用 prepared.rows（含 autogen code）而非 state 里可能 stale 的 inlineCommands
+      body.inline_commands = preparedInlineRows.map(({ _row: _drop, ...rest }) => rest);
     }
     return body;
   };
@@ -1019,7 +1046,7 @@ function DeviceDrawer({ open, editing, hallId, exhibits, prefillExhibitId, onClo
     } catch {
       return;
     }
-    const body = buildBody();
+    const body = await buildBody();
     if (!body) return;
     if (editing) {
       updateMutation.mutate({ id: editing.id, body });
@@ -1156,6 +1183,7 @@ function DeviceDrawer({ open, editing, hallId, exhibits, prefillExhibitId, onClo
               onConnectionConfigChange={setConnectionConfig}
               inlineCommands={inlineCommands}
               onInlineCommandsChange={setInlineCommands}
+              persistedRowKeys={inlinePersistedKeys}
               hallId={hallId}
               exhibitId={form.getFieldValue('exhibit_id') ?? null}
               editingDeviceId={editing?.id ?? null}
@@ -1394,6 +1422,7 @@ function RawTransportStep({
   onConnectionConfigChange,
   inlineCommands,
   onInlineCommandsChange,
+  persistedRowKeys,
   hallId,
   exhibitId,
   editingDeviceId,
@@ -1404,10 +1433,12 @@ function RawTransportStep({
   onConnectionConfigChange: (v: Record<string, unknown>) => void;
   inlineCommands: InlineCommandRow[];
   onInlineCommandsChange: (next: InlineCommandRow[]) => void;
+  persistedRowKeys: Set<string>;
   hallId: number;
   exhibitId: number | null;
   editingDeviceId: number | null;
 }) {
+  const autogenEnabled = useInlineCommandCodeAutogenEnabled();
   const supportsInline =
     transport === 'tcp' ||
     transport === 'udp' ||
@@ -1486,6 +1517,8 @@ function RawTransportStep({
             value={inlineCommands}
             onChange={onInlineCommandsChange}
             onTest={onTest}
+            persistedRowKeys={persistedRowKeys}
+            autogenEnabled={autogenEnabled}
           />
           <Alert
             type="info"

@@ -453,6 +453,22 @@
   0%, 100% { opacity: 1; }
   50% { opacity: 0.3; }
 }
+.appVersion {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-family: 'JetBrains Mono', 'SF Mono', 'Consolas', monospace;
+  letter-spacing: 0.04em;
+  color: var(--color-primary);
+  background: var(--color-primary-container);
+  padding: 1px 6px;
+  border-radius: var(--radius-md);
+  white-space: nowrap;
+}
+.appVersionUnknown {
+  color: var(--color-outline);
+  background: var(--color-surface-container-low);
+}
 .deviceNetwork {
   font-family: 'JetBrains Mono', 'SF Mono', 'Consolas', monospace;
   font-size: 10.5px;

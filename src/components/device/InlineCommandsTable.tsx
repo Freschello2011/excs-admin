@@ -1,24 +1,33 @@
 /**
  * device-mgmt-v2 P-C（ADR-0017）— raw_transport inline_commands 行内编辑表格
  *
+ * P1 + P2 重构（PRD-inline-command-code-autogen.md D1 / D2）：
+ *   - 默认隐藏独立 code 列；code 渲染到 名字 cell 下方小灰副行
+ *     - 已持久化行：🔒 ID · xxx
+ *     - 未持久化行：系统自动起 · ID · xxx（按名字 slug 实时生成）
+ *   - 列：名字 / 类型 / 格式 / 发送内容 / [最近测试] / 操作 [▶ 测试 / ⋯ 详情 / 删]
+ *   - 「⋯ 详情」打开 InlineCommandAdvancedDrawer 看 / 改 ID（已存只读 + 复制；未存可改 + 重算）
+ *   - autogen 在 prepareInlineCommandsForSave 中执行（调用方保存前 await）
+ *
  * 复用于：
  *   - 新建 / 编辑设备抽屉 step1 末尾（保存前一并提交到 inline_commands）
  *   - 设备调试台「命令清单」tab（保存全部走 PUT /devices/:id 全量替换）
  *
- * 列：名字 / code / kind / format(text|hex) / 发送内容 / [最近测试] / 操作 [▶ 测试 / 删]
- *
  * 校验：
- *   - 行内：code 唯一 + 必填
- *   - hex 格式时 request 必须合法 hex（容忍空白和大小写）
- *   - 父层在保存前调用 validateInlineCommands(commands) 拿到 issues 列表
- *
- * 测试结果缓存：onTest 由父层注入（异步 throw 算 fail；返回 latency 算 ok）；
- * 本组件按 code 在 60s 内缓存最近一次结果。
+ *   - 行内 live：未持久化空 code 不报错（保存时由 prepareInlineCommandsForSave 兜底生成）
+ *   - 已存 code 不允许重复 / 覆盖；hex 格式 request 必须合法 hex
  */
 import { useCallback, useMemo, useState } from 'react';
 import { Button, Input, Select, Space, Tag, Tooltip, Typography } from 'antd';
-import { DeleteOutlined, PlayCircleOutlined, PlusOutlined } from '@ant-design/icons';
+import {
+  DeleteOutlined,
+  EllipsisOutlined,
+  PlayCircleOutlined,
+  PlusOutlined,
+} from '@ant-design/icons';
 import type { CommandKind, DeviceCommand } from '@/types/deviceConnector';
+import { generateInlineCommandCode } from './inlineCommandCodeAutogen';
+import InlineCommandAdvancedDrawer from './InlineCommandAdvancedDrawer';
 
 const { Text } = Typography;
 
@@ -51,23 +60,35 @@ export function isValidHex(input: string): boolean {
   return HEX_RE.test(cleaned);
 }
 
-export function validateInlineCommands(rows: InlineCommandRow[]): ValidationIssue[] {
+/**
+ * Live 校验（用户编辑期实时跑）：
+ *   - autogen 开（默认）：未持久化的空 code 不报错，保存时 prepareInlineCommandsForSave 自动按名字生成
+ *   - autogen 关（PRD §P4 feature flag）：空 code 视作行错误，引导用户去「⋯ 详情」抽屉手填
+ *   - 非空 code 仍要查重 / 名字 / hex 格式
+ */
+export function validateInlineCommands(
+  rows: InlineCommandRow[],
+  opts?: { autogenEnabled?: boolean },
+): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   const seen = new Set<string>();
+  const autogen = opts?.autogenEnabled !== false;
   rows.forEach((r, idx) => {
     const rowKey = r._row ?? String(idx);
     const code = (r.code ?? '').trim();
     const name = (r.name ?? '').trim();
     const req = r.request ?? '';
-    if (!code) {
-      issues.push({ rowKey, field: 'code', message: 'code 必填' });
-    } else if (seen.has(code)) {
-      issues.push({ rowKey, field: 'code', message: `code "${code}" 重复` });
-    } else {
-      seen.add(code);
+    if (code) {
+      if (seen.has(code)) {
+        issues.push({ rowKey, field: 'code', message: `ID "${code}" 与本设备另一条命令重复` });
+      } else {
+        seen.add(code);
+      }
+    } else if (!autogen) {
+      issues.push({ rowKey, field: 'code', message: 'ID 必填（自动生成已关闭，请打开「⋯ 详情」手填 ID）' });
     }
     if (!name) {
-      issues.push({ rowKey, field: 'name', message: '名字必填' });
+      issues.push({ rowKey, field: 'name', message: '命令名字必填' });
     }
     if ((r.request_format ?? 'text') === 'hex' && !isValidHex(req)) {
       issues.push({
@@ -78,6 +99,40 @@ export function validateInlineCommands(rows: InlineCommandRow[]): ValidationIssu
     }
   });
   return issues;
+}
+
+/**
+ * 保存前一次性把所有空 code 自动填上、再校验。
+ * 调用方在 PUT 之前 await 此函数；返回 issues 非空则提示用户修改。
+ *
+ * autogen 顺序保证：行内已有的 code（含本批次中先生成的）累计入 used 集合，避免后行撞到前行。
+ *
+ * autogenEnabled=false（PRD §P4 feature flag 关闭）：跳过 generator，空 code 走 validateInlineCommands
+ *   报错；调用方据 issues 提示用户。
+ */
+export async function prepareInlineCommandsForSave(
+  rows: InlineCommandRow[],
+  opts?: { autogenEnabled?: boolean },
+): Promise<{ rows: InlineCommandRow[]; issues: ValidationIssue[] }> {
+  const autogen = opts?.autogenEnabled !== false;
+  if (!autogen) {
+    return { rows, issues: validateInlineCommands(rows, { autogenEnabled: false }) };
+  }
+  const used = new Set<string>();
+  for (const r of rows) {
+    if (r.code) used.add(r.code);
+  }
+  const filled: InlineCommandRow[] = [];
+  for (const row of rows) {
+    if (row.code) {
+      filled.push(row);
+      continue;
+    }
+    const generated = await generateInlineCommandCode(row.name ?? '', Array.from(used));
+    used.add(generated);
+    filled.push({ ...row, code: generated });
+  }
+  return { rows: filled, issues: validateInlineCommands(filled, { autogenEnabled: true }) };
 }
 
 export function ensureRowKey(row: InlineCommandRow, idx: number): string {
@@ -94,8 +149,12 @@ interface Props {
   showLastTest?: boolean;
   /** 调试台模式下 dirty 行高亮 */
   dirtyRowKeys?: Set<string>;
+  /** 已持久化的行 key 集合（决定「⋯ 详情」抽屉里 ID 字段是否锁死 + 副行 🔒 vs 系统自动起 标识） */
+  persistedRowKeys?: Set<string>;
   /** 强制只读 */
   readOnly?: boolean;
+  /** PRD §P4：autogen feature flag。false 时空 code 视作行错误 + 副行文案改"ID 必填" */
+  autogenEnabled?: boolean;
 }
 
 export default function InlineCommandsTable({
@@ -104,10 +163,14 @@ export default function InlineCommandsTable({
   onTest,
   showLastTest = false,
   dirtyRowKeys,
+  persistedRowKeys,
   readOnly = false,
+  autogenEnabled = true,
 }: Props) {
   const [results, setResults] = useState<Record<string, TestResult>>({});
   const [testingKey, setTestingKey] = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerRowIdx, setDrawerRowIdx] = useState<number | null>(null);
 
   // 60s 缓存：渲染时把超期 result 视作"未测"
   const liveResults = useMemo(() => {
@@ -119,7 +182,10 @@ export default function InlineCommandsTable({
     return fresh;
   }, [results]);
 
-  const issues = useMemo(() => validateInlineCommands(value), [value]);
+  const issues = useMemo(
+    () => validateInlineCommands(value, { autogenEnabled }),
+    [value, autogenEnabled],
+  );
   const issueByRow = useMemo(() => {
     const map: Record<string, ValidationIssue[]> = {};
     for (const i of issues) {
@@ -197,6 +263,17 @@ export default function InlineCommandsTable({
     borderBottom: '1px solid var(--ant-color-border-secondary)',
   };
 
+  const drawerRow = drawerRowIdx != null ? value[drawerRowIdx] : null;
+  const drawerOtherCodes = useMemo(() => {
+    if (drawerRowIdx == null) return [];
+    return value
+      .filter((_, i) => i !== drawerRowIdx)
+      .map((r) => r.code ?? '')
+      .filter((c) => c !== '');
+  }, [value, drawerRowIdx]);
+  const drawerIsPersisted =
+    drawerRow?._row != null && persistedRowKeys != null && persistedRowKeys.has(drawerRow._row);
+
   return (
     <div>
       <table
@@ -211,16 +288,15 @@ export default function InlineCommandsTable({
       >
         <thead>
           <tr>
-            <th style={{ ...headStyle, width: '20%' }}>名字</th>
-            <th style={{ ...headStyle, width: '16%' }}>code</th>
+            <th style={{ ...headStyle, width: '32%' }}>名字</th>
             <th style={{ ...headStyle, width: '10%' }}>类型</th>
             <th style={{ ...headStyle, width: '9%' }}>格式</th>
-            <th style={{ ...headStyle, width: showLastTest ? '23%' : '30%' }}>发送内容</th>
+            <th style={{ ...headStyle, width: showLastTest ? '25%' : '32%' }}>发送内容</th>
             {showLastTest && <th style={{ ...headStyle, width: '10%' }}>最近测试</th>}
             <th
               style={{
                 ...headStyle,
-                width: onTest ? '12%' : '6%',
+                width: onTest ? '14%' : '8%',
                 textAlign: 'right',
               }}
             >
@@ -232,7 +308,7 @@ export default function InlineCommandsTable({
           {value.length === 0 && (
             <tr>
               <td
-                colSpan={showLastTest ? 7 : 6}
+                colSpan={showLastTest ? 6 : 5}
                 style={{
                   ...cellStyle,
                   textAlign: 'center',
@@ -247,37 +323,65 @@ export default function InlineCommandsTable({
           {value.map((row, idx) => {
             const rowKey = ensureRowKey(row, idx);
             const rowIssues = issueByRow[rowKey] ?? [];
-            const codeIssue = rowIssues.find((i) => i.field === 'code');
             const nameIssue = rowIssues.find((i) => i.field === 'name');
             const reqIssue = rowIssues.find((i) => i.field === 'request');
+            const codeDupIssue = rowIssues.find((i) => i.field === 'code');
             const result = liveResults[rowKey];
             const isDirty = dirtyRowKeys?.has(rowKey);
+            const isPersisted = persistedRowKeys?.has(rowKey) ?? false;
+            const code = (row.code ?? '').trim();
             return (
               <tr
                 key={rowKey}
                 style={isDirty ? { background: 'var(--ant-color-warning-bg)' } : undefined}
               >
+                {/* 名字 cell：双行布局（名字 + ID 副行小灰） */}
                 <td style={cellStyle}>
-                  <Input
-                    size="small"
-                    variant="borderless"
-                    value={row.name ?? ''}
-                    placeholder="如：开始演示"
-                    disabled={readOnly}
-                    status={nameIssue ? 'error' : undefined}
-                    onChange={(e) => setRow(idx, { name: e.target.value })}
-                  />
-                </td>
-                <td style={cellStyle}>
-                  <Input
-                    size="small"
-                    variant="borderless"
-                    value={row.code ?? ''}
-                    placeholder="start"
-                    disabled={readOnly}
-                    status={codeIssue ? 'error' : undefined}
-                    onChange={(e) => setRow(idx, { code: e.target.value })}
-                  />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <Input
+                      size="small"
+                      variant="borderless"
+                      value={row.name ?? ''}
+                      placeholder="如：开始演示"
+                      disabled={readOnly}
+                      status={nameIssue ? 'error' : undefined}
+                      onChange={(e) => setRow(idx, { name: e.target.value })}
+                    />
+                    <span
+                      style={{
+                        fontFamily: 'var(--font-family-mono, ui-monospace, monospace)',
+                        fontSize: 11,
+                        color: codeDupIssue
+                          ? 'var(--ant-color-error)'
+                          : 'var(--ant-color-text-tertiary)',
+                        padding: '0 6px',
+                        marginLeft: 4,
+                        cursor: 'default',
+                      }}
+                      title={
+                        isPersisted
+                          ? '保存后 ID 锁住，不能再改'
+                          : code
+                            ? '还没保存，点「⋯ 详情」可手改 ID'
+                            : autogenEnabled
+                              ? '保存时按名字自动起 ID'
+                              : 'ID 必填（自动生成已关闭）'
+                      }
+                    >
+                      {isPersisted
+                        ? '🔒 '
+                        : code
+                          ? ''
+                          : autogenEnabled
+                            ? '系统自动起 · '
+                            : '⚠ '}
+                      {code
+                        ? `ID · ${code}`
+                        : autogenEnabled
+                          ? 'ID 待生成'
+                          : 'ID 待手填（点「⋯ 详情」）'}
+                    </span>
+                  </div>
                 </td>
                 <td style={cellStyle}>
                   <Select
@@ -363,6 +467,17 @@ export default function InlineCommandsTable({
                         </Button>
                       </Tooltip>
                     )}
+                    <Tooltip title="详情：查看 / 复制 / 改 ID（未保存时）">
+                      <Button
+                        size="small"
+                        icon={<EllipsisOutlined />}
+                        disabled={readOnly}
+                        onClick={() => {
+                          setDrawerRowIdx(idx);
+                          setDrawerOpen(true);
+                        }}
+                      />
+                    </Tooltip>
                     <Button
                       size="small"
                       danger
@@ -389,6 +504,18 @@ export default function InlineCommandsTable({
           新增命令
         </Button>
       )}
+
+      <InlineCommandAdvancedDrawer
+        open={drawerOpen}
+        row={drawerRow}
+        otherCodes={drawerOtherCodes}
+        isPersisted={drawerIsPersisted}
+        onClose={() => setDrawerOpen(false)}
+        onApply={(patch) => {
+          if (drawerRowIdx == null) return;
+          setRow(drawerRowIdx, patch);
+        }}
+      />
     </div>
   );
 }

@@ -5,7 +5,7 @@ import {
   Select, Typography,
 } from 'antd';
 import { useMessage } from '@/hooks/useMessage';
-import { UploadOutlined, DeleteOutlined, SendOutlined } from '@ant-design/icons';
+import { UploadOutlined, DeleteOutlined, SendOutlined, DownloadOutlined, CopyOutlined } from '@ant-design/icons';
 import PageHeader from '@/components/common/PageHeader';
 import RiskyActionButton from '@/components/authz/RiskyActionButton';
 import { releaseApi } from '@/api/release';
@@ -21,9 +21,10 @@ import styles from './ReleasesPage.module.scss';
 const { Text } = Typography;
 
 const PLATFORMS = [
+  { value: 'win-x64', label: 'Windows (x64)' },
   { value: 'osx-arm64', label: 'macOS (Apple Silicon)' },
   { value: 'osx-x64', label: 'macOS (Intel)' },
-  { value: 'win-x64', label: 'Windows (x64)' },
+  { value: 'linux-x64', label: 'Linux (x64)' },
 ];
 
 function formatFileSize(bytes: number): string {
@@ -208,6 +209,113 @@ export default function ReleasesPage() {
 
   return (
     <div>
+      {/* 📥 安装器（Phase 4c）— 现场新增展项首装专用，永久不变下载链接 */}
+      <Card
+        size="small"
+        style={{ marginBottom: 16, background: '#f6ffed', borderColor: '#b7eb8f' }}
+        styles={{ body: { padding: 12 } }}
+        title={<span>📥 现场首装专用 · Bootstrap Installer 安装器</span>}
+      >
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          安装器永远拉取当前最新稳定版本（不参与灰度）。新增展项时把对应平台的链接发给现场即可，
+          双击安装包后自动从云端拉最新版 + 写开机自启 + 启动展厅 App。
+        </Text>
+        <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+          {/* Windows 卡 */}
+          <Card size="small" type="inner" title="Windows x64">
+            <Space direction="vertical" style={{ width: '100%' }} size={4}>
+              <Text style={{ fontSize: 12 }}>
+                <code style={{ fontSize: 11 }}>
+                  https://excs.crossovercg.com.cn/api/v1/installer/download/win-x64
+                </code>
+              </Text>
+              <Text type="secondary" style={{ fontSize: 11 }}>
+                ~2 MB · 双击 .exe → UAC 同意 → 自动拉当前最新展厅 App + 写 All Users 开机自启 · 适用 Win 10+
+              </Text>
+              <Space size={8} style={{ marginTop: 4 }}>
+                <Button
+                  type="primary"
+                  size="small"
+                  icon={<DownloadOutlined />}
+                  href="/api/v1/installer/download/win-x64"
+                  target="_blank"
+                >
+                  直接下载
+                </Button>
+                <Button
+                  size="small"
+                  icon={<CopyOutlined />}
+                  onClick={async () => {
+                    const url = `${window.location.origin}/api/v1/installer/download/win-x64`;
+                    try {
+                      await navigator.clipboard.writeText(url);
+                      message.success('已复制下载链接');
+                    } catch {
+                      message.error('复制失败，请手动选中链接复制');
+                    }
+                  }}
+                >
+                  复制链接
+                </Button>
+              </Space>
+            </Space>
+          </Card>
+          {/* Linux 卡（Phase 6） */}
+          <Card size="small" type="inner" title="Linux x64 (Ubuntu 24.04)">
+            <Space direction="vertical" style={{ width: '100%' }} size={4}>
+              <Text style={{ fontSize: 12 }}>
+                <code style={{ fontSize: 11 }}>
+                  https://excs.crossovercg.com.cn/api/v1/installer/download/linux-x64
+                </code>
+              </Text>
+              <Text type="secondary" style={{ fontSize: 11 }}>
+                ~12 KB shell · <code style={{ fontSize: 10 }}>chmod +x ./*.run &amp;&amp; sudo ./*.run</code> 或一行
+                {' '}<code style={{ fontSize: 10 }}>curl -fsSL &lt;url&gt; | sudo bash</code> · 自动 apt 装 VLC + 写 systemd 自启
+              </Text>
+              <Space size={8} style={{ marginTop: 4 }}>
+                <Button
+                  type="primary"
+                  size="small"
+                  icon={<DownloadOutlined />}
+                  href="/api/v1/installer/download/linux-x64"
+                  target="_blank"
+                >
+                  直接下载
+                </Button>
+                <Button
+                  size="small"
+                  icon={<CopyOutlined />}
+                  onClick={async () => {
+                    const url = `${window.location.origin}/api/v1/installer/download/linux-x64`;
+                    try {
+                      await navigator.clipboard.writeText(url);
+                      message.success('已复制下载链接');
+                    } catch {
+                      message.error('复制失败，请手动选中链接复制');
+                    }
+                  }}
+                >
+                  复制链接
+                </Button>
+              </Space>
+            </Space>
+          </Card>
+          {/* macOS 卡（暂缓） */}
+          <Card size="small" type="inner" title="macOS Apple Silicon">
+            <Space direction="vertical" style={{ width: '100%' }} size={4}>
+              <Tag color="default">暂缓发布</Tag>
+              <Text type="secondary" style={{ fontSize: 11 }}>
+                Phase 3 待完成 — 需 Apple Developer ID Installer 证书 + first-install 完整 .app
+                bundle 发布通道（PRD §六.6 已选方案 A）
+              </Text>
+              <Text type="secondary" style={{ fontSize: 11 }}>
+                现阶段 mac 展项仍走人工分发 .dmg
+              </Text>
+            </Space>
+          </Card>
+        </div>
+      </Card>
+
       <PageHeader
         title="版本管理"
         description="管理展厅 App 版本发布，设置展厅目标版本实现灰度升级"
@@ -225,7 +333,7 @@ export default function ReleasesPage() {
         }
       />
 
-      {/* 展厅当前目标版本 + 灰度状态 */}
+      {/* 展厅当前目标版本 + 灰度状态 + 现网装版（app-bootstrap-installer Phase 4） */}
       {selectedHallId && hallVersionData && (
         <Card size="small" style={{ marginBottom: 16 }}>
           <Space wrap>
@@ -258,6 +366,35 @@ export default function ReleasesPage() {
               >
                 {hallVersionData.rollout_status === 'pending' ? '推送更新通知' : '重新推送'}
               </RiskyActionButton>
+            )}
+          </Space>
+          {/* 现网装版 + 心跳鲜度（让 admin 一眼看清升级是否到位） */}
+          <Space wrap style={{ marginTop: 8 }}>
+            <span>现网装版：</span>
+            {hallVersionData.installed_version ? (
+              <Tag color={
+                hallVersionData.installed_version === hallVersionData.target_version ? 'green' : 'orange'
+              }>
+                {hallVersionData.installed_version}
+                {hallVersionData.installed_version !== hallVersionData.target_version && ' ⚠ 与目标版本不一致'}
+              </Tag>
+            ) : (
+              <Tag color="default">展厅 App 从未上报</Tag>
+            )}
+            <span style={{ marginLeft: 16 }}>心跳：</span>
+            {hallVersionData.last_report_at ? (() => {
+              const ageMin = dayjs().diff(dayjs(hallVersionData.last_report_at), 'minute');
+              const stale = ageMin > 5;
+              return (
+                <Tag color={stale ? 'red' : 'green'}>
+                  {ageMin < 1 ? '刚才' :
+                   ageMin < 60 ? `${ageMin} 分钟前` :
+                   `${Math.floor(ageMin / 60)} 小时前`}
+                  {stale && ' ⚠ 离线'}
+                </Tag>
+              );
+            })() : (
+              <Tag color="default">无心跳记录</Tag>
             )}
           </Space>
           <div className={styles.flowHint}>

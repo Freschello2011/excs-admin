@@ -1214,7 +1214,15 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** 更新设备 */
+        /**
+         * 更新设备
+         * @description raw_transport 设备 inline_commands 全量替换路径。
+         *     PRD: 01-docs/02-device-mgmt/PRD-inline-command-code-autogen.md §三·D3/D4
+         *       - 旧 ∩ 新 code 自动满足"持久化后不可改"（按集合差天然成立）
+         *       - 旧 \ 新（被删除的 code）→ 串行扫 4 张引用方表（show_actions / scene_actions /
+         *         panel_cards.binding / 同设备 command_presets），任一非空 → 409
+         *         + InlineCommandReferencedDetails，admin 弹 modal 列举
+         */
         put: operations["updateDevice"];
         post?: never;
         /** 删除设备 */
@@ -1968,6 +1976,35 @@ export interface paths {
         put?: never;
         /** 取消演出（MQTT 下发 show_ctrl cancel；清除 hallCache.runningShow） */
         post: operations["cancelShow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/shows/{showId}/seek": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                showId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 跳转演出到指定位置（MQTT 下发 show_ctrl seek）
+         * @description 校验 hallCache.runningShow == showId（与 pause/resume/cancel 同口径），
+         *     未命中返 400「演出未在运行」。
+         *     position_ms 越界由 server 截断到 [0, totalTimeline_ms]（slider 拖到底
+         *     = 自然结束语义），不 400。截断打 warn log。
+         *     ShowEngine 收到 seek envelope 后：重置 Stopwatch 偏移 + 二分定位
+         *     _nextActionIndex + _playbackEngine.Seek(positionMs - videoOffsetMs)；
+         *     paused 状态下 seek 维持 paused（不自动 resume），仅更新 _baseOffsetMs。
+         *     已知行为：跨 seek 边界的 device action 不补发（参 ADR-0028）。
+         */
+        post: operations["seekShow"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2888,6 +2925,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/analytics/oss-stats/platform": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 平台级 OSS 存储统计（"平台公共开销"分区）
+         * @description 列出平台级（无 hallID 概念）OSS 桶的对象数 / 总大小。
+         *     与 `/halls/{hallId}/oss-stats`（展厅可分摊）成对使用，前端「存储与费用」页双区展示。
+         */
+        get: operations["getAnalyticsOssStatsPlatform"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/stats/playback-report": {
         parameters: {
             query?: never;
@@ -3078,6 +3136,68 @@ export interface paths {
          *     所有 instance 都 installed 时切展厅 rollout_status 到 done。
          */
         patch: operations["reportAppUpdateStatus"];
+        trace?: never;
+    };
+    "/installer/manifest/{platform}/latest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 获取指定平台展厅 App 最新稳定版安装清单
+         * @description Bootstrap installer (.exe / .pkg) 公开端点，**不需 auth**。
+         *
+         *     返回当前 `rollout_policy='all'` 或 `rollout_policy='percent' AND rollout_percent=100`
+         *     的最新一条 AppRelease 的下载清单（含 24h 签名 URL + SHA-256）。
+         *
+         *     不返回正在灰度（10%/50%）的版本——installer 是首装路径，新机器应装已全网铺开
+         *     的稳定版。装好后 AutoUpdater 会按 OperationMode + rollout_policy 接管后续升级。
+         */
+        get: operations["getInstallerManifestLatest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/installer/download/{platform}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 下载 Bootstrap Installer 自身（server 302 重定向到 OSS 签名 URL）
+         * @description 公开端点，无 auth。访问后 server 把请求 302 重定向到 OSS 上当前最新的
+         *     Bootstrap installer (.exe / .pkg) 的 24h 签名下载 URL；浏览器自动跟随。
+         *
+         *     **URL 永不变**：现场部署人员可把这个 URL 收藏 / 二维码 / 文档里写死，
+         *     每次访问都自动拿到当前最新 installer。
+         *
+         *     与 /installer/manifest 的区别：manifest 是给 installer 自己装机时调，
+         *     download 是给浏览器直接拉 installer 文件本身（首装入口）。
+         *
+         *     OSS object key 约定：
+         *     - `installers/win-x64/ExCS-Exhibit-Setup.exe`（Win bootstrap installer）
+         *     - `installers/osx-arm64/ExCS-Exhibit-Installer.pkg`（macOS bootstrap installer）
+         *     - `installers/linux-x64/ExCS-Exhibit-Setup.run`（Linux bootstrap shell 自解压）
+         *
+         *     Phase 4c 阶段 win-x64 已上线；linux-x64 Phase 6 阶段实装；osx-arm64 OSS
+         *     对象未上传（PRD §六.6 已选 A 方案，待下次实施）— 该平台 installer
+         *     OSS 对象未上传时返回 404。
+         */
+        get: operations["getInstallerDownload"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/nas-archive/list": {
@@ -5648,12 +5768,14 @@ export interface components {
             /** Format: int64 */
             total_size_bytes: number;
         };
+        /** @description 单展厅 OSS 统计（"展厅可分摊"分区，按 hallID prefix 累加） */
         OSSStatsResult: {
             /** Format: int64 */
             hall_id: number;
             raw_bucket: components["schemas"]["BucketStats"];
             encrypted_bucket: components["schemas"]["BucketStats"];
             thumbnail_bucket: components["schemas"]["BucketStats"];
+            ai_knowledge_bucket?: components["schemas"]["BucketStats"];
         };
         ExhibitContentDTO: {
             /** Format: int64 */
@@ -6150,6 +6272,34 @@ export interface components {
             /** @description ADR-0017 P-C：raw_transport 设备的心跳 query code（可空） */
             inline_heartbeat_command_code?: string | null;
         };
+        InlineCommandReference: {
+            /** @enum {string} */
+            type: "show_action" | "scene_action" | "panel_card" | "command_preset";
+            /**
+             * Format: int64
+             * @description 引用方主键。show_action / scene_action / panel_card 是各自表的 PK；
+             *     command_preset 复用 device.id（preset 是设备聚合根的 jsonb 值对象）。
+             */
+            id: number;
+            /**
+             * @description admin modal 列表行的显示文案，server 端直接拼好。
+             *     例：'演出 A · 轨道 序厅 · 0:03' / '场景 默认开场' /
+             *         '中控面板 · 序厅 · 按钮 开始' / '现场别名 全开'
+             */
+            label: string;
+        };
+        InlineCommandReferencedItem: {
+            /** @description 被删除（O \ N）的 inline_command code */
+            command_code: string;
+            /** @description 被删除命令的人话名字（admin modal 用作主标题） */
+            command_name: string;
+            referenced_by: components["schemas"]["InlineCommandReference"][];
+        };
+        InlineCommandReferencedDetails: {
+            /** @enum {string} */
+            error_code: "INLINE_COMMAND_REFERENCED";
+            items: components["schemas"]["InlineCommandReferencedItem"][];
+        };
         /**
          * @description EffectiveCommandDTO.source ——
          *     v1: baseline / model / instance / override（三层合并结果，"override" 是历史 admin UI 用值）
@@ -6257,6 +6407,8 @@ export interface components {
             paired_at: string;
             /** Format: date-time */
             last_heartbeat_at?: string | null;
+            /** @description 展厅 App 当前装版（来自 excs_hall_app_instances.current_version， 由 release.ReportStatus 升级状态上报刷新）。从未上报为 null。 */
+            current_version?: string | null;
         };
         AnnouncedDeviceDTO: {
             code: string;
@@ -6868,6 +7020,17 @@ export interface components {
              *     前端可据此显示更精确的错误。
              */
             error_code?: string;
+        };
+        SeekShowRequest: {
+            /**
+             * Format: int64
+             * @description 跳转位置（毫秒），相对 show 总时间轴起点（pre_roll 起点）。
+             *     总时间轴 = pre_roll_ms + duration_ms + post_roll_ms。
+             *     越界 server 截断到 [0, total_timeline_ms]（slider 拖到底 = 自然结束语义），
+             *     不返 400（避免前端 fallback `showStatus.durationMs ?? show.durationMs ?? 0`
+             *     触发 400 风暴）。截断时 server 打 warn log 留排查痕迹。
+             */
+            position_ms: number;
         };
         RehearseShowRequest: {
             /**
@@ -7896,6 +8059,12 @@ export interface components {
             next_marker: string;
             is_truncated: boolean;
         };
+        /** @description 平台级 OSS 统计（"平台公共开销"分区，无 hallID 概念，全桶聚合） */
+        PlatformOSSStatsResult: {
+            releases_bucket: components["schemas"]["BucketStats"];
+            ai_assets_platform_bucket: components["schemas"]["BucketStats"];
+            recordings_bucket: components["schemas"]["BucketStats"];
+        };
         AnalyticsPlaybackReportItem: {
             /** Format: int64 */
             exhibit_id: number;
@@ -8017,6 +8186,8 @@ export interface components {
         /**
          * @description 展厅目标版本 DTO（service 层 release.HallAppVersionDTO，updated_at 已 .Format(time.RFC3339)
          *     转字符串）—— 与 GORM HallAppVersion entity 区分。
+         *     installed_version + last_report_at 是 app-bootstrap-installer Phase 4 加的现网可见性字段，
+         *     由展厅 App MQTT 心跳自报，让 admin 一眼看清"哪个展项装的什么版本，心跳是否正常"。
          */
         HallAppVersionDTO: {
             /** Format: int64 */
@@ -8026,6 +8197,16 @@ export interface components {
             rollout_status: string;
             /** @description RFC3339 +08:00 字符串（service 层 .Format(time.RFC3339)），不加 format: date-time */
             updated_at: string;
+            /**
+             * @description 展厅 App 实际装版本（MQTT 心跳上报 → excs_hall_app_versions.installed_version）。
+             *     若与 target_version 不一致 = 升级未完成；空串 = 该展厅 App 还没上报过。
+             */
+            installed_version?: string;
+            /**
+             * @description 展厅 App 最后一次心跳上报时间（RFC3339）。空 = 从未上报。
+             *     admin 可据此判断展厅 App 是否在线（典型：> 5 min 不报视为离线）。
+             */
+            last_report_at?: string;
         };
         SetHallVersionRequest: {
             target_version: string;
@@ -8050,6 +8231,47 @@ export interface components {
              *     若展厅 App 后续约束需切 enum，此处与 service 同步加 oneof + .Valid() 兜底。
              */
             update_status: string;
+        };
+        InstallerManifest: {
+            /**
+             * @example win-x64
+             * @enum {string}
+             */
+            platform: "win-x64" | "osx-arm64" | "linux-x64";
+            /**
+             * @description AppRelease.version (semver)
+             * @example 0.9.12
+             */
+            version: string;
+            /**
+             * @description AppRelease zip 包的 SHA-256（小写 hex）
+             * @example a1b2c3d4e5f6...
+             */
+            sha256: string;
+            /**
+             * Format: int64
+             * @description AppRelease zip 包大小，字节
+             * @example 152043893
+             */
+            size_bytes: number;
+            /**
+             * @description OSS 签名 GET URL（24h 有效）。Bootstrap installer 拉到清单后立即用此 URL 下载 zip。
+             *     sha256 由 installer 自行校验（DownloadTemporaryFile 第三参数也接受预期 sha256 自动校验）。
+             * @example https://excs-releases.oss-cn-beijing.aliyuncs.com/win-x64/0.9.12.zip?Signature=...
+             */
+            download_url: string;
+            /**
+             * Format: date-time
+             * @description 签名 URL 过期时间（ISO 8601）。installer 应在过期前完成下载。
+             */
+            download_url_expires_at: string;
+            /** @description Markdown 格式发布说明（可选） */
+            release_notes_md?: string;
+            /**
+             * Format: date-time
+             * @description 该 release 发布时间（AppRelease.published_at）
+             */
+            released_at: string;
         };
         NASArchiveListItem: {
             /** Format: int64 */
@@ -10043,6 +10265,53 @@ export interface components {
                  *     }
                  */
                 "application/json": components["schemas"]["PermissionDenied"];
+            };
+        };
+        /**
+         * @description raw_transport 设备 PUT inline_commands 时，被删除（O \ N）的命令 code 仍被
+         *     现存场景动作 / 演出动作 / 中控面板按钮 / 同设备 command_preset 引用。
+         *     admin 据 data.items 弹结构化 modal 列举引用方；用户须先清理引用再保存。
+         */
+        InlineCommandReferenced: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "code": 3020,
+                 *       "message": "命令 \"start\" 被 3 处引用，删除会破坏现存场景 / 面板",
+                 *       "data": {
+                 *         "error_code": "INLINE_COMMAND_REFERENCED",
+                 *         "items": [
+                 *           {
+                 *             "command_code": "start",
+                 *             "command_name": "开始演示",
+                 *             "referenced_by": [
+                 *               {
+                 *                 "type": "show_action",
+                 *                 "id": 142,
+                 *                 "label": "演出 A · 轨道 序厅 · 0:03"
+                 *               },
+                 *               {
+                 *                 "type": "scene_action",
+                 *                 "id": 89,
+                 *                 "label": "场景 默认开场"
+                 *               },
+                 *               {
+                 *                 "type": "panel_card",
+                 *                 "id": 12,
+                 *                 "label": "中控面板 · 序厅 · 按钮 开始"
+                 *               }
+                 *             ]
+                 *           }
+                 *         ]
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["ApiResponse"] & {
+                    data?: components["schemas"]["InlineCommandReferencedDetails"];
+                };
             };
         };
         /**
@@ -12380,6 +12649,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["InlineCommandReferenced"];
         };
     };
     deleteDevice: {
@@ -13774,6 +14044,38 @@ export interface operations {
                     };
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    seekShow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                showId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SeekShowRequest"];
+            };
+        };
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["ShowControlResult"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -15493,7 +15795,7 @@ export interface operations {
     getAnalyticsOssBrowser: {
         parameters: {
             query: {
-                /** @description service 层校验 bucket 必须是 raw/encrypted/thumbnail 三个之一 */
+                /** @description service 层校验 bucket 必须是 raw/encrypted/thumbnail/releases/ai-assets 五个之一（ADR-0001 + ADR-0027） */
                 bucket: string;
                 prefix?: string;
                 /** @description 续传 marker（service 层从上一页 next_marker 获取） */
@@ -15519,6 +15821,30 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getAnalyticsOssStatsPlatform: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["PlatformOSSStatsResult"];
+                    };
+                };
+            };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
         };
@@ -15860,6 +16186,99 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    getInstallerManifestLatest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 平台标识，支持 win-x64 / osx-arm64 / linux-x64 */
+                platform: "win-x64" | "osx-arm64" | "linux-x64";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 最新稳定版清单 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["InstallerManifest"];
+                    };
+                };
+            };
+            /** @description 该平台尚无任何稳定版 release */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
+                };
+            };
+            /** @description 限流（每 IP 60 req/min） */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
+                };
+            };
+        };
+    };
+    getInstallerDownload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 平台标识，支持 win-x64 / osx-arm64 / linux-x64 */
+                platform: "win-x64" | "osx-arm64" | "linux-x64";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 重定向到 OSS 24h 签名下载 URL */
+            302: {
+                headers: {
+                    /** @description OSS 签名 URL（24h 有效） */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 平台 enum 不合法 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
+                };
+            };
+            /** @description 该平台 installer 尚未上传 OSS（如 osx-arm64 阶段性未发布） */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
+                };
+            };
+            /** @description 限流（每 IP 60 req/min） */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
+                };
+            };
         };
     };
     listNASArchives: {

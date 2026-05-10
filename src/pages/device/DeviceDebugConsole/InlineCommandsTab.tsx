@@ -16,9 +16,15 @@ import { useMessage } from '@/hooks/useMessage';
 import { deviceV2Api } from '@/api/deviceConnector';
 import InlineCommandsTable, {
   ensureRowKey,
+  prepareInlineCommandsForSave,
   validateInlineCommands,
   type InlineCommandRow,
 } from '@/components/device/InlineCommandsTable';
+import {
+  isInlineCommandReferencedError,
+  showInlineCommandReferencedModal,
+} from '@/components/device/showInlineCommandReferencedModal';
+import { useInlineCommandCodeAutogenEnabled } from '@/components/device/useInlineCommandCodeAutogenEnabled';
 import type { DeviceCommand } from '@/types/deviceConnector';
 
 const { Text } = Typography;
@@ -74,8 +80,12 @@ export default function InlineCommandsTab({ deviceId, initial, onCountChange }: 
     onCountChange?.(rows.length);
   }, [rows.length, onCountChange]);
 
+  const autogenEnabled = useInlineCommandCodeAutogenEnabled();
   const dirty = !rowsEqual(rows, baseline);
-  const issues = useMemo(() => validateInlineCommands(rows), [rows]);
+  const issues = useMemo(
+    () => validateInlineCommands(rows, { autogenEnabled }),
+    [rows, autogenEnabled],
+  );
   const dirtyRowKeys = useMemo(() => {
     const baseByKey = new Map(baseline.map((r) => [r._row, r]));
     const set = new Set<string>();
@@ -96,9 +106,24 @@ export default function InlineCommandsTab({ deviceId, initial, onCountChange }: 
     return set;
   }, [rows, baseline]);
 
+  /** 已持久化行 key 集合：baseline 里有此 _row 且 code 非空（旧 code 不可改） */
+  const persistedRowKeys = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of baseline) {
+      if (r._row && r.code) set.add(r._row);
+    }
+    return set;
+  }, [baseline]);
+
   const saveMutation = useMutation({
     mutationFn: async (next: InlineCommandRow[]) => {
-      const cleaned = next.map(({ _row: _drop, ...rest }) => rest);
+      // PRD-inline-command-code-autogen.md D2：保存前一次性把空 code 自动按名字生成
+      // P4 feature flag 关闭时跳过 autogen，空 code 走 issues 回报
+      const prepared = await prepareInlineCommandsForSave(next, { autogenEnabled });
+      if (prepared.issues.length > 0) {
+        throw new Error(prepared.issues[0].message);
+      }
+      const cleaned = prepared.rows.map(({ _row: _drop, ...rest }) => rest);
       // PUT /api/v1/devices/:id —— deviceV2Api.update 用 Partial<CreateDeviceV2Body>，
       // 直接透传 inline_commands 全量替换。后端按 connector_kind=raw_transport 分支处理。
       return deviceV2Api.update(deviceId, {
@@ -113,6 +138,11 @@ export default function InlineCommandsTab({ deviceId, initial, onCountChange }: 
       queryClient.invalidateQueries({ queryKey: ['devices'] });
     },
     onError: (err: unknown) => {
+      // PRD-inline-command-code-autogen P3.3：409 + INLINE_COMMAND_REFERENCED → 弹结构化 modal
+      if (isInlineCommandReferencedError(err)) {
+        showInlineCommandReferencedModal(modal, err.__inlineCommandReferenced);
+        return;
+      }
       const msg = err instanceof Error ? err.message : '保存失败';
       message.error(`保存失败：${msg}`);
     },
@@ -187,6 +217,8 @@ export default function InlineCommandsTab({ deviceId, initial, onCountChange }: 
         onTest={handleTest}
         showLastTest
         dirtyRowKeys={dirtyRowKeys}
+        persistedRowKeys={persistedRowKeys}
+        autogenEnabled={autogenEnabled}
       />
 
       <Alert

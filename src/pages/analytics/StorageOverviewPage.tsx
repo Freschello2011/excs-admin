@@ -48,7 +48,7 @@ export default function StorageOverviewPage() {
     <div>
       <PageHeader
         title="存储与费用"
-        description="OSS 三桶 + NAS 归档容量 / 文件级浏览 / AI Token 与 OSS 月度费用"
+        description="OSS 6 桶 + NAS 归档容量（展厅可分摊 / 平台公共开销分区）/ 文件级浏览 / AI Token 与 OSS 月度费用"
       />
       <PillTabs tabs={TABS} active={activeTab} onChange={setActive} ariaLabel="存储与费用 tab" />
       <Suspense fallback={<TabFallback />}>{renderActive()}</Suspense>

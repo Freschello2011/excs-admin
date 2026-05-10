@@ -250,6 +250,35 @@ function replaceExhibitInPath(pathname: string, newExhibitId: number): string | 
   return null;
 }
 
+/**
+ * 展厅 region 路由：URL 内含 `:hallId` 片段（`/halls/:hallId/...`），顶栏切换展厅时应"平行跳"到
+ * 同类型路由的新展厅页，否则 `HallContextGuard` 会以 URL 为权威把 store 反向覆盖回旧 hallId。
+ *
+ * 切展厅时一律落到该 region 的"列表入口"（丢掉 `:exhibitId` / `:sceneId` 等子段），
+ * 避免到新展厅访问不存在的子资源。
+ *
+ * 返回 null 表示当前不在 `/halls/:hallId/*` 路由（顶栏胶囊走 store-only 分支即可）。
+ */
+function replaceHallInPath(pathname: string, newHallId: number): string | null {
+  const m = pathname.match(/^\/halls\/\d+(\/[^?#]*)?$/);
+  if (!m) return null;
+  const tail = m[1] ?? '';
+  const segMatch = tail.match(/^\/([^/]+)/);
+  const seg = segMatch ? segMatch[1] : '';
+  // 已知 hall-scoped 子路径段：保留段名、丢子 id；其它情况退到展厅详情
+  const known = new Set([
+    'exhibits',
+    'exhibit-management',
+    'control-app',
+    'triggers',
+    'scenes',
+    'app-sessions',
+    'panel-editor',
+    'pairing-codes',
+  ]);
+  return known.has(seg) ? `/halls/${newHallId}/${seg}` : `/halls/${newHallId}`;
+}
+
 /** 当前路由所属区域（用于顶栏选择器状态） */
 type RouteRegion = 'overview' | 'hall' | 'platform';
 function resolveRouteRegion(pathname: string): RouteRegion {
@@ -649,6 +678,8 @@ export default function AdminLayout() {
                             className={`${styles['admin-layout__selector-option']} ${h.id === selectedHallId ? styles['admin-layout__selector-option--selected'] : ''}`}
                             onClick={() => {
                               setSelectedHall(h.id, h.name);
+                              const target = replaceHallInPath(location.pathname, h.id);
+                              if (target) navigate(target);
                               setShowHallDropdown(false);
                             }}
                           >

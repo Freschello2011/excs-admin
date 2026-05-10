@@ -216,13 +216,15 @@ const DEP_META: Record<
     ],
   },
   oss: {
-    title: 'OSS 三桶',
+    title: 'OSS 业务桶',
     icon: '☁️',
     iconCls: styles.icSuccess,
     extra: [
       { key: 'raw', label: 'excs-raw' },
       { key: 'encrypted', label: 'excs-encrypted' },
       { key: 'thumbnail', label: 'excs-thumbnail' },
+      { key: 'releases', label: 'excs-releases' },
+      { key: 'ai-assets', label: 'excs-ai-assets' },
     ],
   },
 };

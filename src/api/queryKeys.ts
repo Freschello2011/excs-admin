@@ -25,6 +25,7 @@ export const queryKeys = {
   contentTags: (params: Record<string, unknown>) => ['content-tags', params] as const,
   distributions: (params: Record<string, unknown>) => ['distributions', params] as const,
   ossStats: (hallId: number) => ['oss-stats', hallId] as const,
+  ossStatsPlatform: () => ['oss-stats', 'platform'] as const, // ADR-0027
   unboundContent: (hallId: number) => ['unbound-content', hallId] as const,
   exhibitContent: (exhibitId: number) => ['exhibit', exhibitId, 'content'] as const,
   exhibitTags: (exhibitId: number, params?: Record<string, unknown>) =>

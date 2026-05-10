@@ -305,6 +305,20 @@ export const IA: Category[] = [
           { group: 'general', key: 'page_size_max', label: '最大每页条数', suffix: '条', min: 1, max: 1000 },
         ],
       },
+      {
+        key: 'device-mgmt',
+        title: '设备管理',
+        icon: 'developer_board',
+        description: 'raw_transport inline 命令清单的 UX 开关；服务端引用方守卫不受影响',
+        kind: 'fields',
+        fields: [
+          {
+            group: 'device_mgmt',
+            key: 'inline_command_code_autogen_enabled',
+            label: 'inline_commands ID 自动生成',
+          },
+        ],
+      },
     ],
   },
 ];

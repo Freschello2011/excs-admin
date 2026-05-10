@@ -360,10 +360,13 @@ function NASArchiveTable() {
   );
 }
 
+// ADR-0001 + ADR-0027: 6 业务桶
 const OSS_TABS = [
   { key: 'excs-raw', label: '原始桶 (excs-raw)' },
   { key: 'excs-encrypted', label: '加密桶 (excs-encrypted)' },
   { key: 'excs-thumbnail', label: '缩略图桶 (excs-thumbnail)' },
+  { key: 'excs-releases', label: '发布包桶 (excs-releases)' },
+  { key: 'excs-ai-assets', label: 'AI 资产桶 (excs-ai-assets)' },
 ];
 
 export default function OssBrowserPage({ embedded }: { embedded?: boolean } = {}) {

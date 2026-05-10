@@ -23,9 +23,10 @@ import type { HallListItem, OperationMode } from '@/api/gen/client';
 import styles from './ReleasePublishModal.module.scss';
 
 const PLATFORMS = [
+  { value: 'win-x64', label: 'Windows (x64)' },
   { value: 'osx-arm64', label: 'macOS (Apple Silicon)' },
   { value: 'osx-x64', label: 'macOS (Intel)' },
-  { value: 'win-x64', label: 'Windows (x64)' },
+  { value: 'linux-x64', label: 'Linux (x64)' },
 ];
 
 // 投放优先级（mockup §1）：commissioning → maintenance → production；paused 永远跳过

@@ -1,16 +1,32 @@
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Card, Select, Space, Statistic, Spin, Row, Col } from 'antd';
+
+const SectionTitle = ({ children }: { children: React.ReactNode }) => (
+  <div style={{ margin: '24px 0 12px', fontWeight: 500, color: 'var(--color-on-surface)' }}>
+    {children}
+  </div>
+);
 import { useMessage } from '@/hooks/useMessage';
-import { DeleteOutlined, CloudOutlined, LockOutlined, FileImageOutlined } from '@ant-design/icons';
+import {
+  DeleteOutlined,
+  CloudOutlined,
+  LockOutlined,
+  FileImageOutlined,
+  DatabaseOutlined,
+  RocketOutlined,
+  RobotOutlined,
+  VideoCameraOutlined,
+} from '@ant-design/icons';
 import PageHeader from '@/components/common/PageHeader';
 import NASBucketCard from '@/components/nas/NASBucketCard';
 import RiskyActionButton from '@/components/authz/RiskyActionButton';
 import { contentApi } from '@/api/content';
+import { analyticsApi } from '@/api/analytics';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
 import { useAuthStore } from '@/stores/authStore';
 import { useHallStore } from '@/stores/hallStore';
-import type { HallListItem, } from '@/api/gen/client';
+import type { HallListItem } from '@/api/gen/client';
 import type { BucketStats } from '@/api/gen/client';
 
 function formatSize(bytes: number): string {
@@ -68,12 +84,20 @@ export default function OSSStatsPage({ embedded }: { embedded?: boolean } = {}) 
   const halls = hallsData?.list ?? [];
   const hallOptions = halls.map((h: HallListItem) => ({ value: h.id, label: h.name }));
 
-  // OSS stats
+  // OSS stats（"展厅可分摊"分区，按 hallID 前缀累加）
   const { data: stats, isLoading } = useQuery({
     queryKey: queryKeys.ossStats(selectedHallId!),
     queryFn: () => contentApi.getOSSStats(selectedHallId!),
     select: (res) => res.data.data,
     enabled: !!selectedHallId,
+  });
+
+  // ADR-0027: "平台公共开销"分区（无 hallID 概念，全桶聚合；仅 admin 可见）
+  const { data: platformStats } = useQuery({
+    queryKey: queryKeys.ossStatsPlatform(),
+    queryFn: () => analyticsApi.getPlatformOssStats(),
+    select: (res) => res.data.data,
+    enabled: isAdmin(),
   });
 
   const cleanupMutation = useMutation({
@@ -128,6 +152,7 @@ export default function OSSStatsPage({ embedded }: { embedded?: boolean } = {}) 
         )}
       </Space>
 
+      <SectionTitle>展厅可分摊（按展厅 ID 前缀累加）</SectionTitle>
       <Row gutter={[16, 16]}>
         {/* NAS 归档是跨展厅聚合统计，独立于展厅选择始终展示 */}
         {isAdmin() && (
@@ -172,9 +197,60 @@ export default function OSSStatsPage({ embedded }: { embedded?: boolean } = {}) 
                 color="#faad14"
               />
             </Col>
+            {stats.ai_knowledge_bucket && (
+              <Col xs={24} md={12} lg={6}>
+                <BucketCard
+                  title="知识库 (excs-ai-assets/knowledge)"
+                  icon={<DatabaseOutlined />}
+                  stats={stats.ai_knowledge_bucket}
+                  color="#722ed1"
+                />
+              </Col>
+            )}
           </>
         ) : null}
       </Row>
+
+      {/* ADR-0027: 平台公共开销分区（仅 admin 可见，无 hallID 概念） */}
+      {isAdmin() && (
+        <>
+          <SectionTitle>平台公共开销（无展厅概念，全平台共享）</SectionTitle>
+          <Row gutter={[16, 16]}>
+            {platformStats ? (
+              <>
+                <Col xs={24} md={12} lg={8}>
+                  <BucketCard
+                    title="App 发布包 (excs-releases)"
+                    icon={<RocketOutlined />}
+                    stats={platformStats.releases_bucket}
+                    color="#13c2c2"
+                  />
+                </Col>
+                <Col xs={24} md={12} lg={8}>
+                  <BucketCard
+                    title="数字人模板+TTS (excs-ai-assets)"
+                    icon={<RobotOutlined />}
+                    stats={platformStats.ai_assets_platform_bucket}
+                    color="#eb2f96"
+                  />
+                </Col>
+                <Col xs={24} md={12} lg={8}>
+                  <BucketCard
+                    title="Diag 录像 (excs-recordings)"
+                    icon={<VideoCameraOutlined />}
+                    stats={platformStats.recordings_bucket}
+                    color="#fa541c"
+                  />
+                </Col>
+              </>
+            ) : (
+              <Col xs={24}>
+                <Spin style={{ display: 'flex', justifyContent: 'center', padding: 40 }} />
+              </Col>
+            )}
+          </Row>
+        </>
+      )}
     </div>
   );
 }

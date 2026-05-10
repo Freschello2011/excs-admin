@@ -65,7 +65,12 @@ export default function RawStream({ hallId, exhibitId, deviceId, protocolStyle =
       hallId,
       exhibitId,
       onEvent: (e) => {
-        if (e.device_id != null && e.device_id !== deviceId) return;
+        // 严格 device 过滤：device_id 不匹配本设备一律丢弃（含 null）。
+        // 历史 bug：旧逻辑 `device_id != null && != deviceId` 放行 null，
+        // 导致 App 侧未填 device_id 的 inbound 帧（如 K32Buf 查询响应）串到
+        // 同展项所有设备的 Raw 终端。App 侧已配套修复按 resource 反查 owner，
+        // 本兜底 filter 防 App 漏标 / 旧版 App 兼容。
+        if (e.device_id !== deviceId) return;
         // 心跳：仅更新顶部时间戳，不入流
         if (isHeartbeatEvent(e)) {
           setLastHbAt(e.timestamp);

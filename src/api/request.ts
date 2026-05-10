@@ -397,6 +397,13 @@ request.interceptors.response.use(
             resData.error?.details;
           return Promise.reject(error);
         }
+        // PRD-inline-command-code-autogen P3.3：409 + code=3020 = inline_commands 净减命中引用方。
+        // 跳过全局 toast；调用方在 onError 里检测 __inlineCommandReferenced 弹结构化 modal。
+        if (status === 409 && resData.code === 3020 && resData.data?.error_code === 'INLINE_COMMAND_REFERENCED') {
+          (error as Error & { __inlineCommandReferenced?: unknown }).__inlineCommandReferenced =
+            resData.data.items;
+          return Promise.reject(error);
+        }
         if (status === 401 && resData.code === 1002) {
           handleLogout();
         } else if (!silent) {

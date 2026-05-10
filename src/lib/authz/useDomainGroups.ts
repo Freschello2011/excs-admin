@@ -76,12 +76,31 @@ export function useDomainGroups(
     const actionByCode = new Map<string, ActionDef>();
     for (const a of safeActions) actionByCode.set(a.code, a);
 
+    // 0. wildcard 展开：super_admin 模板的 entries 是单条 `{action_code:"*"}`
+    //    （server `buildActionSet` 不展开 64 倍以省 Redis），前端展示时必须 fan-out
+    //    成全部已注册 actions，否则该用户「能做什么」整张卡空白（Bug 5e / 2026-05-09）。
+    //    展开后的合成 entry 复用 wildcard 自身的 scope + source，让来源溯源仍指向超管 grant。
+    const expandedEntries: UserActionEntry[] = [];
+    for (const e of safeEntries) {
+      if (e.action_code === '*') {
+        for (const def of safeActions) {
+          expandedEntries.push({
+            action_code: def.code,
+            scope: e.scope,
+            source: e.source,
+          });
+        }
+      } else {
+        expandedEntries.push(e);
+      }
+    }
+
     // 1. 按 action_code 聚合 scope + sources
     const byCode = new Map<
       string,
       { scopes: Set<string>; sources: Map<number, GrantRef> }
     >();
-    for (const e of safeEntries) {
+    for (const e of expandedEntries) {
       const key = `${e.scope.type}:${e.scope.id ?? ''}`;
       const slot = byCode.get(e.action_code) ?? {
         scopes: new Set<string>(),
