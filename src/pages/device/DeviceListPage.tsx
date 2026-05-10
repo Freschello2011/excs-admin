@@ -168,9 +168,9 @@ function buildGroups(
         icon: k === 'v1' ? '🗂️' : CONNECTOR_KIND_ICON[k as ConnectorKind],
         title:
           k === 'v1'
-            ? 'v1（旧版）'
+            ? '历史导入'
             : `${CONNECTOR_KIND_LABEL[k as ConnectorKind]}`,
-        subtitle: k === 'v1' ? '迁移前的设备' : '接入方式',
+        subtitle: k === 'v1' ? '从老系统导入的设备' : '接入方式',
         devices: list,
       });
     }
@@ -193,7 +193,7 @@ function buildGroups(
     key: 'infra',
     type: 'infra',
     title: '展厅基础设施',
-    subtitle: 'exhibit_id = null · 通常驱动开关馆等触发器',
+    subtitle: '不绑定具体展项的展厅级设备（如开关馆触发器）',
     icon: '🏗️',
     devices: [],
   });
@@ -283,7 +283,7 @@ export default function DeviceListPage() {
   const cloneMutation = useMutation({
     mutationFn: (deviceId: number) => deviceV2Api.clone(deviceId),
     onSuccess: () => {
-      message.success('设备已克隆，请到列表中重命名 + 改连接参数');
+      message.success('已复制设备，请重新填写名称和连接参数');
       queryClient.invalidateQueries({ queryKey: ['devices'] });
     },
   });
@@ -440,7 +440,7 @@ export default function DeviceListPage() {
         render: (s: string) => <StatusTag status={s} />,
       },
       {
-        title: '引用 / 命令清单',
+        title: '主要命令',
         width: 240,
         render: (_, r) => <DeviceRefCell device={r} />,
       },
@@ -474,7 +474,7 @@ export default function DeviceListPage() {
               <PrinterOutlined /> 贴纸
             </a>
             <a onClick={() => openEdit(record)}>编辑</a>
-            <Tooltip title="保留 connector + 命令清单，留空 name + 连接参数；适合批量录入同型号设备">
+            <Tooltip title="复制接入方式和命令，需要重新填写名称和连接参数；适合批量录入同型号设备">
               <a onClick={() => cloneMutation.mutate(record.id)}>
                 <CopyOutlined /> 克隆
               </a>
@@ -502,7 +502,7 @@ export default function DeviceListPage() {
         description={
           devices.length > 0
             ? `共 ${totalStats.total} 台 · ${totalStats.online} 在线 / ${totalStats.offline} 离线 / ${totalStats.other} 其他`
-            : '管理当前展厅的设备实例（v2 — 4 种接入方式：已支持型号 / 标准协议 / 自定义 / 插件）'
+            : '管理当前展厅的设备（4 种接入方式：已支持型号 / 标准协议 / 设备插件 / 自定义协议）'
         }
         extra={
           canConfig ? (
@@ -987,7 +987,7 @@ function DeviceDrawer({ open, editing, hallId, exhibits, prefillExhibitId, onClo
     let preparedInlineRows: InlineCommandRow[] | null = null;
     if (kind === 'preset') {
       if (!presetKey) {
-        message.error('请选择预置型号');
+        message.error('请选择型号');
         return null;
       }
       ref.preset_key = presetKey;
@@ -1004,7 +1004,7 @@ function DeviceDrawer({ open, editing, hallId, exhibits, prefillExhibitId, onClo
       }
       ref.transport = transport;
       if (inlineCommands.length === 0) {
-        message.error('raw_transport 设备必须至少 1 条 inline_command');
+        message.error('自定义协议设备至少需要 1 条命令');
         return null;
       }
       // PRD-inline-command-code-autogen.md D2：保存前一次性把空 code 自动按名字生成
@@ -1019,7 +1019,7 @@ function DeviceDrawer({ open, editing, hallId, exhibits, prefillExhibitId, onClo
       setInlineCommands(prepared.rows);
     } else if (kind === 'plugin') {
       if (!pluginId || !pluginDeviceKey) {
-        message.error('请选择插件 + 子设备类型');
+        message.error('请选择设备插件和子设备型号');
         return null;
       }
       ref.plugin_id = pluginId;
@@ -1084,9 +1084,9 @@ function DeviceDrawer({ open, editing, hallId, exhibits, prefillExhibitId, onClo
         current={step}
         size="small"
         items={[
-          { title: '选接入方式' },
-          { title: '配置连接' },
-          { title: '通用字段' },
+          { title: '选择接入方式' },
+          { title: '设置连接' },
+          { title: '设备信息' },
         ]}
         style={{ marginBottom: 24 }}
       />
@@ -1124,7 +1124,7 @@ function DeviceDrawer({ open, editing, hallId, exhibits, prefillExhibitId, onClo
                 onClick={() => setStep0Tab('manual')}
                 style={{ minWidth: 150 }}
               >
-                ✋ 手动选 connector
+                ✋ 手动选接入方式
               </Button>
             </div>
           )}
@@ -1239,7 +1239,7 @@ function DeviceDrawer({ open, editing, hallId, exhibits, prefillExhibitId, onClo
 
             {/* raw_transport 需要在 step1 已经填好 connectionConfig；这里复用 */}
             {kind !== 'raw_transport' && (
-              <Form.Item label="连接参数" extra="按选中接入方式渲染（IP / 端口 / 串口路径等）">
+              <Form.Item label="连接参数" extra="根据接入方式不同（IP / 端口 / 串口路径等）">
                 <ConnectionConfigForKind
                   kind={kind}
                   presetKey={presetKey}
@@ -1254,12 +1254,12 @@ function DeviceDrawer({ open, editing, hallId, exhibits, prefillExhibitId, onClo
 
             <Form.Item
               name="poll_interval_seconds"
-              label="心跳轮询周期（秒）"
-              extra="ExCS 主动周期问设备"
+              label="在线检查间隔（秒）"
+              extra="每隔多久检查一次设备是否在线"
             >
               <InputNumber min={0} max={3600} placeholder="120" style={{ width: '100%' }} />
             </Form.Item>
-            <Form.Item name="serial_no" label="序列号（可选）">
+            <Form.Item name="serial_no" label="设备 SN 码（可选）" extra="机身贴纸或开机界面上的编号">
               <Input maxLength={64} />
             </Form.Item>
             <Form.Item name="notes" label="备注（可选）" extra="如：松下 PT-FRQ75CL，2024 采购">
@@ -1295,9 +1295,9 @@ function PresetStep({ value, onChange }: { value?: string; onChange: (k: string)
   return (
     <div>
       <Form.Item
-        label="预置型号"
+        label="选择型号"
         required
-        extra="从 ExCS 已支持的型号库选一个，命令清单 / 心跳全自动配好"
+        extra="从已支持的型号库选一个，命令和在线检查方式自动配好"
       >
         <Select
           showSearch
@@ -1330,10 +1330,10 @@ function PresetStep({ value, onChange }: { value?: string; onChange: (k: string)
             {TRANSPORT_LABEL[detail.transport_kind as keyof typeof TRANSPORT_LABEL] ?? detail.transport_kind}{' '}
             · 命令数：{detail.control_count + detail.query_count}
             {detail.heartbeat_patterns && detail.heartbeat_patterns.length > 0 && (
-              <span> · ♥ 心跳模式 {detail.heartbeat_patterns.length} 种</span>
+              <span> · ♥ 在线检查 {detail.heartbeat_patterns.length} 种</span>
             )}
             {detail.commands.length === 0 && detail.default_listener_patterns && (
-              <span> · 📥 接收器型</span>
+              <span> · 📥 只接收，不发命令</span>
             )}
           </div>
           {detail.description && (
@@ -1352,7 +1352,7 @@ function PresetStep({ value, onChange }: { value?: string; onChange: (k: string)
               }}
             >
               <div style={{ color: 'var(--ant-color-text-tertiary)', marginBottom: 4 }}>
-                命令清单（来自 preset，不可改）
+                命令清单（型号自带，不可改）
               </div>
               <Space size={4} wrap>
                 <Tag color="blue">control × {detail.control_count}</Tag>
@@ -1385,7 +1385,7 @@ function ProtocolStep({ value, onChange }: { value?: string; onChange: (p: strin
 
   return (
     <div>
-      <Form.Item label="标准协议" required extra="设备走通用工业协议（PJLink / Modbus / Art-Net / OSC 等）">
+      <Form.Item label="标准协议" required extra="设备使用通用协议（PJLink / Modbus / Art-Net / OSC 等）">
         <Select
           showSearch
           placeholder="选协议"
@@ -1505,7 +1505,7 @@ function RawTransportStep({
               marginBottom: 8,
             }}
           >
-            inline 命令清单 <span style={{ color: 'var(--ant-color-error)' }}>*</span>
+            命令清单 <span style={{ color: 'var(--ant-color-error)' }}>*</span>
             <span
               style={{
                 fontWeight: 'normal',
@@ -1513,7 +1513,7 @@ function RawTransportStep({
                 fontSize: 12,
               }}
             >
-              （≥1 条；这台设备能发什么由你决定）
+              （至少添加 1 条；这是这台设备能执行的所有命令）
             </span>
           </div>
           <InlineCommandsTable
@@ -1529,13 +1529,13 @@ function RawTransportStep({
             style={{ marginTop: 12 }}
             message={
               <span style={{ fontSize: 12 }}>
-                <strong>text 格式</strong>支持 <code>{`\\r \\n \\t \\\\ \\xNN`}</code> 转义；
-                <strong>hex 格式</strong>容忍空白和大小写按字节解码（如 <code>01 02 ff</code>）。
+                <strong>文本</strong>格式支持 <code>{`\\r \\n \\t \\\\ \\xNN`}</code> 表示回车换行制表符；
+                <strong>十六进制</strong>每两位代表一个字节（如 <code>01 02 FF</code>，空格和大小写均可）。
                 <br />
                 每行 <strong>[▶ 测试]</strong>{' '}
                 {editingDeviceId
-                  ? '调云端转发到展厅 App 即时发包，不持久化；保存后命令进入 effective-commands。'
-                  : '需先保存设备拿到 ID，再到调试台「命令清单」tab 即时单测。'}
+                  ? '会立即向设备发一次，不会保存到设备命令中；点保存后命令才会真正生效。'
+                  : '需要先保存设备，再到调试台「命令清单」中单独测试。'}
               </span>
             }
           />
@@ -1546,7 +1546,7 @@ function RawTransportStep({
           type="warning"
           showIcon
           style={{ marginTop: 16 }}
-          message={`${transport} raw_transport 暂不支持 inline_commands（ADR-0017 V1.1 仅 TCP / UDP / Serial / OSC；artnet / modbus 留 V2）`}
+          message={`${TRANSPORT_LABEL[transport]} 暂不支持自定义命令（目前仅 TCP / UDP / 串口 / OSC 可用）`}
         />
       )}
     </div>
@@ -1581,10 +1581,10 @@ function PluginStep({
       <Empty
         description={
           <span>
-            暂无已安装插件
+            暂无已安装的设备插件
             <br />
             <span style={{ fontSize: 12, color: 'var(--ant-color-text-tertiary)' }}>
-              Smyoo 等 plugin 在 P7 接入
+              闪优等设备插件即将接入
             </span>
           </span>
         }
@@ -1594,7 +1594,7 @@ function PluginStep({
 
   return (
     <div>
-      <Form.Item label="插件" required>
+      <Form.Item label="设备插件" required>
         <Select
           value={pluginId}
           onChange={onPluginIdChange}
@@ -1605,7 +1605,7 @@ function PluginStep({
         />
       </Form.Item>
       {pluginId && (
-        <Form.Item label="子设备类型" required>
+        <Form.Item label="子设备型号" required>
           <Select
             value={pluginDeviceKey}
             onChange={onPluginDeviceKeyChange}

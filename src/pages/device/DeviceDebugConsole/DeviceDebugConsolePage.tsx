@@ -13,8 +13,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Button, Space, Spin, Tag, Tooltip, Typography } from 'antd';
-import { CloseOutlined, FullscreenOutlined, PrinterOutlined, ReloadOutlined } from '@ant-design/icons';
+import { Alert, Button, Form, Input, InputNumber, Popover, Space, Spin, Tag, Tooltip, Typography } from 'antd';
+import { CloseOutlined, EditOutlined, FullscreenOutlined, PrinterOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useMessage } from '@/hooks/useMessage';
 import { deviceDebugApi, type DeviceDebugBundle } from '@/api/deviceDebug';
 import { channelMapApi, type ChannelEntry, type ChannelMap } from '@/api/channelMap';
@@ -24,6 +24,7 @@ import { deviceV2Api } from '@/api/deviceConnector';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
 import { startEventStream, type SSEClient } from '@/api/diag';
+import { CONNECTOR_KIND_LABEL } from '@/lib/deviceConnectorLabels';
 import type { DebugEvent, DeviceCommand as DeviceCommandView } from '@/types/deviceConnector';
 import ChannelMatrix, { type MatrixVariant } from './ChannelMatrix';
 import CascadeSelector from './CascadeSelector';
@@ -182,7 +183,7 @@ export default function DeviceDebugConsolePage() {
   const updateChannelMapMutation = useMutation({
     mutationFn: (next: ChannelMap) => channelMapApi.update(deviceId, { channel_map: next }),
     onSuccess: () => {
-      message.success('通道映射已更新');
+      message.success('通道标签已保存');
       queryClient.invalidateQueries({ queryKey: ['device-debug-bundle', deviceId] });
       queryClient.invalidateQueries({ queryKey: ['devices'] });
       setLabelPopoverIndexes(null);
@@ -206,7 +207,7 @@ export default function DeviceDebugConsolePage() {
       body: Parameters<typeof commandPresetApi.upsert>[2];
     }) => commandPresetApi.upsert(deviceId, name, body),
     onSuccess: () => {
-      message.success('指令组已保存');
+      message.success('命令组合已保存');
       queryClient.invalidateQueries({ queryKey: ['device-debug-bundle', deviceId] });
       queryClient.invalidateQueries({ queryKey: ['devices'] });
       queryClient.invalidateQueries({ queryKey: queryKeys.effectiveCommands(deviceId) });
@@ -221,7 +222,7 @@ export default function DeviceDebugConsolePage() {
   const deletePresetMutation = useMutation({
     mutationFn: (name: string) => commandPresetApi.delete(deviceId, name),
     onSuccess: () => {
-      message.success('指令组已删除');
+      message.success('命令组合已删除');
       queryClient.invalidateQueries({ queryKey: ['device-debug-bundle', deviceId] });
       queryClient.invalidateQueries({ queryKey: ['devices'] });
       queryClient.invalidateQueries({ queryKey: queryKeys.effectiveCommands(deviceId) });
@@ -321,7 +322,7 @@ export default function DeviceDebugConsolePage() {
       // 后端 cloud-dispatch 路径返 status=executed；MQTT 路径返 status=pending/sent。
       // status=failed 时把错误显式抛出（cloud-dispatch / cmd-ack 任一阶段失败都用同一字段）。
       if (res?.status === 'failed') {
-        message.error(`通道 ${index} 控制失败（status=failed）`);
+        message.error(`通道 ${index} 控制失败（设备未响应）`);
         return;
       }
       message.success(`通道 ${index} ${next === 'channels_on' ? '开' : '关'} 已发送`);
@@ -361,7 +362,7 @@ export default function DeviceDebugConsolePage() {
         params: { channels: indexes },
       });
       if (res?.status === 'failed') {
-        message.error(`批量控制失败（status=failed）`);
+        message.error(`批量控制失败（设备未响应）`);
         return;
       }
       message.success(
@@ -384,11 +385,11 @@ export default function DeviceDebugConsolePage() {
       });
       if (res?.status === 'failed') {
         message.error(
-          `触发 ${p.name} 失败（status=failed）—— 检查 command_code / params 是否匹配 device 的 effective_commands`,
+          `触发 ${p.name} 失败 —— 这条命令不在该设备的命令清单中，请检查命令名和参数`,
         );
         return;
       }
-      message.success(`已触发 ${p.name}，等下一帧 retained 验证…`);
+      message.success(`已发送 ${p.name}，等待设备回应…`);
       pendingVerifyRef.current = { name: p.name, preset: p };
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ['device-state', deviceId] });
@@ -435,13 +436,13 @@ export default function DeviceDebugConsolePage() {
     key: 'presets',
     label: (
       <>
-        📚 指令组 <span className={styles.tabBadge}>{presets.length}</span>
+        📚 命令组合 <span className={styles.tabBadge}>{presets.length}</span>
       </>
     ),
   });
   tabs.push({
     key: 'raw',
-    label: variant === 'smyoo16' ? '⌨️ HTTP 终端' : '⌨️ Raw 终端',
+    label: variant === 'smyoo16' ? '⌨️ 网络请求' : '⌨️ 协议调试',
   });
   tabs.push({ key: 'parser', label: '🔍 响应解析' });
 
@@ -460,14 +461,14 @@ export default function DeviceDebugConsolePage() {
           {device.name}
           <span className={styles.deviceId}>
             #{device.id}
-            {device.connector_kind && ` · ${device.connector_kind}`}
+            {device.connector_kind && ` · ${CONNECTOR_KIND_LABEL[device.connector_kind as keyof typeof CONNECTOR_KIND_LABEL] || device.connector_kind}`}
           </span>
         </div>
         <span className={`${styles.heartbeatBadge} ${styles[device.status]}`}>
           {device.status === 'online' && <span className={styles.heartbeatPulse} />}
-          {device.status === 'online' ? '心跳正常' : device.status === 'offline' ? '离线' : '未知'}
+          {device.status === 'online' ? '在线' : device.status === 'offline' ? '离线' : '未知'}
         </span>
-        <Tag>{device.connector_kind || 'v1'}</Tag>
+        <Tag>{CONNECTOR_KIND_LABEL[device.connector_kind as keyof typeof CONNECTOR_KIND_LABEL] || '历史导入'}</Tag>
         <span className={styles.flexSpacer} />
         <Tooltip title="打印设备贴纸（A6 不干胶 · 含 QR 扫码跳本调试台）">
           <Button
@@ -630,7 +631,7 @@ export default function DeviceDebugConsolePage() {
                       type="primary"
                       onClick={() => handleCellAction('preset', [...selectedIndexes].sort((a, b) => a - b))}
                     >
-                      💾 存为指令组…
+                      💾 存为命令组合…
                     </Button>
                     <Button size="small" onClick={() => setSelectedIndexes(new Set())}>
                       ✕ 取消选择
@@ -721,6 +722,13 @@ export default function DeviceDebugConsolePage() {
               <RawTransportSideStats
                 device={device}
                 inlineCommands={inlineCommands}
+                onSaveTarget={async (host, port) => {
+                  const cfg = { ...(device.connection_config ?? {}), host, port };
+                  await hallApi.updateDevice(deviceId, { connection_config: cfg });
+                  message.success('目标地址已更新');
+                  queryClient.invalidateQueries({ queryKey: ['device-debug-bundle', deviceId] });
+                  queryClient.invalidateQueries({ queryKey: ['devices'] });
+                }}
               />
             ) : (
               <>
@@ -775,7 +783,7 @@ export default function DeviceDebugConsolePage() {
 
           <div className={styles.sideCard}>
             <div className={styles.sideCardTitle}>
-              <span>指令组</span>
+              <span>命令组合</span>
               <small>{presets.length} 个</small>
             </div>
             <CommandPresetList
@@ -807,7 +815,7 @@ export default function DeviceDebugConsolePage() {
           <div className={styles.callout}>
             💡 <strong>实施小贴士</strong>：未标注的灯亮起后，
             <strong>右键单格 → [打标签…]</strong> 当场命名。多格拖选 →{' '}
-            <strong>[存为指令组…]</strong> 保存灯组合，演出 / 场景里直接复用。
+            <strong>[存为命令组合…]</strong> 保存灯组合，演出 / 场景里直接复用。
           </div>
         </div>
       </div>
@@ -845,7 +853,7 @@ function SmyooCredsCard({ deviceId }: { deviceId: number }) {
     mutationFn: () => deviceCommandApi.refreshCredentials(deviceId),
     onSuccess: (res) => {
       setLastRefreshed(res.data.data.refreshed_at);
-      message.success('已强制重登并刷新 ticket');
+      message.success('已重新登录厂家账号');
     },
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : '刷新失败';
@@ -855,19 +863,19 @@ function SmyooCredsCard({ deviceId }: { deviceId: number }) {
   return (
     <div className={`${styles.sideCard} ${styles.sideCardCreds}`}>
       <div className={styles.sideCardTitle}>
-        <span>🔐 厂家凭据</span>
-        <small>SmyooPlugin 委托</small>
+        <span>🔐 厂家账号</span>
+        <small>闪优云端登录</small>
       </div>
       <div className={styles.statRow}>
         <span>设备</span>
         <strong>#{deviceId}</strong>
       </div>
       <div className={styles.statRow}>
-        <span>BpeSessionId</span>
-        <strong style={{ fontSize: 11 }}>插件内部缓存（24h TTL）</strong>
+        <span>登录状态</span>
+        <strong style={{ fontSize: 11 }}>已登录（24 小时自动续期）</strong>
       </div>
       <div className={styles.statRow}>
-        <span>上次刷新</span>
+        <span>上次重登</span>
         <strong style={{ fontSize: 11 }}>
           {lastRefreshed ? new Date(lastRefreshed).toLocaleString('zh-CN', { hour12: false }) : '未刷新'}
         </strong>
@@ -879,7 +887,7 @@ function SmyooCredsCard({ deviceId }: { deviceId: number }) {
         loading={refreshMutation.isPending}
         onClick={() => refreshMutation.mutate()}
       >
-        🔄 立即刷新 ticket
+        🔄 重新登录
       </Button>
     </div>
   );
@@ -890,9 +898,11 @@ function SmyooCredsCard({ deviceId }: { deviceId: number }) {
 function RawTransportSideStats({
   device,
   inlineCommands,
+  onSaveTarget,
 }: {
   device: DeviceDebugBundle['device'];
   inlineCommands: DeviceCommandView[];
+  onSaveTarget: (host: string, port: number) => Promise<void>;
 }) {
   const cfg = device.connection_config ?? {};
   const transport = device.connector_ref?.transport;
@@ -903,19 +913,28 @@ function RawTransportSideStats({
   const broadcast = (cfg as { broadcast?: boolean }).broadcast;
   const controlCount = inlineCommands.filter((c) => (c.kind ?? 'control') === 'control').length;
   const queryCount = inlineCommands.filter((c) => c.kind === 'query').length;
+  const targetEditable = transport === 'udp' || transport === 'tcp';
   return (
     <>
       <div className={styles.statRow}>
-        <span>connector</span>
-        <strong>raw_transport · {transport ?? '?'}</strong>
+        <span>接入方式</span>
+        <strong>自定义协议 · {transport ?? '?'}</strong>
       </div>
-      {(host || port) && (
+      {(host || port || targetEditable) && (
         <div className={styles.statRow}>
           <span>目标</span>
-          <strong style={{ fontSize: 11 }}>
-            {host ?? '?'}
-            {port ? `:${port}` : ''}
-          </strong>
+          {targetEditable ? (
+            <TargetEditor
+              host={host}
+              port={port}
+              onSave={onSaveTarget}
+            />
+          ) : (
+            <strong style={{ fontSize: 11 }}>
+              {host ?? '?'}
+              {port ? `:${port}` : ''}
+            </strong>
+          )}
         </div>
       )}
       {com && (
@@ -941,7 +960,7 @@ function RawTransportSideStats({
       <div className={styles.statRow}>
         <span>命令数</span>
         <strong>
-          {controlCount} control / {queryCount} query
+          {controlCount} 控制 / {queryCount} 查询
         </strong>
       </div>
       {device.status === 'unknown' && queryCount === 0 && (
@@ -951,11 +970,124 @@ function RawTransportSideStats({
           style={{ marginTop: 10 }}
           message={
             <span style={{ fontSize: 11.5 }}>
-              无 query 命令，状态走兜底（&gt;5 分钟无操作 → unknown）
+              没有查询类命令，状态判断走兜底（5 分钟无操作 → 未知）
             </span>
           }
         />
       )}
     </>
+  );
+}
+
+/** raw_transport (udp/tcp) 设备目标地址内联编辑：点击当前值 → Popover 表单 → 保存即写 connection_config。
+ *  端口范围 1-65535；host 允许 IP/域名/广播地址（broadcast 字段单独管，这里不动）。 */
+function TargetEditor({
+  host,
+  port,
+  onSave,
+}: {
+  host: string | undefined;
+  port: number | undefined;
+  onSave: (host: string, port: number) => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [hostDraft, setHostDraft] = useState(host ?? '');
+  const [portDraft, setPortDraft] = useState<number | null>(port ?? null);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  // 每次打开 Popover 把草稿同步回当前值，避免上次取消后残留
+  useEffect(() => {
+    if (open) {
+      setHostDraft(host ?? '');
+      setPortDraft(port ?? null);
+      setErr(null);
+    }
+  }, [open, host, port]);
+
+  const submit = async () => {
+    const h = hostDraft.trim();
+    if (!h) {
+      setErr('请填写 IP 或域名');
+      return;
+    }
+    if (portDraft == null || portDraft < 1 || portDraft > 65535) {
+      setErr('端口需在 1-65535');
+      return;
+    }
+    setSaving(true);
+    setErr(null);
+    try {
+      await onSave(h, portDraft);
+      setOpen(false);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : '保存失败');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const content = (
+    <Form layout="vertical" size="small" style={{ width: 220 }}>
+      <Form.Item label="IP / 域名" style={{ marginBottom: 8 }}>
+        <Input
+          value={hostDraft}
+          onChange={(e) => setHostDraft(e.target.value)}
+          placeholder="192.168.1.10 或 255.255.255.255"
+          autoFocus
+          onPressEnter={submit}
+        />
+      </Form.Item>
+      <Form.Item label="端口" style={{ marginBottom: 8 }}>
+        <InputNumber
+          value={portDraft ?? undefined}
+          onChange={(v) => setPortDraft(typeof v === 'number' ? v : null)}
+          min={1}
+          max={65535}
+          style={{ width: '100%' }}
+          onPressEnter={submit}
+        />
+      </Form.Item>
+      {err && (
+        <div style={{ color: 'var(--ant-color-error)', fontSize: 11.5, marginBottom: 6 }}>
+          {err}
+        </div>
+      )}
+      <Space style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <Button size="small" onClick={() => setOpen(false)} disabled={saving}>
+          取消
+        </Button>
+        <Button size="small" type="primary" loading={saving} onClick={submit}>
+          保存
+        </Button>
+      </Space>
+    </Form>
+  );
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(v) => !saving && setOpen(v)}
+      trigger="click"
+      placement="left"
+      title="编辑目标地址"
+      content={content}
+    >
+      <Tooltip title="点击编辑">
+        <strong
+          style={{
+            fontSize: 11,
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+          }}
+        >
+          {host ?? '?'}
+          {port ? `:${port}` : ''}
+          <EditOutlined style={{ fontSize: 11, opacity: 0.6 }} />
+        </strong>
+      </Tooltip>
+    </Popover>
   );
 }

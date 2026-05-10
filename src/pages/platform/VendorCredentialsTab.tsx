@@ -23,7 +23,6 @@ import {
   Table,
   Tag,
   Tooltip,
-  Typography,
 } from 'antd';
 import type { TableColumnsType } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
@@ -71,7 +70,7 @@ export default function VendorCredentialsTab() {
   const createMutation = useMutation({
     mutationFn: vendorCredentialApi.create,
     onSuccess: () => {
-      message.success('厂家凭据已新建');
+      message.success('厂家账号已新建');
       queryClient.invalidateQueries({ queryKey: ['vendor-credentials'] });
       setEditorOpen(false);
     },
@@ -85,7 +84,7 @@ export default function VendorCredentialsTab() {
     mutationFn: ({ id, body }: { id: number; body: Parameters<typeof vendorCredentialApi.update>[1] }) =>
       vendorCredentialApi.update(id, body),
     onSuccess: () => {
-      message.success('厂家凭据已更新');
+      message.success('厂家账号已更新');
       queryClient.invalidateQueries({ queryKey: ['vendor-credentials'] });
       setEditorOpen(false);
     },
@@ -98,7 +97,7 @@ export default function VendorCredentialsTab() {
   const deleteMutation = useMutation({
     mutationFn: vendorCredentialApi.delete,
     onSuccess: () => {
-      message.success('厂家凭据已删除');
+      message.success('厂家账号已删除');
       queryClient.invalidateQueries({ queryKey: ['vendor-credentials'] });
     },
     onError: (err: unknown) => {
@@ -106,7 +105,7 @@ export default function VendorCredentialsTab() {
       const e = err as { response?: { status?: number; data?: { message?: string } } };
       if (e?.response?.status === 409) {
         message.error(
-          e.response?.data?.message || '该凭据被设备引用中，无法删除——请先把使用中的设备改用其它凭据',
+          e.response?.data?.message || '该账号正被设备使用，无法删除——请先把使用中的设备改用其它账号',
         );
       } else {
         message.error(e?.response?.data?.message || (err instanceof Error ? err.message : '删除失败'));
@@ -126,7 +125,7 @@ export default function VendorCredentialsTab() {
 
   const columns: TableColumnsType<VendorCredentialDTO> = [
     {
-      title: '凭据',
+      title: '账号',
       render: (_, r) => (
         <Space direction="vertical" size={0}>
           <span style={{ fontWeight: 500 }}>{r.label}</span>
@@ -144,17 +143,17 @@ export default function VendorCredentialsTab() {
         r.complete ? (
           <Tag color="success">✓ 齐全</Tag>
         ) : (
-          <Tooltip title="必填字段不全（闪优需 phone/password/client_id/client_secret）">
+          <Tooltip title="必填字段不全（闪优需要：手机号、密码、应用 ID、应用密钥）">
             <Tag color="warning">⚠ 缺字段</Tag>
           </Tooltip>
         ),
     },
     {
-      title: '上次轮换',
+      title: '上次修改',
       dataIndex: 'last_rotated_at',
       width: 160,
       render: (v?: string | null) => {
-        if (!v) return <span style={{ color: 'var(--ant-color-text-tertiary)' }}>从未轮换</span>;
+        if (!v) return <span style={{ color: 'var(--ant-color-text-tertiary)' }}>从未修改</span>;
         return <span style={{ fontSize: 12 }}>{new Date(v).toLocaleString('zh-CN', { hour12: false })}</span>;
       },
     },
@@ -177,10 +176,10 @@ export default function VendorCredentialsTab() {
       width: 160,
       render: (_, r) => (
         <Space size="small">
-          <a onClick={() => openEdit(r)}>编辑/轮换</a>
+          <a onClick={() => openEdit(r)}>编辑 / 改密码</a>
           <DangerConfirm
-            title={`删除凭据「${r.label}」？`}
-            description="如被设备引用将拒绝删除（409）；删除后该凭据加密 payload 永久丢失"
+            title={`删除账号「${r.label}」？`}
+            description="已被设备使用时不能删除；删除后无法恢复，需要重新填写厂家信息"
             onConfirm={() => deleteMutation.mutate(r.id)}
           >
             <a style={{ color: 'var(--ant-color-error)' }}>删除</a>
@@ -228,23 +227,18 @@ export default function VendorCredentialsTab() {
         type="info"
         showIcon
         style={{ marginBottom: 16 }}
-        message="厂家凭据库（excs_vendor_credentials）"
+        message="厂家账号"
         description={
           <span>
-            存储 vendor 账号 phone/password/client_id/client_secret，AES-256-GCM 加密入库，永不在 UI 回显。
-            闪优 16 路 4G 开关 preset 通过 vendor_credential_id 委托 SmyooPlugin 使用本表凭据登录云端。
-            服务器迁移时务必同步主密钥（详见{' '}
-            <Typography.Link href="/01-docs/05-ops/deploy-guide.md" target="_blank">
-              deploy-guide.md
-            </Typography.Link>
-            ）。
+            登录云端设备所用的厂家账号（如闪优开关）。账号信息加密保存，密码不会在页面显示。
+            添加 / 编辑后即可在「设备插件」类设备中绑定使用。
           </span>
         }
       />
 
       <Space style={{ marginBottom: 12 }}>
         <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-          新建凭据
+          新建账号
         </Button>
         <span style={{ color: 'var(--ant-color-text-tertiary)', fontSize: 12 }}>
           共 {list.length} 条
@@ -303,7 +297,7 @@ function CredentialEditor({
   return (
     <Modal
       open={open}
-      title={editing ? `编辑凭据 — ${editing.label}` : '新建厂家凭据'}
+      title={editing ? `编辑账号 — ${editing.label}` : '新建厂家账号'}
       onCancel={() => {
         form.resetFields();
         onCancel();
@@ -329,9 +323,9 @@ function CredentialEditor({
       >
         <Form.Item
           name="vendor_key"
-          label="厂家 key"
+          label="厂家代号"
           rules={[{ required: true, message: '必填' }]}
-          extra="如 smyoo（闪优 4G）；与 preset 的 delegate_plugin.plugin_id 对齐"
+          extra="如 smyoo（闪优）；由设备插件自动识别，普通用户不用动"
         >
           <Input maxLength={64} disabled={!!editing} placeholder="smyoo" />
         </Form.Item>
@@ -353,35 +347,37 @@ function CredentialEditor({
               style={{ marginBottom: 12 }}
               message={
                 editing
-                  ? '编辑模式：留空表示不修改；任何字段填了就会触发完整 payload 重写 + last_rotated_at 刷新。'
-                  : '闪优 vendor_key=smyoo 必填以下 4 字段（缺一不可），从闪优后台开发者中心获取。'
+                  ? '编辑模式：留空表示不修改；任意一项填了，会一并保存并记录修改时间。'
+                  : '闪优账号需要填写以下 4 项（缺一不可），从闪优开发者后台获取。'
               }
             />
             <Form.Item
               name="phone"
-              label="phone（账号手机号）"
-              rules={editing ? [] : [{ required: true, message: '闪优凭据必填' }]}
+              label="登录手机号"
+              rules={editing ? [] : [{ required: true, message: '闪优账号必填' }]}
             >
               <Input maxLength={32} placeholder="20019812736" />
             </Form.Item>
             <Form.Item
               name="password"
-              label="password"
-              rules={editing ? [] : [{ required: true, message: '闪优凭据必填' }]}
+              label="登录密码"
+              rules={editing ? [] : [{ required: true, message: '闪优账号必填' }]}
             >
               <Input.Password autoComplete="new-password" placeholder={editing ? '留空 = 不修改' : ''} />
             </Form.Item>
             <Form.Item
               name="client_id"
-              label="client_id"
-              rules={editing ? [] : [{ required: true, message: '闪优凭据必填' }]}
+              label="应用 ID"
+              rules={editing ? [] : [{ required: true, message: '闪优账号必填' }]}
+              extra="厂家给的对接编号"
             >
               <Input placeholder={editing ? '留空 = 不修改' : ''} />
             </Form.Item>
             <Form.Item
               name="client_secret"
-              label="client_secret"
-              rules={editing ? [] : [{ required: true, message: '闪优凭据必填' }]}
+              label="应用密钥"
+              rules={editing ? [] : [{ required: true, message: '闪优账号必填' }]}
+              extra="厂家给的对接密钥"
             >
               <Input.Password autoComplete="new-password" placeholder={editing ? '留空 = 不修改' : ''} />
             </Form.Item>

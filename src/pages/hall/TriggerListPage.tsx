@@ -129,7 +129,7 @@ export default function TriggerListPage() {
 
   const testMutation = useMutation({
     mutationFn: (id: number) => triggerApi.test(id),
-    onSuccess: () => message.success('已发送一次模拟触发'),
+    onSuccess: () => message.success('已发送一次测试信号'),
   });
 
   const columns: TableColumnsType<Trigger> = [
@@ -149,9 +149,9 @@ export default function TriggerListPage() {
       width: 150,
       render: (k: TriggerKind) =>
         k === 'listener' ? (
-          <Tag color="blue">📡 监听数据</Tag>
+          <Tag color="blue">📡 设备消息触发</Tag>
         ) : (
-          <Tag color="purple">⏰ 按时间表</Tag>
+          <Tag color="purple">⏰ 定时触发</Tag>
         ),
     },
     {
@@ -184,7 +184,7 @@ export default function TriggerListPage() {
           >
             编辑
           </a>
-          <Tooltip title="发一条模拟事件，验证 action 是否生效">
+          <Tooltip title="发一次假信号，看动作能不能跑通">
             <a onClick={() => testMutation.mutate(r.id)}>
               <ExperimentOutlined /> 测试
             </a>
@@ -204,7 +204,7 @@ export default function TriggerListPage() {
     <div>
       <PageHeader
         title="触发器"
-        description="监听设备数据 / 按时间表自动执行场景 / 命令 / 媒体 / 查询 / Webhook"
+        description="当设备发来数据，或到点了，自动切场景 / 发命令 / 播放媒体"
         extra={
           <Button
             type="primary"
@@ -231,8 +231,8 @@ export default function TriggerListPage() {
           <Space style={{ marginBottom: 16 }}>
             <Radio.Group value={filterKind} onChange={(e) => setFilterKind(e.target.value)}>
               <Radio.Button value="all">全部</Radio.Button>
-              <Radio.Button value="listener">📡 监听数据</Radio.Button>
-              <Radio.Button value="timer">⏰ 按时间表</Radio.Button>
+              <Radio.Button value="listener">📡 设备消息触发</Radio.Button>
+              <Radio.Button value="timer">⏰ 定时触发</Radio.Button>
             </Radio.Group>
           </Space>
           <Table
@@ -291,13 +291,13 @@ function SourceSummary({ trigger, devices }: { trigger: Trigger; devices: Device
     let summary = '';
     switch (sched.schedule_kind) {
       case 'cron':
-        summary = `cron: ${sched.cron}`;
+        summary = `按周期：${sched.cron}`;
         break;
       case 'once_at':
-        summary = `单次：${sched.once_at}`;
+        summary = `一次性：${sched.once_at}`;
         break;
       case 'interval':
-        summary = `每 ${sched.interval_seconds}s 一次`;
+        summary = `每 ${sched.interval_seconds} 秒一次`;
         break;
     }
     return <span style={{ fontSize: 13 }}>{summary}</span>;
@@ -506,7 +506,7 @@ function TriggerDrawer({ open, editing, hallId, devices, exhibits, onClose, onSa
         try {
           new RegExp(conditionPattern);
         } catch (e) {
-          message.error(`正则编译失败：${(e as Error).message}`);
+          message.error(`匹配规则有误：${(e as Error).message}`);
           return;
         }
       }
@@ -614,8 +614,8 @@ function TriggerDrawer({ open, editing, hallId, devices, exhibits, onClose, onSa
         </Form.Item>
         <Form.Item label="触发方式">
           <Radio.Group value={kind} onChange={(e) => setKind(e.target.value)}>
-            <Radio.Button value="listener">📡 监听数据（设备发什么时触发）</Radio.Button>
-            <Radio.Button value="timer">⏰ 按时间表（定时触发）</Radio.Button>
+            <Radio.Button value="listener">📡 设备消息触发（设备发数据时触发）</Radio.Button>
+            <Radio.Button value="timer">⏰ 定时触发（到点自动执行）</Radio.Button>
           </Radio.Group>
         </Form.Item>
 
@@ -788,7 +788,7 @@ function ListenerForm({
           type="info"
           showIcon
           style={{ marginBottom: 12 }}
-          message="✨ 这是接收器型设备 — 可以用现成 pattern"
+          message="✨ 这是接收器型设备 — 可以用现成的匹配规则"
           description={
             <div>
               <Radio.Group
@@ -796,12 +796,12 @@ function ListenerForm({
                 onChange={(e) => onUsePresetPatternChange(e.target.value)}
                 style={{ marginBottom: 8 }}
               >
-                <Radio value={true}>用预置 pattern（推荐）</Radio>
-                <Radio value={false}>手写 pattern</Radio>
+                <Radio value={true}>用预置规则（推荐）</Radio>
+                <Radio value={false}>手写规则</Radio>
               </Radio.Group>
               {usePresetPattern && (
                 <Select
-                  placeholder="选一条预置数据模式"
+                  placeholder="选一条预置匹配规则"
                   style={{ width: '100%', marginTop: 8 }}
                   value={pickedPresetPatternIdx}
                   onChange={onPickPresetPattern}
@@ -842,13 +842,13 @@ function ListenerForm({
             <span>匹配规则</span>
             {usePresetPattern === true && (
               <span style={{ fontSize: 12, color: 'var(--ant-color-text-tertiary)' }}>
-                🔒 来自预置库不可改 · 想改请去 设备目录 改 preset 全局规则（admin 权限）
+                🔒 来自预置库不可改 · 想改请去 设备目录 调整全局规则（管理员权限）
               </span>
             )}
           </Space>
         }
         required
-        extra="命中后可以引用：${1} ${2} ...（按 capture group 顺序）"
+        extra="匹配到后可以引用抓出来的内容：${1} ${2} ...（按括号出现的顺序）"
       >
         <Input.TextArea
           value={conditionPattern}
@@ -918,7 +918,7 @@ function TimerForm({
 }) {
   return (
     <>
-      <Form.Item label="调度类型">
+      <Form.Item label="时间方式">
         <Radio.Group value={scheduleKind} onChange={(e) => onScheduleKindChange(e.target.value)}>
           {(['cron', 'once_at', 'interval'] as ScheduleKind[]).map((k) => (
             <Radio.Button key={k} value={k}>
@@ -931,11 +931,11 @@ function TimerForm({
         <Form.Item
           label={
             <Space>
-              <span>Cron 表达式</span>
+              <span>时间表达式</span>
               <Tooltip
                 title={
                   <div style={{ fontSize: 12 }}>
-                    五字段 cron：分 时 日 月 周
+                    格式：分 时 日 月 周
                     <br />
                     <code>0 9 * * *</code> = 每天 9:00
                     <br />
@@ -946,7 +946,7 @@ function TimerForm({
                 }
               >
                 <span style={{ fontSize: 12, color: 'var(--ant-color-text-tertiary)', cursor: 'help' }}>
-                  ❓ cron 是什么？
+                  ❓ 怎么填？
                 </span>
               </Tooltip>
             </Space>
@@ -957,7 +957,7 @@ function TimerForm({
         </Form.Item>
       )}
       {scheduleKind === 'once_at' && (
-        <Form.Item label="单次时刻 (ISO8601)" required>
+        <Form.Item label="执行时刻" required extra="格式：年-月-日T时:分:秒+08:00">
           <Input
             value={onceAt}
             onChange={(e) => onOnceAtChange(e.target.value)}
@@ -1069,13 +1069,13 @@ function CommandActionForm({
           options={devices}
         />
       </Form.Item>
-      <Form.Item label="命令代号" required extra="如 power_on / channel_on / set_brightness">
+      <Form.Item label="命令名" required extra="如 power_on / channel_on / set_brightness">
         <Input
           value={payload.command_code as string | undefined}
           onChange={(e) => set('command_code', e.target.value)}
         />
       </Form.Item>
-      <Form.Item label="参数（JSON）">
+      <Form.Item label="参数（JSON 格式）">
         <Input.TextArea
           rows={3}
           value={JSON.stringify(payload.params ?? {}, null, 2)}
@@ -1102,7 +1102,7 @@ function QueryActionForm({
   devices: { value: number; label: string }[];
 }) {
   return (
-    <Form.Item label="设备" required extra="立即触发该设备一次 query，刷新缓存状态">
+    <Form.Item label="设备" required extra="立即向该设备发一次查询，刷新它的最新状态">
       <Select value={payload.device_id as number | undefined} onChange={(v) => set('device_id', v)} options={devices} />
     </Form.Item>
   );
@@ -1139,22 +1139,22 @@ function WebhookActionForm({
   return (
     <>
       <Form.Item
-        label="Webhook URL"
+        label="网址"
         required
-        extra="必须是 https 公网地址（不能是局域网 IP / 127.0.0.1）"
+        extra="必须是公网 https 地址（不能是局域网 IP / 127.0.0.1）"
         validateStatus={isPrivateUrl || isHttp ? 'warning' : undefined}
-        help={isPrivateUrl ? '⚠ 检测到局域网 IP，可能调不通' : isHttp ? '⚠ 推荐 https' : undefined}
+        help={isPrivateUrl ? '⚠ 检测到局域网 IP，可能调不通' : isHttp ? '⚠ 建议使用 https' : undefined}
       >
         <Input value={url} onChange={(e) => set('url', e.target.value)} placeholder="https://example.com/hook" />
       </Form.Item>
-      <Form.Item label="HTTP method">
+      <Form.Item label="请求方式">
         <Radio.Group value={(payload.method as string | undefined) ?? 'POST'} onChange={(e) => set('method', e.target.value)}>
           <Radio.Button value="POST">POST</Radio.Button>
           <Radio.Button value="GET">GET</Radio.Button>
           <Radio.Button value="PUT">PUT</Radio.Button>
         </Radio.Group>
       </Form.Item>
-      <Form.Item label="Headers (JSON)">
+      <Form.Item label="请求头（JSON 格式）">
         <Input.TextArea
           rows={2}
           value={JSON.stringify(payload.headers ?? {}, null, 2)}
@@ -1167,7 +1167,7 @@ function WebhookActionForm({
           }}
         />
       </Form.Item>
-      <Form.Item label="Body 模板" extra="支持 ${1} / ${2}（按 listener capture 顺序）/ ${trigger_name} / ${fired_at} 占位符">
+      <Form.Item label="请求内容模板" extra="可引用：${1} ${2}（设备消息中抓出来的内容）/ ${trigger_name}（触发器名）/ ${fired_at}（触发时间）">
         <Input.TextArea
           rows={4}
           value={(payload.body as string | undefined) ?? ''}
@@ -1190,9 +1190,9 @@ function WebhookActionForm({
       </Space>
       <details>
         <summary style={{ cursor: 'pointer', color: 'var(--ant-color-text-tertiary)' }}>
-          高级（HMAC 签名）
+          高级（签名校验）
         </summary>
-        <Form.Item label="HMAC 密钥引用名" extra="留空表示不签名" style={{ marginTop: 12 }}>
+        <Form.Item label="签名密钥名称" extra="留空表示不签名" style={{ marginTop: 12 }}>
           <Input
             value={(payload.hmac_secret_ref as string | undefined) ?? ''}
             onChange={(e) => set('hmac_secret_ref', e.target.value)}

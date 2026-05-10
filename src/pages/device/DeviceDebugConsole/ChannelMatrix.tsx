@@ -141,7 +141,7 @@ export default function ChannelMatrix({
       },
       {
         key: 'preset',
-        label: multi ? `💾 加入指令组…（${targets.length} 路）` : '💾 加入指令组…',
+        label: multi ? `💾 加入命令组合…（${targets.length} 路）` : '💾 加入命令组合…',
         onClick: () => onCellAction('preset', targets),
       },
     ];

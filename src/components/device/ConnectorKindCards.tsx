@@ -10,8 +10,8 @@ const KINDS: Array<{
 }> = [
   { kind: 'preset', scenario: '场景：投影机（PJLink）/ 秀展 K32 / 激光笔接收器' },
   { kind: 'protocol', scenario: '场景：通用 PJLink 设备 / Modbus PLC / Art-Net 灯具' },
-  { kind: 'raw_transport', scenario: '场景：自研 ESP32 / 串口设备 / 自定义协议' },
-  { kind: 'plugin', scenario: '场景：闪优开关 / 米家 / 涂鸦智能（P7 接入）' },
+  { kind: 'raw_transport', scenario: '场景：自研 ESP32 / 串口控制器 / 现场写命令的设备' },
+  { kind: 'plugin', scenario: '场景：闪优开关 / 米家 / 涂鸦智能等云端设备' },
 ];
 
 interface Props {

@@ -18,8 +18,8 @@ import type {
 export const CONNECTOR_KIND_LABEL: Record<ConnectorKind, string> = {
   preset: '已支持型号',
   protocol: '标准协议',
-  raw_transport: '自定义',
-  plugin: '插件',
+  raw_transport: '自定义协议',
+  plugin: '设备插件',
 };
 
 export const CONNECTOR_KIND_ICON: Record<ConnectorKind, string> = {
@@ -30,10 +30,10 @@ export const CONNECTOR_KIND_ICON: Record<ConnectorKind, string> = {
 };
 
 export const CONNECTOR_KIND_DESC: Record<ConnectorKind, string> = {
-  preset: '从已支持的型号库挑一个，命令清单 / 心跳全自动配好',
-  protocol: '设备走标准协议（如 PJLink / Modbus / Art-Net）',
-  raw_transport: '自研 / 非标设备，自己定义命令和监听规则',
-  plugin: '通过插件接入复杂会话型设备（如智能开关、自动化平台）',
+  preset: '从型号库选一个（如投影机、矩阵切换器），命令和检查方式自动配好',
+  protocol: '设备使用通用协议（如 PJLink、Modbus、Art-Net、OSC），按协议填命令',
+  raw_transport: '自己写命令的设备（自研 ESP32、串口控制器等）',
+  plugin: '通过厂家账号接入云端设备（如闪优开关、米家）',
 };
 
 export const TRANSPORT_LABEL: Record<TransportKind, string> = {
@@ -48,24 +48,24 @@ export const TRANSPORT_LABEL: Record<TransportKind, string> = {
 };
 
 export const PATTERN_KIND_LABEL: Record<PatternKind, string> = {
-  exact: '完全相等',
-  regex: '模糊匹配',
-  bytes: '二进制',
+  exact: '完全相同',
+  regex: '按规则匹配',
+  bytes: '十六进制字节',
 };
 
 export const PATTERN_KIND_HELP: Record<PatternKind, string> = {
-  exact: '完整字符串一字不差，例：STAGE_START',
-  regex: '用正则表达式描述，例：^STAGE_(\\d+)$',
-  bytes: '十六进制字节序列，例：FF 01 02 0A',
+  exact: '内容必须一字不差，例：STAGE_START',
+  regex: '按规则模糊匹配（高级：正则表达式），例：开头是 STAGE_ 后面跟数字  ^STAGE_(\\d+)$',
+  bytes: '每两位代表一个字节，例：FF 01 02 0A',
 };
 
 export const EVENT_KIND_LABEL: Record<EventKind, string> = {
   outbound: '发出',
   inbound: '收到',
-  listener_hit: '命中',
-  listener_miss: '没命中',
+  listener_hit: '匹配到',
+  listener_miss: '未匹配到',
   trigger_fire: '触发',
-  poll_cycle: '轮询',
+  poll_cycle: '在线检查',
   error: '错误',
 };
 
@@ -80,8 +80,8 @@ export const EVENT_KIND_COLOR: Record<EventKind, string> = {
 };
 
 export const SCHEDULE_KIND_LABEL: Record<ScheduleKind, string> = {
-  cron: '周期（每天 / 每周）',
-  once_at: '单次时刻',
+  cron: '按周期执行（每天 / 每周）',
+  once_at: '一次性',
   interval: '间隔重复',
 };
 
@@ -90,7 +90,7 @@ export const ACTION_KIND_LABEL: Record<ActionKind, string> = {
   command: '⚙ 下发命令',
   media: '▶ 播放媒体',
   query: '🔍 查询设备',
-  webhook: '🌐 调外部接口',
+  webhook: '🌐 调用网址',
 };
 
 export const RESOURCE_KIND_LABEL: Record<ResourceKind, string> = {

@@ -102,8 +102,8 @@ export default function RawStream({ hallId, exhibitId, deviceId, protocolStyle =
   return (
     <div className={styles.sideCard}>
       <div className={styles.sideCardTitle}>
-        <span>{protocolStyle === 'http' ? 'HTTP 调用记录' : 'Raw 终端'}</span>
-        <span className={styles.heartbeatChip} title={lastHbAt ? `最近心跳 ${lastHbAt}` : '尚未收到心跳'}>
+        <span>{protocolStyle === 'http' ? '网络请求记录' : '协议调试'}</span>
+        <span className={styles.heartbeatChip} title={lastHbAt ? `最近收到 ${lastHbAt}` : '尚未收到设备数据'}>
           <span className={styles.heartbeatChipDot} />
           ♥ {formatRelativeTime(lastHbAt)}
         </span>

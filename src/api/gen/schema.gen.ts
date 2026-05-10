@@ -1742,6 +1742,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/control-app/sessions/{sessionId}/network-fingerprint": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 中控会话网络指纹上报（ADR-0029 WOL 兜底 LAN sanity 数据源）
+         * @description 中控 App 周期性（默认 5min + 网络变化触发）上报本机活跃 NIC 列表 + mDNS
+         *     探测结果。server 行级覆盖到 control_app_sessions.network_fingerprint（JSON）。
+         *
+         *     路径 sessionId 必须与 user_token 解出的 user_id 匹配同一会话；不匹配返 403。
+         *     session 不存在返 404。请求体 JSON 反序列化失败返 400。
+         *
+         *     WolDelegationService 选 actor 时按 (中控 IP) ⊆ (hall.expected_subnets) +
+         *     mdns_seen_excs 派生 strong/weak/degraded 三档（详见 ADR-0029 §LAN sanity 矩阵）。
+         */
+        post: operations["updateControlSessionFingerprint"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/shows": {
         parameters: {
             query?: never;
@@ -6901,6 +6928,26 @@ export interface components {
              *     与 hall_switch envelope.new_subscribe_topics 同源，App reconcile 时直接复用。
              */
             subscribe_topics?: string[];
+        };
+        /** @description 中控 App 上报的单个 NIC 原始字段（不含派生 is_private/suggested_cidr，与 diag.NetworkInterfaceVO 区分） */
+        NetworkFingerprintInterface: {
+            /** @description NIC 名（en0 / eth0 / wlan0） */
+            name: string;
+            /** @description IPv4 地址 */
+            ip: string;
+            /** @description 子网掩码（255.255.255.0 形态） */
+            subnet_mask: string;
+        };
+        /** @description ADR-0029 中控 App 心跳指纹上报；server 行级覆盖到 control_app_sessions.network_fingerprint */
+        NetworkFingerprintRequest: {
+            /** @description 当前活跃 NIC 列表；空数组表示无网络 */
+            interfaces: components["schemas"]["NetworkFingerprintInterface"][];
+            /** @description 最近一次 mDNS 探测窗口（≤2s）是否看到任一 _excs._tcp 服务 */
+            mdns_seen_excs: boolean;
+        };
+        NetworkFingerprintResult: {
+            /** @description 落字段成功（含 owner 校验通过） */
+            accepted: boolean;
         };
         /** @description 演出列表项（不含 tracks，列表轻量化） */
         ShowListItemDTO: {
@@ -13727,6 +13774,38 @@ export interface operations {
                     };
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateControlSessionFingerprint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NetworkFingerprintRequest"];
+            };
+        };
+        responses: {
+            /** @description 落字段成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["NetworkFingerprintResult"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];

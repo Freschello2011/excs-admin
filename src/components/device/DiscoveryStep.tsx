@@ -194,7 +194,7 @@ export default function DiscoveryStep({ hallId, smyooCredentialId, onPrefill }: 
   const handleAdd = (r: DiscoveryResult) => {
     const prefill = inferPrefill(r);
     if (!prefill) {
-      message.warning(`暂不支持自动预填 ${r.protocol}，请手动选 connector`);
+      message.warning(`暂不支持自动预填 ${r.protocol}，请手动选接入方式`);
       return;
     }
     setAddedEndpoints((prev) => new Set(prev).add(r.endpoint));
@@ -418,7 +418,7 @@ export default function DiscoveryStep({ hallId, smyooCredentialId, onPrefill }: 
           showIcon
           style={{ marginTop: 16 }}
           message="未匹配？"
-          description="切到上方 [手动选 connector] 自己挑接入方式，或回这里改协议复选项重扫。"
+          description="切到上方 [手动选接入方式] 自己挑，或回这里改协议复选项重扫。"
         />
       )}
     </div>

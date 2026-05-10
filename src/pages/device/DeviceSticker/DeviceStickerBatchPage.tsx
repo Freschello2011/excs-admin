@@ -102,8 +102,8 @@ export default function DeviceStickerBatchPage() {
         <div className={styles.center}>
           <Alert
             type="warning"
-            message="未指定设备 ID"
-            description="URL 应为 /devices/sticker/batch?ids=12,13,29"
+            message="链接格式错误"
+            description="请从设备列表点「贴纸」按钮进入，或勾选多台设备后点「批量打印贴纸」"
           />
           <Button onClick={() => navigate('/devices')} style={{ marginTop: 16 }} icon={<ArrowLeftOutlined />}>
             返回设备列表

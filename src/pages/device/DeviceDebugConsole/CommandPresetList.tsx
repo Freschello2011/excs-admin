@@ -52,7 +52,7 @@ export default function CommandPresetList({
     <div>
       {presets.length === 0 ? (
         <Text type="secondary" style={{ fontSize: 12 }}>
-          尚未保存任何指令组——拖选通道 → 右键 [加入指令组…] 开始
+          尚未保存任何命令组合——拖选通道 → 右键 [加入命令组合…] 开始
         </Text>
       ) : (
         presets.map((p) => {
@@ -116,7 +116,7 @@ export default function CommandPresetList({
                 </button>
               </Tooltip>
               <Button size="small" icon={<EditOutlined />} onClick={() => onEdit(p)} />
-              <Popconfirm title={`删除指令组 ${p.name}？`} onConfirm={() => onDelete(p)}>
+              <Popconfirm title={`删除命令组合 ${p.name}？`} onConfirm={() => onDelete(p)}>
                 <Button size="small" danger icon={<DeleteOutlined />} />
               </Popconfirm>
             </div>
@@ -130,7 +130,7 @@ export default function CommandPresetList({
         block
         style={{ marginTop: 6 }}
       >
-        新增指令组
+        新增命令组合
       </Button>
     </div>
   );

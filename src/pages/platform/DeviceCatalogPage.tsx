@@ -43,7 +43,7 @@ export default function DeviceCatalogPage() {
     <div>
       <PageHeader
         title="设备目录"
-        description="一处管理所有支持的设备类型：预置型号、标准协议、插件，以及未来的触发器模板"
+        description="集中管理所有支持的设备类型：已支持型号、标准协议、设备插件、厂家账号"
       />
       <Tabs
         activeKey={tab}
@@ -51,14 +51,14 @@ export default function DeviceCatalogPage() {
         items={[
           { key: 'preset', label: '已支持型号', children: <PresetCatalogTab /> },
           { key: 'protocol', label: '标准协议', children: <ProtocolProfileTab /> },
-          { key: 'plugin', label: '插件', children: <PluginTab /> },
-          { key: 'vendor-credentials', label: '厂家凭据', children: <VendorCredentialsTab /> },
+          { key: 'plugin', label: '设备插件', children: <PluginTab /> },
+          { key: 'vendor-credentials', label: '厂家账号', children: <VendorCredentialsTab /> },
           {
             key: 'trigger-template',
             label: '触发器模板',
             children: (
               <Empty
-                description="V3 计划中：可保存常用触发器配置为模板（如「每天开馆前 10 分钟开投影」），新触发器一键引用。当前版本（V2）请在「触发器」页面手动建。"
+                description="规划中：常用触发器一键复用（如「每天开馆前 10 分钟开投影」）。当前版本请在「触发器」页面手动添加。"
                 style={{ padding: 60 }}
               />
             ),
@@ -116,8 +116,8 @@ function PresetCatalogTab() {
       width: 140,
       render: (_, r) =>
         DEPRECATED_PRESETS.has(r.key) ? (
-          <Tag color="error" title="该预置已废弃，建议改用 plugin 接入">
-            ⚠ 已废弃
+          <Tag color="error" title="该型号已停用，请改用「设备插件」方式接入">
+            ⚠ 已停用
           </Tag>
         ) : (
           <Tag color="success">可用</Tag>
@@ -130,8 +130,8 @@ function PresetCatalogTab() {
       <Alert
         type="info"
         showIcon
-        message="预置库（只读）"
-        description="预置型号在代码中以 yaml 文件维护（go:embed 编译时打入）。如需新增 / 修改，请联系 ExCS 工程师。"
+        message="型号库（只读）"
+        description="已支持型号在系统中预置，如需新增 / 修改，请联系 ExCS 工程师。"
         style={{ marginBottom: 16 }}
       />
       <Table
@@ -169,7 +169,7 @@ function PresetDetailDrawer({
 
   return (
     <Drawer
-      title={detail ? `预置：${detail.name}` : '预置详情'}
+      title={detail ? `型号：${detail.name}` : '型号详情'}
       open={!!presetKey}
       onClose={onClose}
       width={720}
@@ -188,8 +188,8 @@ function PresetDetailBody({ detail }: { detail: PresetDetailDTO }) {
         <Alert
           type="error"
           showIcon
-          message="该预置已废弃"
-          description="此型号的接入方式已改为「插件」。新设备请在「设备管理 → 新建」时选择插件接入。已存在设备暂不强制迁移。"
+          message="该型号已停用"
+          description="该型号已升级为「设备插件」方式。新建设备请选「设备插件」；已有设备暂时保留，可继续使用。"
           style={{ marginBottom: 16 }}
         />
       )}
@@ -238,8 +238,8 @@ function PresetDetailBody({ detail }: { detail: PresetDetailDTO }) {
       {/* P3 留尾 1：心跳模式 */}
       {detail.heartbeat_patterns && detail.heartbeat_patterns.length > 0 && (
         <Section
-          title="心跳模式"
-          subtitle={`设备主动发的"我还活着"信号 — 周期上限 ≤ ${detail.heartbeat_period_seconds_max ?? 10}s · 共 ${detail.heartbeat_patterns.length} 种`}
+          title="在线检查方式"
+          subtitle={`设备主动发出的"我还活着"信号 — 间隔不超过 ${detail.heartbeat_period_seconds_max ?? 10} 秒`}
         >
           <HeartbeatPatternList value={detail.heartbeat_patterns} readOnly />
         </Section>
@@ -249,7 +249,7 @@ function PresetDetailBody({ detail }: { detail: PresetDetailDTO }) {
       {detail.default_listener_patterns && detail.default_listener_patterns.length > 0 && (
         <Section
           title="该设备会发送的数据"
-          subtitle="admin 配触发器时一键引用，无需手抄说明书"
+          subtitle="配触发器时一键引用，无需手抄说明书"
         >
           <DocumentedListenerPatternList
             value={detail.default_listener_patterns}
@@ -353,7 +353,7 @@ function ProtocolProfileTab() {
       ),
     },
     {
-      title: '心跳指令',
+      title: '在线检查指令',
       dataIndex: 'heartbeat_command_code',
       width: 160,
       render: (v?: string) => (v ? <code>{v}</code> : <span style={{ color: 'var(--ant-color-text-tertiary)' }}>-</span>),
@@ -372,7 +372,7 @@ function ProtocolProfileTab() {
       <Alert
         type="info"
         showIcon
-        message="标准协议（admin 极少修改）"
+        message="标准协议（一般不改）"
         description="像 PJLink、Modbus、Art-Net 这类标准协议的命令模板。一般无需改动；新增命令请联系 ExCS 工程师。"
         style={{ marginBottom: 16 }}
       />
@@ -461,7 +461,7 @@ function CreateProtocolProfileModal({ open, onClose }: { open: boolean; onClose:
         type="info"
         showIcon
         message="新建后命令清单为空"
-        description="协议骨架先创建，命令 / connection_schema / 心跳模式可在「编辑」抽屉中补；复杂命令编辑请联系 ExCS 工程师。"
+        description="先创建协议名，命令 / 连接配置 / 在线检查方式可在「编辑」中补充；复杂命令编辑请联系 ExCS 工程师。"
         style={{ marginBottom: 16 }}
       />
       <Form form={form} layout="vertical" preserve={false}>
@@ -473,7 +473,7 @@ function CreateProtocolProfileModal({ open, onClose }: { open: boolean; onClose:
             { pattern: /^[a-z0-9_]+$/, message: '只能用小写字母 / 数字 / 下划线' },
             { max: 64, message: '不超过 64 字符' },
           ]}
-          extra="唯一标识，URL-safe；如 my_custom_tcp"
+          extra="内部代号，只能用小写字母 / 数字 / 下划线（如 my_custom_tcp）"
         >
           <Input placeholder="如 my_custom_tcp" />
         </Form.Item>
@@ -486,10 +486,10 @@ function CreateProtocolProfileModal({ open, onClose }: { open: boolean; onClose:
         </Form.Item>
         <Form.Item
           name="transport_kind"
-          label="传输类型"
-          extra="留空表示由插件 / 自定义协议自描述"
+          label="连接方式"
+          extra="留空表示由插件或自定义协议决定"
         >
-          <Select allowClear placeholder="选择物理传输" options={TRANSPORT_OPTIONS} />
+          <Select allowClear placeholder="选择连接方式" options={TRANSPORT_OPTIONS} />
         </Form.Item>
         <Form.Item name="notes" label="备注">
           <Input.TextArea rows={2} maxLength={500} />
@@ -512,7 +512,7 @@ function PluginTab() {
 
   const columns: TableColumnsType<PluginDTO> = [
     {
-      title: '插件',
+      title: '设备插件',
       render: (_, r) => (
         <Space direction="vertical" size={0}>
           <span style={{ fontWeight: 500 }}>{r.name}</span>
@@ -547,12 +547,12 @@ function PluginTab() {
       <Alert
         type="warning"
         showIcon
-        message="插件接入路线（P7 接入计划）"
-        description="像闪优开关、米家这类需要会话鉴权 / 复杂登录流程的设备，将通过插件接入。当前版本暂无已安装插件。"
+        message="设备插件接入路线"
+        description="像闪优开关、米家这类需要厂家账号 / 复杂登录流程的云端设备，通过设备插件接入。"
         style={{ marginBottom: 16 }}
       />
       {list.length === 0 && !isLoading ? (
-        <Empty description="暂无已安装插件 — Smyoo 等 plugin 在 P7 接入" />
+        <Empty description="暂无已安装的设备插件 — 闪优等插件即将接入" />
       ) : (
         <Table
           columns={columns}
@@ -563,7 +563,7 @@ function PluginTab() {
         />
       )}
       <Drawer
-        title={selectedPlugin ? `插件子设备：${selectedPlugin}` : '插件子设备'}
+        title={selectedPlugin ? `子设备型号：${selectedPlugin}` : '子设备型号'}
         open={!!selectedPlugin}
         onClose={() => setSelectedPlugin(null)}
         width={680}
@@ -584,7 +584,7 @@ function PluginDevicesView({ pluginId }: { pluginId: string }) {
   });
 
   if (isLoading) return <Spin />;
-  if (list.length === 0) return <Empty description="该插件暂未声明任何子设备类型" />;
+  if (list.length === 0) return <Empty description="该插件暂未声明任何子设备型号" />;
 
   return (
     <Table
@@ -594,7 +594,7 @@ function PluginDevicesView({ pluginId }: { pluginId: string }) {
       dataSource={list}
       columns={[
         {
-          title: '设备类型',
+          title: '子设备型号',
           render: (_, r) => (
             <Space direction="vertical" size={0}>
               <span style={{ fontWeight: 500 }}>{r.name}</span>

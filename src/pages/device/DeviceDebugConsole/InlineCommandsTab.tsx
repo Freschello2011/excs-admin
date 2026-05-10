@@ -154,7 +154,7 @@ export default function InlineCommandsTab({ deviceId, initial, onCountChange }: 
       return;
     }
     if (rows.length === 0) {
-      message.error('raw_transport 设备至少要保留 1 条 inline_command');
+      message.error('自定义协议设备至少需要保留 1 条命令');
       return;
     }
     saveMutation.mutate(rows);
@@ -205,9 +205,9 @@ export default function InlineCommandsTab({ deviceId, initial, onCountChange }: 
           marginBottom: 12,
         }}
       >
-        <div style={{ fontWeight: 600 }}>inline 命令清单</div>
+        <div style={{ fontWeight: 600 }}>命令清单</div>
         <Text type="secondary" style={{ fontSize: 12 }}>
-          raw_transport 设备的命令在此就地编辑，支持每行 [▶ 测试] 即时验证
+          自定义协议设备的命令在此就地编辑，支持每行 [▶ 测试] 即时验证
         </Text>
       </div>
 
@@ -227,8 +227,8 @@ export default function InlineCommandsTab({ deviceId, initial, onCountChange }: 
         style={{ marginTop: 12 }}
         message={
           <span style={{ fontSize: 12 }}>
-            <strong>测试发送</strong>走云端转发到展厅 App，不持久化、不入 audit、1 QPS 限流。
-            未保存的行用 ad-hoc payload 发送；已保存且未改动的行用 command_code 走已存命令。
+            <strong>测试发送</strong>会立即发到设备，不会保存到设备命令中（每秒最多 1 次）。
+            未保存的行直接发送当前内容；已保存且未改动的行使用已存命令。
           </span>
         }
       />
