@@ -3070,7 +3070,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** 获取展厅目标版本（未设置时 data=null） */
+        /** 获取展厅 × 平台目标版本列表（一个 hall 可能多 platform；未设过返 list=[]） */
         get: operations["getHallAppVersion"];
         /** 设置展厅目标版本（rollout_status 重置为 pending） */
         put: operations["setHallAppVersion"];
@@ -8184,14 +8184,19 @@ export interface components {
             rollout_hall_ids?: number[];
         };
         /**
-         * @description 展厅目标版本 DTO（service 层 release.HallAppVersionDTO，updated_at 已 .Format(time.RFC3339)
-         *     转字符串）—— 与 GORM HallAppVersion entity 区分。
-         *     installed_version + last_report_at 是 app-bootstrap-installer Phase 4 加的现网可见性字段，
-         *     由展厅 App MQTT 心跳自报，让 admin 一眼看清"哪个展项装的什么版本，心跳是否正常"。
+         * @description 展厅 × 平台目标版本 DTO（service 层 release.HallAppVersionDTO；updated_at 已
+         *     .Format(time.RFC3339) 转字符串）—— 与 GORM HallAppVersion entity 区分。
+         *
+         *     复合键 (hall_id, platform)：一个展厅可能跑多个 platform（罕见但可能：win 主屏 + osx 辅屏），
+         *     各 platform 独立追踪一行。installed_version + last_report_at 由展厅 App MQTT 心跳自报，
+         *     server 端按 instance.device_info.os 反推 platform 后写对应行，让 admin 一眼看清
+         *     "哪个 platform 装的什么版本，心跳是否正常"。
          */
         HallAppVersionDTO: {
             /** Format: int64 */
             hall_id: number;
+            /** @description osx-arm64 / osx-x64 / win-x64 / linux-x64；与 release.platform 对齐（不做 oneof 校验，遇新 RID 自然兼容） */
+            platform: string;
             target_version: string;
             /** @description pending / rolling / done；service 层 string 透传，未做 oneof 校验 */
             rollout_status: string;
@@ -8199,7 +8204,7 @@ export interface components {
             updated_at: string;
             /**
              * @description 展厅 App 实际装版本（MQTT 心跳上报 → excs_hall_app_versions.installed_version）。
-             *     若与 target_version 不一致 = 升级未完成；空串 = 该展厅 App 还没上报过。
+             *     若与 target_version 不一致 = 升级未完成；空串 = 该 platform 行还没上报过。
              */
             installed_version?: string;
             /**
@@ -8208,8 +8213,22 @@ export interface components {
              */
             last_report_at?: string;
         };
+        /**
+         * @description 展厅目标版本列表响应 data（GET /halls/{hallId}/app-version）。
+         *     一个 hall 可能多 platform（DDD §3.3），每个 platform 一行；hall 没设过任何 platform
+         *     时返回空数组（未设 != 错误）。
+         */
+        HallAppVersionListData: {
+            list: components["schemas"]["HallAppVersionDTO"][];
+        };
+        /**
+         * @description 设置展厅 × 平台的目标版本。复合键 (hall_id, platform)：必须显式指定 platform，
+         *     server 拒收空 platform（admin 漏选 platform 历史 bug 的修复，2026-05-10）。
+         */
         SetHallVersionRequest: {
             target_version: string;
+            /** @description osx-arm64 / osx-x64 / win-x64 / linux-x64；与 release.platform 对齐（不做 oneof 校验，遇新 RID 自然兼容） */
+            platform: string;
         };
         NotifyAppUpdateRequest: {
             version: string;
@@ -16063,7 +16082,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiResponse"] & {
-                        data?: components["schemas"]["HallAppVersionDTO"];
+                        data?: components["schemas"]["HallAppVersionListData"];
                     };
                 };
             };

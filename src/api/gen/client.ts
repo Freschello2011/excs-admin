@@ -2362,6 +2362,7 @@ export function aiKeywordLabel(k: AnalyticsAiKeywordStat): string {
 
 export type AppRelease = components['schemas']['AppRelease'];
 export type HallAppVersionDTO = components['schemas']['HallAppVersionDTO'];
+export type HallAppVersionListData = components['schemas']['HallAppVersionListData'];
 export type RequestReleaseUploadRequest =
   components['schemas']['RequestReleaseUploadRequest'];
 export type RequestReleaseUploadResponse =
@@ -2435,9 +2436,13 @@ export const releaseClient = {
       ),
     );
   },
-  getHallAppVersion(hallId: number): Promise<HallAppVersionDTO | null> {
+  /**
+   * 2026-05-10：返回 list（一个 hall 可能多 platform，复合键 (hall_id, platform)）。
+   * 历史 GET 返单条 DTO，旧调用方需按 list[0] / find(p => p.platform === ...) 适配。
+   */
+  getHallAppVersion(hallId: number): Promise<HallAppVersionListData> {
     return unwrap(
-      request.get<ApiEnvelope<HallAppVersionDTO | null>>(
+      request.get<ApiEnvelope<HallAppVersionListData>>(
         `/api/v1/halls/${hallId}/app-version`,
       ),
     );

@@ -8,7 +8,7 @@ import type { AxiosResponse } from 'axios';
 import {
   releaseClient,
   type AppRelease,
-  type HallAppVersionDTO,
+  type HallAppVersionListData,
   type RequestReleaseUploadRequest,
   type RequestReleaseUploadResponse,
   type CreateReleaseBody,
@@ -61,9 +61,13 @@ export const releaseApi = {
   deleteRelease(id: number, reason?: string): Promise<AxiosResponse<ApiResponse<null>>> {
     return releaseClient.deleteRelease(id, reason).then(() => ok(null));
   },
+  /**
+   * 2026-05-10：返回 list（一个 hall 可能多 platform）。
+   * 老调用方（select: res.data.data 后当成单条用）需按 .list[0] 或 .list.find(p=>p.platform===...) 适配。
+   */
   getHallVersion(
     hallId: number,
-  ): Promise<AxiosResponse<ApiResponse<HallAppVersionDTO | null>>> {
+  ): Promise<AxiosResponse<ApiResponse<HallAppVersionListData>>> {
     return releaseClient.getHallAppVersion(hallId).then((d) => ok(d));
   },
   setHallVersion(

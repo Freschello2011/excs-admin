@@ -144,16 +144,21 @@ export default function ReleasesPage() {
   const { data: hallVersionData } = useQuery({
     queryKey: queryKeys.hallAppVersion(selectedHallId ?? 0),
     queryFn: () => releaseApi.getHallVersion(selectedHallId!),
-    select: (res) => res.data.data,
+    select: (res) => res.data.data?.list ?? [],
     enabled: !!selectedHallId,
   });
 
   const assignMutation = useMutation({
-    mutationFn: (data: { hallId: number; version: string; reason?: string }) =>
-      releaseApi.setHallVersion(data.hallId, { target_version: data.version }, data.reason),
+    mutationFn: (data: { hallId: number; platform: string; version: string; reason?: string }) =>
+      releaseApi.setHallVersion(
+        data.hallId,
+        { target_version: data.version, platform: data.platform },
+        data.reason,
+      ),
     onSuccess: (_data, variables) => {
       message.success('目标版本已设置');
       setAssignModalOpen(false);
+      assignForm.resetFields();
       queryClient.invalidateQueries({ queryKey: queryKeys.hallAppVersion(variables.hallId) });
     },
     onError: () => message.error('设置失败'),
@@ -333,70 +338,76 @@ export default function ReleasesPage() {
         }
       />
 
-      {/* 展厅当前目标版本 + 灰度状态 + 现网装版（app-bootstrap-installer Phase 4） */}
-      {selectedHallId && hallVersionData && (
+      {/* 展厅当前目标版本 + 灰度状态 + 现网装版（app-bootstrap-installer Phase 4）
+          2026-05-10：复合键 (hall_id, platform) — 一个 hall 可能多 platform，每行一个 */}
+      {selectedHallId && hallVersionData && hallVersionData.length > 0 && (
         <Card size="small" style={{ marginBottom: 16 }}>
-          <Space wrap>
-            <span>当前展厅目标版本：</span>
-            <Tag color="blue">{hallVersionData.target_version}</Tag>
-            <Tag color={
-              hallVersionData.rollout_status === 'done' ? 'green' :
-              hallVersionData.rollout_status === 'rolling' ? 'orange' : 'default'
-            }>
-              {hallVersionData.rollout_status === 'pending' ? '待推送' :
-               hallVersionData.rollout_status === 'rolling' ? '推送中' :
-               hallVersionData.rollout_status === 'done' ? '已完成' :
-               hallVersionData.rollout_status}
-            </Tag>
-            {hallVersionData.rollout_status !== 'done' && (
-              <RiskyActionButton
-                action="release.notify"
-                type="link"
-                size="small"
-                loading={notifyMutation.isPending}
-                confirmTitle="推送 App 更新通知"
-                confirmContent={`将向展厅 App 广播版本 ${hallVersionData.target_version} 可升级。请填写操作原因（≥ 5 字，审计用）。`}
-                onConfirm={async (reason) => {
-                  await notifyMutation.mutateAsync({
-                    hallId: selectedHallId,
-                    version: hallVersionData.target_version,
-                    reason,
-                  });
-                }}
-              >
-                {hallVersionData.rollout_status === 'pending' ? '推送更新通知' : '重新推送'}
-              </RiskyActionButton>
-            )}
-          </Space>
-          {/* 现网装版 + 心跳鲜度（让 admin 一眼看清升级是否到位） */}
-          <Space wrap style={{ marginTop: 8 }}>
-            <span>现网装版：</span>
-            {hallVersionData.installed_version ? (
-              <Tag color={
-                hallVersionData.installed_version === hallVersionData.target_version ? 'green' : 'orange'
-              }>
-                {hallVersionData.installed_version}
-                {hallVersionData.installed_version !== hallVersionData.target_version && ' ⚠ 与目标版本不一致'}
-              </Tag>
-            ) : (
-              <Tag color="default">展厅 App 从未上报</Tag>
-            )}
-            <span style={{ marginLeft: 16 }}>心跳：</span>
-            {hallVersionData.last_report_at ? (() => {
-              const ageMin = dayjs().diff(dayjs(hallVersionData.last_report_at), 'minute');
-              const stale = ageMin > 5;
-              return (
-                <Tag color={stale ? 'red' : 'green'}>
-                  {ageMin < 1 ? '刚才' :
-                   ageMin < 60 ? `${ageMin} 分钟前` :
-                   `${Math.floor(ageMin / 60)} 小时前`}
-                  {stale && ' ⚠ 离线'}
+          {hallVersionData.map((row) => (
+            <div key={row.platform} style={{ marginBottom: 12 }}>
+              <Space wrap>
+                <Tag>{PLATFORMS.find(x => x.value === row.platform)?.label ?? row.platform}</Tag>
+                <span>目标版本：</span>
+                <Tag color="blue">{row.target_version}</Tag>
+                <Tag color={
+                  row.rollout_status === 'done' ? 'green' :
+                  row.rollout_status === 'rolling' ? 'orange' : 'default'
+                }>
+                  {row.rollout_status === 'pending' ? '待推送' :
+                   row.rollout_status === 'rolling' ? '推送中' :
+                   row.rollout_status === 'done' ? '已完成' :
+                   row.rollout_status}
                 </Tag>
-              );
-            })() : (
-              <Tag color="default">无心跳记录</Tag>
-            )}
-          </Space>
+                {row.rollout_status !== 'done' && (
+                  <RiskyActionButton
+                    action="release.notify"
+                    type="link"
+                    size="small"
+                    loading={notifyMutation.isPending}
+                    confirmTitle="推送 App 更新通知"
+                    confirmContent={`将向展厅 App 广播版本 ${row.target_version} 可升级。请填写操作原因（≥ 5 字，审计用）。`}
+                    onConfirm={async (reason) => {
+                      await notifyMutation.mutateAsync({
+                        hallId: selectedHallId,
+                        version: row.target_version,
+                        reason,
+                      });
+                    }}
+                  >
+                    {row.rollout_status === 'pending' ? '推送更新通知' : '重新推送'}
+                  </RiskyActionButton>
+                )}
+              </Space>
+              {/* 现网装版 + 心跳鲜度（让 admin 一眼看清升级是否到位） */}
+              <Space wrap style={{ marginTop: 4 }}>
+                <span>现网装版：</span>
+                {row.installed_version ? (
+                  <Tag color={
+                    row.installed_version === row.target_version ? 'green' : 'orange'
+                  }>
+                    {row.installed_version}
+                    {row.installed_version !== row.target_version && ' ⚠ 与目标版本不一致'}
+                  </Tag>
+                ) : (
+                  <Tag color="default">展厅 App 从未上报</Tag>
+                )}
+                <span style={{ marginLeft: 16 }}>心跳：</span>
+                {row.last_report_at ? (() => {
+                  const ageMin = dayjs().diff(dayjs(row.last_report_at), 'minute');
+                  const stale = ageMin > 5;
+                  return (
+                    <Tag color={stale ? 'red' : 'green'}>
+                      {ageMin < 1 ? '刚才' :
+                       ageMin < 60 ? `${ageMin} 分钟前` :
+                       `${Math.floor(ageMin / 60)} 小时前`}
+                      {stale && ' ⚠ 离线'}
+                    </Tag>
+                  );
+                })() : (
+                  <Tag color="default">无心跳记录</Tag>
+                )}
+              </Space>
+            </div>
+          ))}
           <div className={styles.flowHint}>
             流程：设置目标版本（待推送）→ 推送通知（推送中）→ 终端确认安装（已完成）
           </div>
@@ -432,7 +443,7 @@ export default function ReleasesPage() {
         onSubmit={handlePublish}
       />
 
-      {/* 指定展厅版本弹窗 */}
+      {/* 指定展厅版本弹窗 — 复合键 (hall_id, platform)：必须先选 platform 再选版本 */}
       <Modal
         title="指定展厅目标版本"
         open={assignModalOpen}
@@ -440,6 +451,7 @@ export default function ReleasesPage() {
           const values = await assignForm.validateFields();
           assignMutation.mutate({
             hallId: values.hall_id,
+            platform: values.platform,
             version: values.version,
             reason: values.reason,
           });
@@ -448,18 +460,46 @@ export default function ReleasesPage() {
         confirmLoading={assignMutation.isPending}
         okText="确认"
       >
-        <Form form={assignForm} layout="vertical" initialValues={{ hall_id: selectedHallId }}>
+        <Form
+          form={assignForm}
+          layout="vertical"
+          initialValues={{ hall_id: selectedHallId, platform: 'win-x64' }}
+        >
           <Form.Item name="hall_id" label="展厅" rules={[{ required: true }]}>
             <Select
               placeholder="选择展厅"
               options={(hallsData ?? []).map(h => ({ value: h.id, label: h.name }))}
             />
           </Form.Item>
-          <Form.Item name="version" label="目标版本" rules={[{ required: true }]}>
+          <Form.Item
+            name="platform"
+            label="平台"
+            rules={[{ required: true, message: '请选择平台' }]}
+            help="复合键 (hall_id, platform)：每个平台独立设置目标版本"
+          >
             <Select
-              placeholder="选择版本"
-              options={releases.map(r => ({ value: r.version, label: `${r.version} (${r.platform})` }))}
+              placeholder="选择平台"
+              options={PLATFORMS}
+              onChange={() => assignForm.setFieldValue('version', undefined)}
             />
+          </Form.Item>
+          <Form.Item
+            noStyle
+            shouldUpdate={(prev, cur) => prev.platform !== cur.platform}
+          >
+            {({ getFieldValue }) => {
+              const selPlatform = getFieldValue('platform');
+              const candidates = releases.filter(r => !selPlatform || r.platform === selPlatform);
+              return (
+                <Form.Item name="version" label="目标版本" rules={[{ required: true }]}>
+                  <Select
+                    placeholder={selPlatform ? '选择版本' : '请先选择平台'}
+                    disabled={!selPlatform}
+                    options={candidates.map(r => ({ value: r.version, label: `${r.version} (${r.platform})` }))}
+                  />
+                </Form.Item>
+              );
+            }}
           </Form.Item>
           <Form.Item
             name="reason"
