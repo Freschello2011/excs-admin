@@ -37,7 +37,7 @@ const STATUS_META: Record<GrantStatusType, { label: string; color: string }> = {
   revoked: { label: '已撤销', color: 'red' },
 };
 
-export default function GrantListPage() {
+export default function GrantListPage({ embedded }: { embedded?: boolean } = {}) {
   const { message } = useMessage();
   const queryClient = useQueryClient();
   const currentUser = useAuthStore((s) => s.user);
@@ -321,7 +321,7 @@ export default function GrantListPage() {
 
   return (
     <div>
-      <PageHeader description="授权总览：查看所有用户的授权记录，支持续期、撤销。" />
+      {!embedded && <PageHeader description="授权总览：查看所有用户的授权记录，支持续期、撤销。" />}
 
       <Space
         wrap

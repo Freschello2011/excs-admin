@@ -72,6 +72,7 @@ import PanelSectionNav from './components/PanelSectionNav';
 import DeviceCommandButtonList from './components/DeviceCommandButtonList';
 import DeviceCommandButtonPreview from './components/DeviceCommandButtonPreview';
 import DeviceCommandButtonBasicInfo from './components/DeviceCommandButtonBasicInfo';
+import WolFallbackSummary from './components/WolFallbackSummary';
 import ContentPicker, {
   type ContentPickerMode,
 } from './components/ContentPicker';
@@ -455,6 +456,12 @@ export default function DeviceCommandButtonEditorV2({
                   errors={pickButtonErrors(activeErrors)}
                   disabled={disabled}
                   onChange={(patch) => patchActiveButton(patch)}
+                />
+
+                {/* ADR-0029：本按钮涉及 WOL 设备时显示兜底唤醒摘要 + 跳转设备编辑入口 */}
+                <WolFallbackSummary
+                  actions={activeButton.actions}
+                  devices={devicesData ?? []}
                 />
 
                 <Card

@@ -12,7 +12,6 @@ import {
   CloudOutlined,
   LockOutlined,
   FileImageOutlined,
-  DatabaseOutlined,
   RocketOutlined,
   RobotOutlined,
   VideoCameraOutlined,
@@ -197,16 +196,6 @@ export default function OSSStatsPage({ embedded }: { embedded?: boolean } = {}) 
                 color="#faad14"
               />
             </Col>
-            {stats.ai_knowledge_bucket && (
-              <Col xs={24} md={12} lg={6}>
-                <BucketCard
-                  title="知识库 (excs-ai-assets/knowledge)"
-                  icon={<DatabaseOutlined />}
-                  stats={stats.ai_knowledge_bucket}
-                  color="#722ed1"
-                />
-              </Col>
-            )}
           </>
         ) : null}
       </Row>

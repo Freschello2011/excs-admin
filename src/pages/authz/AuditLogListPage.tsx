@@ -37,7 +37,7 @@ import {
 const { Text } = Typography;
 const { RangePicker } = DatePicker;
 
-export default function AuditLogListPage() {
+export default function AuditLogListPage({ embedded }: { embedded?: boolean } = {}) {
   const actionsMap = useActionsMap();
   // URL 同步 filter，便于「按人视角」深链跳转：?actor_user_id=4&action_code=user.grant
   const [searchParams, setSearchParams] = useSearchParams();
@@ -66,16 +66,21 @@ export default function AuditLogListPage() {
   const [pageSize, setPageSize] = useState(50);
 
   // filter → URL 反向同步（去掉空值；不写 page/pageSize 避免污染历史栈）
+  // 保留外部传入的非自身 key（例如父级 LogsHubPage 的 ?tab=authz-audit），
+  // 只增删自己负责的 7 个 filter 键，避免在 embedded 模式下抹掉父级 tab 状态。
   useEffect(() => {
-    const next = new URLSearchParams();
-    if (actorUserId) next.set('actor_user_id', actorUserId);
-    if (actionCode) next.set('action_code', actionCode);
-    if (resourceType) next.set('resource_type', resourceType);
-    if (resourceId) next.set('resource_id', resourceId);
-    if (status) next.set('status', status);
-    if (range[0]) next.set('from', range[0].toISOString());
-    if (range[1]) next.set('to', range[1].toISOString());
+    const next = new URLSearchParams(searchParams);
+    const setOrDelete = (k: string, v: string) => { v ? next.set(k, v) : next.delete(k); };
+    setOrDelete('actor_user_id', actorUserId);
+    setOrDelete('action_code', actionCode);
+    setOrDelete('resource_type', resourceType);
+    setOrDelete('resource_id', resourceId);
+    setOrDelete('status', status);
+    setOrDelete('from', range[0] ? range[0].toISOString() : '');
+    setOrDelete('to', range[1] ? range[1].toISOString() : '');
     setSearchParams(next, { replace: true });
+    // searchParams 故意从依赖里排除：当 setSearchParams 写回时会触发 hook 重跑死循环。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [actorUserId, actionCode, resourceType, resourceId, status, range, setSearchParams]);
 
   const queryParams = useMemo(
@@ -232,10 +237,12 @@ export default function AuditLogListPage() {
 
   return (
     <div>
-      <PageHeader
-        title="权限审计"
-        description="谁在什么时间、对什么资源做了什么——含授权变更、风险操作、登录登出、配置变更。近 90 天数据可即时查询，更早的从归档自动合并。"
-      />
+      {!embedded && (
+        <PageHeader
+          title="权限审计"
+          description="谁在什么时间、对什么资源做了什么——含授权变更、风险操作、登录登出、配置变更。近 90 天数据可即时查询，更早的从归档自动合并。"
+        />
+      )}
 
       {archiveUsed && (
         <Alert

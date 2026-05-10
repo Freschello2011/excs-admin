@@ -126,20 +126,35 @@ function buildMenuRegions(selectedHallId?: number): MenuRegion[] {
       label: '平台管理',
       groups: [
         {
-          key: 'platform-catalog',
-          label: '数据字典',
+          key: 'platform-hall-settings',
+          label: '展厅设置',
           collapsible: true,
           items: [
             // device-mgmt-v2 P6：4 tab 合并页（预置 / 协议 / 插件 / 触发器模板占位）
             { path: '/platform/device-catalog', icon: 'inventory_2', label: '设备目录', requireActions: ['catalog.view', 'catalog.edit'] },
+            { path: '/platform/ai-avatar-library', icon: 'view_cozy', label: 'AI 形象库', requireActions: ['catalog.view', 'catalog.edit'] },
+            { path: '/platform/releases', icon: 'system_update', label: '展厅软件发布', requireActions: ['release.view', 'release.manage'] },
+            { path: '/notifications', icon: 'notifications', label: '通知管理', requireActions: ['notification.view', 'notification.edit'] },
           ],
         },
         {
-          key: 'platform-assets',
-          label: '内容资产',
+          key: 'authz',
+          label: '身份与权限',
           collapsible: true,
           items: [
-            { path: '/platform/ai-avatar-library', icon: 'view_cozy', label: 'AI 形象库', requireActions: ['catalog.view', 'catalog.edit'] },
+            // 人员与授权：用户 + 授权总览 PillTabs 合并（PeopleAuthzHubPage）；旧 /platform/authz/grants 已 redirect
+            { path: '/platform/authz/users', icon: 'group', label: '人员与授权', requireActions: ['user.view', 'user.manage', 'user.grant'] },
+            { path: '/platform/authz/role-templates', icon: 'manage_accounts', label: '角色模板', requireActions: ['user.grant', 'user.view'] },
+            { path: '/platform/authz/vendors', icon: 'business_center', label: '供应商', requireActions: ['vendor.view', 'vendor.manage'] },
+            { path: '/platform/authz/reports', icon: 'insights', label: '权限合规', requireActions: ['audit.view'] },
+          ],
+        },
+        {
+          key: 'system-settings',
+          label: '系统设置',
+          collapsible: true,
+          items: [
+            { path: '/platform/sys-config', icon: 'settings', label: '系统参数', requireActions: ['config.view', 'config.edit'] },
           ],
         },
         {
@@ -149,30 +164,8 @@ function buildMenuRegions(selectedHallId?: number): MenuRegion[] {
           items: [
             { path: '/analytics', icon: 'insights', label: '运营分析', requireActions: ['analytics.view'] },
             { path: '/analytics/storage', icon: 'cloud', label: '存储与费用', requireActions: ['analytics.view'] },
-            { path: '/logs', icon: 'history', label: '操作日志', requireActions: ['audit.view'] },
-          ],
-        },
-        {
-          key: 'authz',
-          label: '身份与权限',
-          collapsible: true,
-          items: [
-            { path: '/platform/authz/users', icon: 'group', label: '用户', requireActions: ['user.view', 'user.manage'] },
-            { path: '/platform/authz/role-templates', icon: 'manage_accounts', label: '角色模板', requireActions: ['user.grant', 'user.view'] },
-            { path: '/platform/authz/grants', icon: 'key', label: '授权总览', requireActions: ['user.grant', 'user.view'] },
-            { path: '/platform/authz/vendors', icon: 'business_center', label: '供应商', requireActions: ['vendor.view', 'vendor.manage'] },
-            { path: '/platform/authz/audit', icon: 'fact_check', label: '权限审计', requireActions: ['audit.view'] },
-            { path: '/platform/authz/reports', icon: 'insights', label: '合规报表', requireActions: ['audit.view'] },
-          ],
-        },
-        {
-          key: 'system-settings',
-          label: '系统设置',
-          collapsible: true,
-          items: [
-            { path: '/platform/sys-config', icon: 'settings', label: '系统参数', requireActions: ['config.view', 'config.edit'] },
-            { path: '/platform/releases', icon: 'system_update', label: '版本管理', requireActions: ['release.view', 'release.manage'] },
-            { path: '/notifications', icon: 'notifications', label: '通知管理', requireActions: ['notification.view', 'notification.edit'] },
+            // 日志：业务日志 + 权限审计 PillTabs 合并（LogsHubPage）；旧 /platform/authz/audit 已 redirect
+            { path: '/logs', icon: 'history', label: '日志', requireActions: ['audit.view'] },
           ],
         },
       ],
@@ -190,19 +183,17 @@ const titleMap: Record<string, string> = {
   '/shows': '演出管理',
   '/ai/avatars': '数字人',
   '/notifications': '通知管理',
-  '/logs': '操作日志',
+  '/logs': '日志',
   '/smarthome': '智能家居',
   '/analytics': '运营分析',
   '/platform/device-catalog': '设备目录',
   '/platform/ai-avatar-library': 'AI 形象库',
-  '/platform/authz/users': '用户',
+  '/platform/authz/users': '人员与授权',
   '/platform/sys-config': '系统参数',
-  '/platform/releases': '版本管理',
+  '/platform/releases': '展厅软件发布',
   '/platform/authz/role-templates': '角色模板',
-  '/platform/authz/grants': '授权总览',
   '/platform/authz/vendors': '供应商',
-  '/platform/authz/audit': '权限审计',
-  '/platform/authz/reports': '合规报表',
+  '/platform/authz/reports': '权限合规',
 };
 
 /** Match dynamic hall-level routes for page title */
@@ -415,11 +406,10 @@ export default function AdminLayout() {
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
-    'platform-catalog': true,
-    'platform-assets': true,
-    analytics: true,
+    'platform-hall-settings': true,
     authz: true,
     'system-settings': true,
+    analytics: true,
   });
 
   /* Page title */

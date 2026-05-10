@@ -65,6 +65,9 @@ import ConnectorKindCards from '@/components/device/ConnectorKindCards';
 import TransportBindEditor from '@/components/device/TransportBindEditor';
 import DiscoveryStep, { type DiscoveryPrefill } from '@/components/device/DiscoveryStep';
 import PresetConnectionConfigForm from '@/components/device/PresetConnectionConfigForm';
+import WolControlAppFallbackForm, {
+  type WolControlAppFallback,
+} from '@/components/device/WolControlAppFallbackForm';
 import InlineCommandsTable, {
   ensureRowKey,
   prepareInlineCommandsForSave,
@@ -1662,12 +1665,22 @@ function ConnectionConfigForKind({
 
   // protocol 没有固定 transport (依赖 schema)；这里做简单回退：从 schema 推断 host/port 字段
   if (kind === 'protocol' && protoDetail) {
+    const isWol = protocol === 'wol';
     return (
-      <SchemaConfigForm
-        schema={(protoDetail.connection_schema as Record<string, unknown>) ?? {}}
-        value={value}
-        onChange={onChange}
-      />
+      <>
+        <SchemaConfigForm
+          schema={(protoDetail.connection_schema as Record<string, unknown>) ?? {}}
+          value={value}
+          onChange={onChange}
+        />
+        {/* ADR-0029：WOL 设备额外渲染中控 App 兜底配置（落 connection_config.control_app_fallback） */}
+        {isWol && (
+          <WolControlAppFallbackForm
+            value={(value.control_app_fallback as WolControlAppFallback | undefined) ?? {}}
+            onChange={(fb) => onChange({ ...value, control_app_fallback: fb })}
+          />
+        )}
+      </>
     );
   }
 

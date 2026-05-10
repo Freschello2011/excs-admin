@@ -572,8 +572,8 @@ export default function PanelEditorPage() {
       case 'script':
       case 'ai':
         return bindingId ? { type: 'exhibit', id: bindingId } : null;
-      case 'show':
-        return bindingId ? { type: 'show', id: bindingId } : null;
+      // case 'show': 已撤（2026-05-10）。演出收编进 media 卡 picker;
+      // 老数据若仍带 binding 走 default 返回 null,不影响其他卡型。
       case 'device_toggle':
       case 'slider':
         return bindingId ? { type: 'device', id: bindingId } : null;
@@ -585,7 +585,7 @@ export default function PanelEditorPage() {
   }
 
   const needsSingleId = (ct?: CardType) =>
-    ct === 'media' || ct === 'script' || ct === 'ai' || ct === 'show' || ct === 'device_toggle' || ct === 'slider';
+    ct === 'media' || ct === 'script' || ct === 'ai' || ct === 'device_toggle' || ct === 'slider';
 
   /* ─── DnD handlers ─── */
   const handleSectionDragEnd = (event: DragEndEvent) => {
@@ -904,12 +904,7 @@ export default function PanelEditorPage() {
             </Form.Item>
           )}
 
-          {/* Single binding — show */}
-          {cardTypeValue === 'show' && (
-            <Form.Item name="binding_id" label="绑定演出">
-              <InputNumber min={1} style={{ width: '100%' }} placeholder="演出 ID" />
-            </Form.Item>
-          )}
+          {/* Single binding — show:已撤（2026-05-10）。演出收编进 media 卡 picker。 */}
 
           {/* Single binding — device */}
           {(cardTypeValue === 'device_toggle' || cardTypeValue === 'slider') && (

@@ -38,10 +38,10 @@ const AiAvatarLibraryPage = lazy(() => import('@/pages/ai/AiAvatarLibraryPage'))
 // device-mgmt-v2 P6：4 tab 合并页（预置型号 / 协议库 / 插件 / 触发器模板占位）
 const DeviceCatalogPage = lazy(() => import('@/pages/platform/DeviceCatalogPage'));
 const TriggerListPage = lazy(() => import('@/pages/hall/TriggerListPage'));
-const UserListPage = lazy(() => import('@/pages/user/UserListPage'));
 const UserDetailPage = lazy(() => import('@/pages/user/UserDetailPage'));
 const NotificationListPage = lazy(() => import('@/pages/notification/NotificationListPage'));
-const OperationLogPage = lazy(() => import('@/pages/log/OperationLogPage'));
+const PeopleAuthzHubPage = lazy(() => import('@/pages/authz/PeopleAuthzHubPage'));
+const LogsHubPage = lazy(() => import('@/pages/log/LogsHubPage'));
 const SysConfigPage = lazy(() => import('@/pages/sys-config/SysConfigPage'));
 const ExhibitDetailPage = lazy(() => import('@/pages/hall/ExhibitDetailPage'));
 const ExhibitManagementPage = lazy(() => import('@/pages/hall/ExhibitManagementPage'));
@@ -53,9 +53,7 @@ const AnalyticsHubPage = lazy(() => import('@/pages/analytics/AnalyticsHubPage')
 const ReleasesPage = lazy(() => import('@/pages/sys-config/ReleasesPage'));
 const RoleTemplateListPage = lazy(() => import('@/pages/authz/RoleTemplateListPage'));
 const RoleTemplateEditPage = lazy(() => import('@/pages/authz/RoleTemplateEditPage'));
-const GrantListPage = lazy(() => import('@/pages/authz/GrantListPage'));
 const GrantWizardPage = lazy(() => import('@/pages/authz/GrantWizardPage'));
-const AuditLogListPage = lazy(() => import('@/pages/authz/AuditLogListPage'));
 const AuditReportPage = lazy(() => import('@/pages/authz/AuditReportPage'));
 const VendorListPage = lazy(() => import('@/pages/authz/VendorListPage'));
 const VendorCreatePage = lazy(() => import('@/pages/authz/VendorCreatePage'));
@@ -414,7 +412,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'logs',
-        element: <RequireAdmin><SuspenseWrap><OperationLogPage /></SuspenseWrap></RequireAdmin>,
+        element: <RequireAdmin><SuspenseWrap><LogsHubPage /></SuspenseWrap></RequireAdmin>,
       },
       /* 系统配置（新前缀 /platform/*） */
       {
@@ -429,7 +427,7 @@ export const router = createBrowserRouter([
       /* P0.5（2026-04-25）：用户列表 / 详情 / 三步授权向导 全族迁入 /platform/authz/users 下 */
       {
         path: 'platform/authz/users',
-        element: <SuspenseWrap><UserListPage /></SuspenseWrap>,
+        element: <SuspenseWrap><PeopleAuthzHubPage /></SuspenseWrap>,
       },
       {
         path: 'platform/authz/users/:userId',
@@ -453,11 +451,11 @@ export const router = createBrowserRouter([
       },
       {
         path: 'platform/authz/grants',
-        element: <SuspenseWrap><GrantListPage /></SuspenseWrap>,
+        element: <Navigate to="/platform/authz/users?tab=grants" replace />,
       },
       {
         path: 'platform/authz/audit',
-        element: <SuspenseWrap><AuditLogListPage /></SuspenseWrap>,
+        element: <Navigate to="/logs?tab=authz-audit" replace />,
       },
       {
         path: 'platform/authz/reports',

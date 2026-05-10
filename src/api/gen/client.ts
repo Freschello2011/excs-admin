@@ -1832,6 +1832,11 @@ export interface ListPanelVersionsParams {
  * 自洽（沿用 Phase 3-A 陷阱 #28）。
  */
 export type PanelSectionType = 'global' | 'exhibit';
+/**
+ * 注:`show`（独立演出控制卡）2026-05-10 撤,演出收编进 media 卡「当前片源」picker
+ * 「演出」tab。常量保留 1-2 周供老数据兼容（DB 已 migration 软删,server
+ * CreateDefaultPanel 已不种）,新建面板下拉不再列出。
+ */
 export type PanelCardType =
   | 'scene_group'
   | 'media'
@@ -1882,7 +1887,7 @@ export function cardBinding(c: { binding?: Record<string, unknown> | null }): Pa
 export const CARD_TYPE_LABELS: Record<PanelCardType, string> = {
   scene_group: '场景按钮组',
   media: '媒体播控',
-  show: '演出控制',
+  show: '演出控制（已撤）',
   device_toggle: '设备开关',
   device_command: '设备命令',
   slider: '滑块控制',
@@ -1910,11 +1915,14 @@ export const SECTION_TYPE_LABELS: Record<PanelSectionType, string> = {
   exhibit: '展项',
 };
 
-/** 全部 card_type 列表（用于"添加卡片"下拉选项，迁移自 types/panel.ts）。 */
+/**
+ * 全部 card_type 列表（用于"添加卡片"下拉选项）。
+ * 2026-05-10 撤 'show'（演出收编进 media 卡 picker）;PanelCardType 仍含
+ * 'show' 用于老数据 fallback 渲染,但此清单不再列出,新建面板不能选。
+ */
 export const ALL_CARD_TYPES: PanelCardType[] = [
   'scene_group',
   'media',
-  'show',
   'device_toggle',
   'device_command',
   'slider',

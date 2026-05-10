@@ -47,7 +47,7 @@ const ACCOUNT_TO_USER_TYPE: Record<string, string> = {
   vendor: 'supplier',
 };
 
-export default function UserListPage() {
+export default function UserListPage({ embedded }: { embedded?: boolean } = {}) {
   const { message, modal } = useMessage();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -198,7 +198,7 @@ export default function UserListPage() {
 
   return (
     <div>
-      <PageHeader title="用户管理" description="管理系统用户和权限" />
+      {!embedded && <PageHeader title="用户管理" description="管理系统用户和权限" />}
 
       <Space wrap style={{ marginBottom: 16, width: '100%', justifyContent: 'space-between' }}>
         <Space wrap>

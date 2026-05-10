@@ -370,6 +370,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/commands/wol-fired": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * WOL 中控兜底回调关账（ADR-0029）
+         * @description 中控 App 收到 status=delegated 的设备指令响应后，本地 UDP 广播 magic packet，发完
+         *     （成功/失败）后必须 5s 内调本端点关账；超时由 server cron 写 wol-fire-timeout 审计行。
+         *
+         *     幂等：同 audit_id 重复回调返 accepted=true，以首次为准。
+         *
+         *     鉴权：中控 session 自带 token；server 校验 audit_id 的 target_session_id 与当前调用者
+         *     session_id 一致（防其他端误关账）。
+         */
+        post: operations["confirmWolFired"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/devices/{deviceId}/realtime-status": {
         parameters: {
             query?: never;
@@ -4448,6 +4474,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/halls/{hallId}/network-interfaces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 拉取 hall 内任一在线展厅 App 的 NIC 指纹（admin 辅助 expected_subnets 配置）
+         * @description ADR-0029 配套：admin 在展厅设置表单点击"🔍 从在线展厅 App 自动读取 NIC"按钮时调用。
+         *     server 选 hall_master（如不可达则任一在线展厅 App）→ MQTT request/response 模式拿 NIC 列表
+         *     → 提取私有网段（RFC1918）作为推荐 expected_subnets 候选 → admin 用户复核后保存。
+         *
+         *     不直接写 hall.expected_subnets，仅返回候选；admin 表单展示后由用户编辑/确认再 PUT /halls/{hallId}。
+         *
+         *     若 hall 内全无展厅 App 在线 → 503，admin UI 提示"请先点亮任一展厅 App 后再扫描"。
+         */
+        get: operations["getHallNetworkInterfaces"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/preset-catalog": {
         parameters: {
             query?: never;
@@ -5389,6 +5441,30 @@ export interface components {
                 [key: string]: unknown;
             } | null;
         };
+        /** @description ADR-0029 lan_local 传输 envelope 元数据；中控 App 按此发本地 UDP 广播 */
+        WolDelegationPayload: {
+            /**
+             * @description 目标 PC 的 MAC 地址（aa:bb:cc:dd:ee:ff 或 aabbccddeeff）
+             * @example AA:BB:CC:DD:EE:FF
+             */
+            mac_address: string;
+            /**
+             * @description 广播地址。优先取 device.connection_config.control_app_fallback.subnet_broadcast；
+             *     空则取顶层 connection_config.broadcast；都空 server 拒发（不退化到 255.255.255.255）。
+             * @example 192.168.50.255
+             */
+            broadcast: string;
+            /** @example 9 */
+            port: number;
+            /**
+             * @description server LAN sanity 判定结果，中控 App 必须原样回传到 wol-fired（防中途改判）。
+             *     strong = 中控 IP ⊆ hall.expected_subnets；
+             *     weak = expected_subnets 未配但 mDNS 看到 _excs._tcp；
+             *     degraded = 私有 IP 但不在 expected_subnets，require_lan_sanity=false 时放行。
+             * @enum {string}
+             */
+            sanity_strength: "strong" | "weak" | "degraded";
+        };
         CommandResult: {
             msg_id: string;
             /**
@@ -5402,10 +5478,24 @@ export interface components {
              */
             exhibit_id?: number | null;
             /**
-             * @description 发送状态。`sent` = 已 publish 到 MQTT；其余值（如 cmd-ack 回带）见 PRD §4 错误码表。
-             *     异步指令成功状态码区间 5001-5004 对应 MQTT 超时 / 设备离线 / 参数错误 / 权限不足。
+             * @description 发送状态。`sent` = 已 publish 到 MQTT；`delegated` = ADR-0029 WOL 中控兜底；
+             *     其余值（如 cmd-ack 回带、`executed` / `queued` / `failed` / 5001-5004 区间）见 PRD §4 错误码表。
+             *     不写 enum：cmd-ack 各 driver 回带值多样，强约束会破坏现有兼容；以文档为准。
              */
             status: string;
+            /**
+             * @description 传输路由提示（ADR-0029）。`lan_local` = 调用方为中控 App 时由本地 UDP 广播 magic packet；
+             *     其他 status 时为空。仅 WOL 设备 + hall_master 不可达 + 设备开启 control_app_fallback
+             *     + 当前调用方为合格中控 session 时出现。
+             * @enum {string|null}
+             */
+            transport_hint?: "lan_local" | null;
+            wol?: components["schemas"]["WolDelegationPayload"];
+            /**
+             * @description ADR-0029 兜底审计 ID（uuid）。仅 status=delegated 时填；中控 App 发完 magic packet
+             *     后必须 POST /commands/wol-fired 关账。
+             */
+            audit_id?: string | null;
         };
         ExhibitCommandRequest: {
             /** Format: int64 */
@@ -5415,6 +5505,26 @@ export interface components {
             params?: {
                 [key: string]: unknown;
             } | null;
+        };
+        WolFiredRequest: {
+            /** @description server delegate 时下发的 audit_id（uuid） */
+            audit_id: string;
+            /** Format: date-time */
+            sent_at: string;
+            /** @description 中控 App 实际发包用的 NIC IP；server 用于审计校对（与心跳上报的 fingerprint 比对） */
+            source_ip?: string | null;
+            /**
+             * @description server 下发的判定值原样回传，防中控篡改
+             * @enum {string}
+             */
+            sanity_strength: "strong" | "weak" | "degraded";
+            success: boolean;
+            /** @description success=false 时的简短错误码（NIC_NOT_FOUND / SOCKET_FAILED / UDP_SEND_FAILED） */
+            errno?: string | null;
+        };
+        WolFiredResult: {
+            /** @description 关账成功（含幂等：同 audit_id 重复回调返 true，以首次为准） */
+            accepted: boolean;
         };
         DeviceRealtimeStatusDTO: {
             /** Format: int64 */
@@ -5775,7 +5885,6 @@ export interface components {
             raw_bucket: components["schemas"]["BucketStats"];
             encrypted_bucket: components["schemas"]["BucketStats"];
             thumbnail_bucket: components["schemas"]["BucketStats"];
-            ai_knowledge_bucket?: components["schemas"]["BucketStats"];
         };
         ExhibitContentDTO: {
             /** Format: int64 */
@@ -5919,6 +6028,16 @@ export interface components {
             exhibit_count: number;
             /** Format: int64 */
             device_count: number;
+            /**
+             * @description ADR-0029 LAN sanity 数据源。CIDR 列表，逗号分隔（例 `192.168.50.0/24,10.0.1.0/24`）。
+             *     中控 App 的 NIC 命中此列表才被视作 strong on-LAN，可被 server 选作 WOL 兜底 actor。
+             *     空值时 LAN sanity 退化为弱判定（mDNS 看到任一 _excs._tcp 即放行 weak delegate）。
+             *
+             *     admin 表单可点 "🔍 从在线展厅 App 自动读取 NIC" 调
+             *     GET /halls/{hallId}/network-interfaces 拿建议值。
+             * @example 192.168.50.0/24
+             */
+            expected_subnets?: string | null;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -5980,6 +6099,13 @@ export interface components {
          */
         UpdateHallConfigRequest: {
             ai_knowledge_text?: string | null;
+            /**
+             * @description ADR-0029 LAN sanity 数据源（CIDR 列表，逗号分隔）。空字符串 = 清空（退化弱判定）。
+             *     admin 表单可点 "🔍 从在线展厅 App 自动读取 NIC" 调
+             *     GET /halls/{hallId}/network-interfaces 拿建议值。
+             * @example 192.168.50.0/24,10.0.1.0/24
+             */
+            expected_subnets?: string | null;
         };
         UpdateServicePeriodRequest: {
             service_start: string;
@@ -6654,7 +6780,12 @@ export interface components {
              *     以匹配中控 App 历史字段约定（不要改名）。
              */
             filename: string;
-            /** @description 内容类型（video / image / audio / fusion-video） */
+            /**
+             * @description 内容类型（video / image / audio / fusion-video / slideshow / show）。
+             *     - slideshow / show 为 server 派生的虚拟 content,不来自 excs_contents 表;
+             *     - show 虚拟项 id 为 -show.id（与 slideshow 用 -exhibit.id 同体系,与真实
+             *       content.id 永不冲突）,真实 show id 走 show_id 字段透传给中控 picker。
+             */
             type: string;
             /** Format: int64 */
             file_size: number;
@@ -6693,6 +6824,13 @@ export interface components {
             slideshow_background_content_id?: number | null;
             /** @description slideshow 过渡效果（fade / cut / ...）；其余 type 为 null */
             slideshow_transition?: string | null;
+            /**
+             * Format: int64
+             * @description show 虚拟项专用:真实 show.id（content 主键 id 字段已用 -show.id 占位以避开
+             *     与真 content 主键冲突）。中控 picker 选中 type='show' 项时取此值走
+             *     `POST /shows/{show_id}/start` 启动演出。其余 type 为 null。
+             */
+            show_id?: number | null;
         };
         ControlAppSyncShowDTO: {
             /** Format: int64 */
@@ -7478,13 +7616,19 @@ export interface components {
             /** Format: int64 */
             id: number;
             /**
-             * @description 卡片类型：scene_group / media / show / device_toggle / slider / device_status / script / ai。
+             * @description 卡片类型：scene_group / media / device_toggle / device_command / slider /
+             *     device_status / script / ai。
              *     服务端 binding:"required" 但不 oneof，保持 free-form 兼容历史扩展。
+             *
+             *     历史:`show`（独立演出控制卡）2026-05-10 撤,演出收编进 media 卡「当前片源」
+             *     picker（见 ControlAppSyncContentDTO.show_id 字段说明）。`show_control`
+             *     常量保留 1-2 周供老数据兼容,DB 现存数据由 migration 软删,server
+             *     CreateDefaultPanel 已不再种该卡。
              */
             card_type: string;
             /**
              * @description 卡片绑定（service 层 json.RawMessage 透传）。常见键：
-             *       - scene_group / show: {hall_id}
+             *       - scene_group:        {hall_id}
              *       - media / script:     {exhibit_id}
              *       - device_toggle:      {device_id}
              *       - device_status:      {type, ids[]}
@@ -9470,6 +9614,45 @@ export interface components {
              */
             expires_at: string;
         };
+        NetworkInterfaceVO: {
+            /** @description NIC 名（en0 / eth0 / wlan0） */
+            name: string;
+            /**
+             * @description IPv4 地址
+             * @example 192.168.50.12
+             */
+            ip: string;
+            /**
+             * @description 子网掩码（点分十进制）
+             * @example 255.255.255.0
+             */
+            subnet_mask: string;
+            /** @description server 派生（RFC1918 段判定） */
+            is_private?: boolean;
+            /**
+             * @description server 把 ip + mask 算出的 CIDR 形式建议值（仅 is_private=true 时填）
+             * @example 192.168.50.0/24
+             */
+            suggested_cidr?: string | null;
+        };
+        HallNetworkInterfacesResult: {
+            /** Format: int64 */
+            hall_id: number;
+            /** @description NIC 数据来源标记（哪台展厅 App 上报的） */
+            source: {
+                exhibit_app_machine_code: string;
+                exhibit_app_version: string;
+                /** Format: date-time */
+                fetched_at: string;
+            };
+            interfaces: components["schemas"]["NetworkInterfaceVO"][];
+            /**
+             * @description 所有 is_private NIC 的 suggested_cidr 用 `,` 拼接的字符串，admin 表单可一键填入；
+             *     用户保存前可手动编辑
+             * @example 192.168.50.0/24,10.0.1.0/24
+             */
+            suggested_expected_subnets: string;
+        };
         PresetCatalogDTO: {
             key: string;
             name: string;
@@ -11034,6 +11217,49 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    confirmWolFired: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WolFiredRequest"];
+            };
+        };
+        responses: {
+            /** @description 关账完成 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["WolFiredResult"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description audit_id 与当前 session 不匹配 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description audit_id 不存在或已过期 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             500: components["responses"]["InternalError"];
         };
     };
@@ -18680,6 +18906,39 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    getHallNetworkInterfaces: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hallId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["HallNetworkInterfacesResult"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description hall 内无展厅 App 在线 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     listPresetCatalog: {

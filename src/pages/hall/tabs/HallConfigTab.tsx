@@ -143,6 +143,7 @@ export default function HallConfigTab({ hallId, hall, canConfig }: HallConfigTab
   const { message } = useMessage();
   const queryClient = useQueryClient();
   const [form] = Form.useForm<{ ai_knowledge_text: string }>();
+  const [wolForm] = Form.useForm<{ expected_subnets: string }>(); // ADR-0029
 
   // 本地维护的优先级数组（拖拽改的就是它，提交时整体提交）
   const [priority, setPriority] = useState<number[]>(() => hall.hall_master_priority ?? []);
@@ -167,6 +168,11 @@ export default function HallConfigTab({ hallId, hall, canConfig }: HallConfigTab
   useEffect(() => {
     form.setFieldsValue({ ai_knowledge_text: hall.ai_knowledge_text || '' });
   }, [hall, form]);
+
+  // ADR-0029：expected_subnets 同步
+  useEffect(() => {
+    wolForm.setFieldsValue({ expected_subnets: hall.expected_subnets || '' });
+  }, [hall, wolForm]);
 
   // hall 字段变化时（通常是 invalidate 后重新取）同步本地 state
   useEffect(() => {
@@ -222,6 +228,22 @@ export default function HallConfigTab({ hallId, hall, canConfig }: HallConfigTab
     },
   });
 
+  // ADR-0029：保存 expected_subnets（CIDR 列表；空字符串清空 → server 退化弱判定）
+  const updateWolSubnetsMutation = useMutation({
+    mutationFn: (data: { expected_subnets: string }) =>
+      hallApi.updateHallConfig(hallId, data),
+    onSuccess: () => {
+      message.success('展厅子网（WOL 兜底 LAN sanity）已保存');
+      queryClient.invalidateQueries({ queryKey: queryKeys.hallDetail(hallId) });
+    },
+    onError: (err: unknown) => {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        'CIDR 校验失败';
+      message.error(msg);
+    },
+  });
+
   const updatePriorityMutation = useMutation({
     mutationFn: ({
       data,
@@ -252,6 +274,15 @@ export default function HallConfigTab({ hallId, hall, canConfig }: HallConfigTab
     form.validateFields().then((values) => {
       updateConfigMutation.mutate({
         ai_knowledge_text: values.ai_knowledge_text || '',
+      });
+    });
+  };
+
+  // ADR-0029：保存 expected_subnets
+  const handleSaveWolSubnets = () => {
+    wolForm.validateFields().then((values) => {
+      updateWolSubnetsMutation.mutate({
+        expected_subnets: (values.expected_subnets || '').trim(),
       });
     });
   };
@@ -315,6 +346,42 @@ export default function HallConfigTab({ hallId, hall, canConfig }: HallConfigTab
               maxLength={10000}
               showCount
               placeholder="输入展厅知识文本，AI 互动时会作为上下文参考..."
+            />
+          </Form.Item>
+        </Form>
+      </Card>
+
+      {/* ADR-0029 WOL 中控兜底 LAN sanity 配置 */}
+      <Card
+        title="WOL 中控兜底 — 展厅子网（ADR-0029）"
+        extra={
+          canConfig ? (
+            <Button
+              type="primary"
+              loading={updateWolSubnetsMutation.isPending}
+              onClick={handleSaveWolSubnets}
+            >
+              保存
+            </Button>
+          ) : undefined
+        }
+      >
+        <Form form={wolForm} layout="vertical" disabled={!canConfig}>
+          <Form.Item
+            name="expected_subnets"
+            label="展厅 LAN 网段（CIDR 列表，逗号分隔）"
+            extra={
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                用于判定中控 App 是否处于展厅 LAN（决定能否担任 WOL 兜底 actor）。空值
+                则退化为弱判定（看到展厅 mDNS 即放行）。例：
+                <Typography.Text code>192.168.50.0/24,10.1.0.0/16</Typography.Text>
+                。CIDR 必须是网段地址（如 192.168.50.0/24，不能是 192.168.50.255）。
+              </Typography.Text>
+            }
+          >
+            <Input
+              placeholder="留空 = 退化弱判定（mDNS 看到展厅 App 即放行）"
+              maxLength={255}
             />
           </Form.Item>
         </Form>

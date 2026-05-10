@@ -36,7 +36,7 @@ const ACTION_COLORS: Record<string, string> = {
   permission_update: 'magenta',
 };
 
-export default function OperationLogPage() {
+export default function OperationLogPage({ embedded }: { embedded?: boolean } = {}) {
   const { message } = useMessage();
   const [action, setAction] = useState<string>('all');
   const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null] | null>(null);
@@ -128,21 +128,25 @@ export default function OperationLogPage() {
     },
   ];
 
+  const exportButton = (
+    <Button
+      icon={<DownloadOutlined />}
+      loading={exporting}
+      onClick={handleExport}
+    >
+      导出 CSV
+    </Button>
+  );
+
   return (
     <div>
-      <PageHeader
-        title="操作日志"
-        description="查看系统操作记录"
-        extra={
-          <Button
-            icon={<DownloadOutlined />}
-            loading={exporting}
-            onClick={handleExport}
-          >
-            导出 CSV
-          </Button>
-        }
-      />
+      {!embedded && (
+        <PageHeader
+          title="操作日志"
+          description="查看系统操作记录"
+          extra={exportButton}
+        />
+      )}
 
       <Space wrap style={{ marginBottom: 16 }}>
         <Select
@@ -158,6 +162,7 @@ export default function OperationLogPage() {
             setPage(1);
           }}
         />
+        {embedded && exportButton}
       </Space>
 
       <Table<OperationLogItem>
