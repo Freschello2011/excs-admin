@@ -117,10 +117,14 @@ export default function ContentGroupListPage() {
   });
 
   // ---- 辅助数据 ----
+  // 守门：vendors 列表归 vendor.view 域；hall_admin 等非平台级用户无此 action，
+  // 跳过请求避免 403 toast。下游 vendorNameMap 空时列表行 Tag 自然 fallback 到 `#id`。
+  const canViewVendors = useCan('vendor.view');
   const { data: vendors = [] } = useQuery({
     queryKey: ['authz', 'vendors', 'all'],
     queryFn: () => vendorApi.list(),
     select: (res) => (res.data.data?.list ?? []) as Vendor[],
+    enabled: canViewVendors,
   });
 
   const { data: exhibits = [] } = useQuery({
@@ -360,16 +364,19 @@ export default function ContentGroupListPage() {
 
       {/* 筛选条 */}
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
-        <Select
-          allowClear
-          placeholder="全部供应商"
-          style={{ minWidth: 200 }}
-          value={vendorIdFilter}
-          onChange={(v) => updateParam({ vendor_id: v ? String(v) : null })}
-          options={vendors.map((v) => ({ value: v.id, label: v.name }))}
-          showSearch
-          filterOption={(input, option) => (option?.label as string)?.toLowerCase().includes(input.toLowerCase())}
-        />
+        {/* 供应商筛选：仅 vendor.view 持有者可用（hall_admin 数据范围是 hall scope，跨 vendor 筛选不在其视角） */}
+        {canViewVendors && (
+          <Select
+            allowClear
+            placeholder="全部供应商"
+            style={{ minWidth: 200 }}
+            value={vendorIdFilter}
+            onChange={(v) => updateParam({ vendor_id: v ? String(v) : null })}
+            options={vendors.map((v) => ({ value: v.id, label: v.name }))}
+            showSearch
+            filterOption={(input, option) => (option?.label as string)?.toLowerCase().includes(input.toLowerCase())}
+          />
+        )}
         <Select
           style={{ minWidth: 180 }}
           value={hallScope}
