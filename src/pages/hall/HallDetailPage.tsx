@@ -6,7 +6,6 @@ import PageHeader from '@/components/common/PageHeader';
 import StatusTag from '@/components/common/StatusTag';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
-import { useAuthStore } from '@/stores/authStore';
 import { useHallStore } from '@/stores/hallStore';
 import { useCan } from '@/lib/authz/can';
 import Can from '@/components/authz/Can';
@@ -19,7 +18,6 @@ export default function HallDetailPage() {
   const { hallId: hallIdStr } = useParams<{ hallId: string }>();
   const hallId = Number(hallIdStr);
   const navigate = useNavigate();
-  const isAdmin = useAuthStore((s) => s.isAdmin);
   const canConfig = useCan('hall.update_config', { type: 'hall', id: String(hallId) });
   const setSelectedHall = useHallStore((s) => s.setSelectedHall);
 
@@ -61,7 +59,7 @@ export default function HallDetailPage() {
 
       {/* 基本信息 */}
       <div className={styles.section}>
-        <HallInfoTab hall={hall} isAdmin={isAdmin()} />
+        <HallInfoTab hall={hall} />
       </div>
 
       {/* 配置参数 */}

@@ -1,13 +1,11 @@
 import { useState } from 'react';
 import { Tabs } from 'antd';
-import { useAuthStore } from '@/stores/authStore';
 import { useHallStore } from '@/stores/hallStore';
 import AppInstanceTab from './tabs/AppInstanceTab';
 import ControlAppTab from './tabs/ControlAppTab';
 import PageHeader from '@/components/common/PageHeader';
 
 export default function AppSessionPage() {
-  const isAdmin = useAuthStore((s) => s.isAdmin);
   const [activeTab, setActiveTab] = useState('instances');
   const hallId = useHallStore((s) => s.selectedHallId);
 
@@ -15,12 +13,12 @@ export default function AppSessionPage() {
     {
       key: 'instances',
       label: 'App 实例',
-      children: <AppInstanceTab hallId={hallId} isAdmin={isAdmin()} />,
+      children: <AppInstanceTab hallId={hallId} />,
     },
     {
       key: 'control-sessions',
       label: '中控会话',
-      children: <ControlAppTab hallId={hallId} isAdmin={isAdmin()} />,
+      children: <ControlAppTab hallId={hallId} />,
     },
   ] : [];
 

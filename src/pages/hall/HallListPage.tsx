@@ -29,7 +29,7 @@ import PageHeader from '@/components/common/PageHeader';
 import StatusTag from '@/components/common/StatusTag';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
-import { useAuthStore } from '@/stores/authStore';
+import { useCan } from '@/lib/authz/can';
 import type {
   HallListItem,
   HallStatus,
@@ -377,7 +377,8 @@ type OpModeFilter = typeof OP_MODE_FILTER_ALL | OperationMode;
 export default function HallListPage() {
   const { message } = useMessage();
   const queryClient = useQueryClient();
-  const isAdmin = useAuthStore((s) => s.isAdmin);
+  // ADR-0021：MDM 同步按 hall.sync_mdm @ Global 判定；禁用 isAdmin() 字面量门禁
+  const canSyncMdm = useCan('hall.sync_mdm');
 
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState<HallStatus | 'all'>('all');
@@ -575,7 +576,7 @@ export default function HallListPage() {
         title="展厅列表"
         description="管理所有展厅"
         extra={
-          isAdmin() ? (
+          canSyncMdm ? (
             <Button
               icon={<SyncOutlined />}
               loading={syncMutation.isPending}

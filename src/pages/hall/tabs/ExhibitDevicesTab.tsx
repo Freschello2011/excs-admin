@@ -68,7 +68,7 @@ function calcStats(devices: DeviceListItemV2[]): HealthStats {
 
 export default function ExhibitDevicesTab({ hallId, exhibitId, canManage, onOpenDebug }: Props) {
   const navigate = useNavigate();
-  const { message } = useMessage();
+  const { notification } = useMessage();
   const queryClient = useQueryClient();
   void onOpenDebug;
 
@@ -84,7 +84,11 @@ export default function ExhibitDevicesTab({ hallId, exhibitId, canManage, onOpen
   const cloneMutation = useMutation({
     mutationFn: (deviceId: number) => deviceV2Api.clone(deviceId),
     onSuccess: () => {
-      message.success('设备已克隆，请到全局设备管理重命名 + 改连接参数');
+      notification.success({
+        message: '设备已克隆',
+        description: '请到全局设备管理重命名 + 改连接参数；保存后需到展厅 PC 重启展厅 App，新副本才能被中控/演出/触发器调用。',
+        duration: 8,
+      });
       queryClient.invalidateQueries({ queryKey: ['devices'] });
     },
   });

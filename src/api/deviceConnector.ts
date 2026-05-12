@@ -101,6 +101,8 @@ export const deviceV2Api = {
         device_id?: number;
         status?: string;
         detail?: string;
+        /** ADR-0030 §D5：失败时的结构化错误码（READ_TIMEOUT / EXPECT_NOT_MATCHED / READ_EMPTY / EXPECT_ECHO_MISMATCH / ACK_TIMEOUT 等） */
+        error_code?: string;
         latency_ms?: number;
       }>
     >(`/api/v1/v2/devices/${id}/inline-commands/test`, body, {

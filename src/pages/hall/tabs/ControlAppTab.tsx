@@ -6,25 +6,29 @@ import type { TableColumnsType } from 'antd';
 import StatusTag from '@/components/common/StatusTag';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
+import { useCan } from '@/lib/authz/can';
 import type { ControlAppSessionItem, HallListItem } from '@/api/gen/client';
 
 interface ControlAppTabProps {
   hallId: number;
-  isAdmin: boolean;
 }
 
-export default function ControlAppTab({ hallId, isAdmin }: ControlAppTabProps) {
+export default function ControlAppTab({ hallId }: ControlAppTabProps) {
   const { message } = useMessage();
   const queryClient = useQueryClient();
   const [switchModalOpen, setSwitchModalOpen] = useState(false);
   const [switchingSession, setSwitchingSession] = useState<ControlAppSessionItem | null>(null);
   const [targetHallId, setTargetHallId] = useState<number | null>(null);
 
+  // ADR-0021：按 action + scope 判定，禁用 isAdmin() 字面量门禁
+  const hallScope = { type: 'hall' as const, id: String(hallId) };
+  const canView = useCan('app.view', hallScope);
+
   const { data: sessions = [], isLoading } = useQuery({
     queryKey: queryKeys.controlAppSessions(hallId),
     queryFn: () => hallApi.listControlAppSessions(hallId),
     select: (res) => res.data.data,
-    enabled: isAdmin,
+    enabled: canView,
   });
 
   const { data: halls = [] } = useQuery({
@@ -92,11 +96,11 @@ export default function ControlAppTab({ hallId, isAdmin }: ControlAppTabProps) {
     },
   ];
 
-  if (!isAdmin) {
+  if (!canView) {
     return (
       <Card>
         <div style={{ textAlign: 'center', color: 'var(--color-outline)', padding: 40 }}>
-          仅管理员可查看中控会话
+          您没有查看中控会话的权限。请联系管理员授权当前展厅的「查看展厅 App（app.view）」。
         </div>
       </Card>
     );

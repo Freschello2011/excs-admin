@@ -319,8 +319,9 @@ export const hallApi = {
   disconnectDebugInstance(
     hallId: number,
     instanceId: number,
+    reason?: string,
   ): Promise<AxiosResponse<ApiResponse<void>>> {
-    return asAxiosResp(hallClient.disconnectDebugInstance(hallId, instanceId));
+    return asAxiosResp(hallClient.disconnectDebugInstance(hallId, instanceId, reason));
   },
 
   extendDebugInstance(

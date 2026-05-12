@@ -43,7 +43,7 @@ import StatusTag from '@/components/common/StatusTag';
 import { hallApi } from '@/api/hall';
 import { presetCatalogApi, protocolProfileApi, pluginApi, deviceV2Api } from '@/api/deviceConnector';
 import { queryKeys } from '@/api/queryKeys';
-import { useAuthStore } from '@/stores/authStore';
+import { useCan } from '@/lib/authz/can';
 import { useHallStore } from '@/stores/hallStore';
 import type { DeviceListItem, ExhibitListItem } from '@/api/gen/client';
 import type {
@@ -231,12 +231,15 @@ function buildGroups(
 }
 
 export default function DeviceListPage() {
-  const { message } = useMessage();
+  const { notification } = useMessage();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const isAdmin = useAuthStore((s) => s.isAdmin);
-  const user = useAuthStore((s) => s.user);
   const selectedHallId = useHallStore((s) => s.selectedHallId);
+  // ADR-0021：按 device.edit @ hall 判定；禁用 isAdmin() + legacy hall_permissions 字面量比较
+  const canEditDevices = useCan(
+    'device.edit',
+    selectedHallId ? { type: 'hall', id: String(selectedHallId) } : undefined,
+  );
 
   const [keyword, setKeyword] = useState('');
   const [groupMode, setGroupMode] = useState<GroupMode>('exhibit');
@@ -265,17 +268,16 @@ export default function DeviceListPage() {
     enabled: !!selectedHallId,
   });
 
-  const canConfig =
-    !!selectedHallId &&
-    (isAdmin() ||
-      (user?.hall_permissions?.some(
-        (hp) => hp.hall_id === selectedHallId && hp.permissions.includes('system_config'),
-      ) ?? false));
+  const canConfig = !!selectedHallId && canEditDevices;
 
   const deleteMutation = useMutation({
     mutationFn: (deviceId: number) => hallApi.deleteDevice(deviceId),
     onSuccess: () => {
-      message.success('设备已删除');
+      notification.success({
+        message: '设备已删除',
+        description: '现场展厅 App 仍在内存中保留该设备的旧驱动 — 请到展厅 PC 上重启展厅 App，以释放连接并避免对已不存在的设备发命令。',
+        duration: 8,
+      });
       queryClient.invalidateQueries({ queryKey: ['devices'] });
     },
   });
@@ -283,7 +285,11 @@ export default function DeviceListPage() {
   const cloneMutation = useMutation({
     mutationFn: (deviceId: number) => deviceV2Api.clone(deviceId),
     onSuccess: () => {
-      message.success('已复制设备，请重新填写名称和连接参数');
+      notification.success({
+        message: '已复制设备',
+        description: '请到副本里重新填写名称和连接参数；保存后需到展厅 PC 重启展厅 App，新副本才能被中控/演出/触发器调用。',
+        duration: 8,
+      });
       queryClient.invalidateQueries({ queryKey: ['devices'] });
     },
   });
@@ -853,7 +859,7 @@ interface DrawerProps {
 }
 
 function DeviceDrawer({ open, editing, hallId, exhibits, prefillExhibitId, onClose, onSaved }: DrawerProps) {
-  const { message, modal } = useMessage();
+  const { message, modal, notification } = useMessage();
   const directConnectMode = useDirectConnect((s) => s.mode);
   const autogenEnabled = useInlineCommandCodeAutogenEnabled();
 
@@ -958,7 +964,11 @@ function DeviceDrawer({ open, editing, hallId, exhibits, prefillExhibitId, onClo
   const createMutation = useMutation({
     mutationFn: (body: CreateDeviceV2Body) => deviceV2Api.create(body),
     onSuccess: () => {
-      message.success('设备已创建');
+      notification.success({
+        message: '设备已创建',
+        description: '现场展厅 App 不会自动感知新设备 — 请到展厅 PC 上重启展厅 App，新设备才能被中控/演出/触发器调用。',
+        duration: 8,
+      });
       onSaved();
     },
   });
@@ -967,7 +977,11 @@ function DeviceDrawer({ open, editing, hallId, exhibits, prefillExhibitId, onClo
     mutationFn: ({ id, body }: { id: number; body: Partial<CreateDeviceV2Body> }) =>
       deviceV2Api.update(id, body),
     onSuccess: () => {
-      message.success('设备已更新');
+      notification.success({
+        message: '设备已更新',
+        description: '若改动了连接参数 / inline_commands / connector / ChannelMap，现场展厅 App 需重启才能按新配置生效（仅改名称/备注无需重启）。',
+        duration: 8,
+      });
       onSaved();
     },
     onError: (err: unknown) => {

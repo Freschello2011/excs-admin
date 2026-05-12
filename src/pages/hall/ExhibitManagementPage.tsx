@@ -1,6 +1,5 @@
 import { Navigate, useSearchParams } from 'react-router-dom';
 import { Tabs } from 'antd';
-import { useAuthStore } from '@/stores/authStore';
 import { useHallStore } from '@/stores/hallStore';
 import { useCan } from '@/lib/authz/can';
 import { useExhibitContextSync } from '@/hooks/useExhibitContextSync';
@@ -11,7 +10,6 @@ import PageHeader from '@/components/common/PageHeader';
 type OuterTab = 'list' | 'pairing-codes';
 
 export default function ExhibitManagementPage() {
-  const isAdmin = useAuthStore((s) => s.isAdmin);
   const hallId = useHallStore((s) => s.selectedHallId);
   const effectiveExhibitId = useExhibitContextSync();
 
@@ -47,7 +45,7 @@ export default function ExhibitManagementPage() {
             {
               key: 'pairing-codes',
               label: '配对码',
-              children: <PairingCodeTab hallId={hallId} isAdmin={isAdmin()} mode="exhibit" exhibitId={effectiveExhibitId} />,
+              children: <PairingCodeTab hallId={hallId} mode="exhibit" exhibitId={effectiveExhibitId} />,
             },
           ]}
         />

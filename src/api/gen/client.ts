@@ -904,9 +904,12 @@ export const hallClient = {
   },
 
   /* ---- 调试实例 ---- */
-  disconnectDebugInstance(hallId: number, instanceId: number): Promise<void> {
+  /** pairing.debug 标了 RequireReason: true（critical）。reason 走 body.reason（≥ 5 字）。 */
+  disconnectDebugInstance(hallId: number, instanceId: number, reason?: string): Promise<void> {
     return unwrap(
-      request.delete<ApiEnvelope<void>>(`/api/v1/halls/${hallId}/debug-instances/${instanceId}`),
+      request.delete<ApiEnvelope<void>>(`/api/v1/halls/${hallId}/debug-instances/${instanceId}`, {
+        data: mergeReasonBody(undefined, reason),
+      }),
     );
   },
   extendDebugInstance(hallId: number, instanceId: number, body: ExtendDebugInstanceRequest): Promise<AppInstanceDTO> {

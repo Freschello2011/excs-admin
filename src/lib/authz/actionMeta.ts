@@ -9,35 +9,10 @@
  * 配对/智能家居 → 全局资产 → 人/审计 → 平台。
  */
 import type { RiskLevel } from '@/api/gen/client';
+import { AUTHZ_DOMAIN_DISPLAY_LABELS } from './navLabels';
 
-/** 域代码 → 中文名（PRD §5 分域标题） */
-export const DOMAIN_LABELS: Record<string, string> = {
-  hall: '展厅',
-  exhibit: '展项',
-  device: '设备',
-  scene: '场景',
-  content: '内容库',
-  show: '演出',
-  panel: '中控面板',
-  notification: '通知',
-  ai: 'AI 形象',
-  template: '形象模板',
-  knowledge: '知识库',
-  tts: 'TTS',
-  pairing: '配对',
-  app: '展厅 App',
-  smarthome: '智能家居',
-  analytics: '统计分析',
-  dashboard: '仪表盘',
-  catalog: '设备目录',
-  release: '版本发布',
-  config: '系统配置',
-  nas: 'NAS 归档',
-  user: '用户与授权',
-  vendor: '供应商',
-  audit: '审计',
-  platform: '平台监控',
-};
+/** 域代码 → 中文名（与 sidebar 新 IA 同源；权威映射在 navLabels.ts） */
+export const DOMAIN_LABELS: Record<string, string> = AUTHZ_DOMAIN_DISPLAY_LABELS;
 
 /** 业务域优先级（高频在前；未列出的回退到末尾按字母序） */
 export const DOMAIN_ORDER: string[] = [

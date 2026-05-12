@@ -16,7 +16,6 @@ import dayjs from 'dayjs';
 import StatusTag from '@/components/common/StatusTag';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
-import { useAuthStore } from '@/stores/authStore';
 import { useHallStore } from '@/stores/hallStore';
 import { useCan } from '@/lib/authz/can';
 import ExhibitContentTab from './tabs/ExhibitContentTab';
@@ -94,8 +93,9 @@ export default function ExhibitDetailPage() {
   const exhibitId = Number(exhibitIdStr);
   const navigate = useNavigate();
   const { message } = App.useApp();
-  const isAdmin = useAuthStore((s) => s.isAdmin);
   const canManage = useCan('content.edit', { type: 'hall', id: String(hallId) });
+  // ADR-0021：配对码强调卡按 pairing.view 判定可见性（原来用 isAdmin() 误挡了 hall_admin）
+  const canViewPairing = useCan('pairing.view', { type: 'hall', id: String(hallId) });
   const clearSelectedExhibit = useHallStore((s) => s.clearSelectedExhibit);
   const selectedExhibitId = useHallStore((s) => s.selectedExhibitId);
   const setSelectedExhibit = useHallStore((s) => s.setSelectedExhibit);
@@ -234,8 +234,8 @@ export default function ExhibitDetailPage() {
         />
       </div>
 
-      {/* 配对码强调卡（仅 admin 可见） */}
-      {isAdmin() && (
+      {/* 配对码强调卡（按 pairing.view @ hall 判定；ADR-0021） */}
+      {canViewPairing && (
         <div className={styles.pairCard}>
           {currentCode ? (
             <>

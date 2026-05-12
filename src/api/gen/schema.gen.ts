@@ -6377,6 +6377,34 @@ export interface components {
             fields: components["schemas"]["ResponseField"][];
             timeout_ms: number;
         };
+        /**
+         * @description raw_transport inline_command 的响应判定模式（ADR-0030 §D3）。
+         *     none = 写完即关不等回应（"发完就算"，灯光盒类）；
+         *     any = 读到任何字节即 ok（debug / sniff 用）；
+         *     match = 读到的内容里匹配 match_pattern 才算 ok（命令-响应设备主流）；
+         *     echo = 设备必须把发出去的内容原样回来才算 ok（部分投影机 / KNX）。
+         * @enum {string}
+         */
+        ExpectResponseMode: "none" | "any" | "match" | "echo";
+        /**
+         * @description raw_transport inline_command 的命令级响应判定（ADR-0030 §D3）。
+         *     仅 connector_kind=raw_transport 的 inline_commands 必填；其他 connector kind 该字段忽略。
+         *     server 应用层不变量（ValidateCommands）：
+         *       - mode=match → match_pattern 必填且为合法正则
+         *       - mode=echo → 不允许 match_pattern / fail_pattern（语义冲突）
+         *       - read_timeout_ms 100-30000；max_bytes 1-65536
+         */
+        ExpectResponse: {
+            mode: components["schemas"]["ExpectResponseMode"];
+            /** @description mode=match 时必填的正则；其他 mode 该字段无效 */
+            match_pattern?: string;
+            /** @description 可选；显式失败模式（先于 match_pattern 判定） */
+            fail_pattern?: string;
+            /** @description 读响应超时（ms）。默认 1500；测试端点压到 1000（ADR-0030 §D5） */
+            read_timeout_ms?: number;
+            /** @description 一次最多读多少字节。默认 256 */
+            max_bytes?: number;
+        };
         DeviceCommand: {
             code: string;
             name: string;
@@ -6401,6 +6429,12 @@ export interface components {
             request_format?: "text" | "hex";
             /** @description query 命令响应模式（kind=query 必填） */
             response_schema?: components["schemas"]["ResponseSchema"];
+            /**
+             * @description ADR-0030 §D3：命令级响应判定。仅 raw_transport 的 inline_commands 必填
+             *     （server ValidateCommands 拦截），其他 connector kind 忽略此字段。
+             *     admin UI 强制 4 选 1（none/any/match/echo），老数据缺 mode 时 server 兜底用 none。
+             */
+            expect_response?: components["schemas"]["ExpectResponse"];
         };
         /**
          * @description 更新设备请求（device-mgmt-v2 P7-Cleanup 后只支持 connection_config / 元数据更新）。
@@ -16119,7 +16153,7 @@ export interface operations {
     getAnalyticsOssBrowser: {
         parameters: {
             query: {
-                /** @description service 层校验 bucket 必须是 raw/encrypted/thumbnail/releases/ai-assets 五个之一（ADR-0001 + ADR-0027） */
+                /** @description service 层校验 bucket 必须是 raw/encrypted/thumbnail/releases/ai-assets 五个之一（ADR-0031 + ADR-0033） */
                 bucket: string;
                 prefix?: string;
                 /** @description 续传 marker（service 层从上一页 next_marker 获取） */

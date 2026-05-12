@@ -6,7 +6,7 @@ import { useMessage } from '@/hooks/useMessage';
 import { useFieldMode } from '@/stores/fieldModeStore';
 import FieldModeFab from '@/components/common/FieldModeFab';
 import { useAuthStore } from '@/stores/authStore';
-import { hasAnyAction } from '@/lib/authz/can';
+import { hasAnyAction, useCan } from '@/lib/authz/can';
 import ForceChangePasswordModal from '@/components/auth/ForceChangePasswordModal';
 import { useAppStore } from '@/stores/appStore';
 import { useBrandingStore } from '@/stores/brandingStore';
@@ -298,7 +298,6 @@ export default function AdminLayout() {
   const navigate = useNavigate();
   const userName = useAuthStore((s) => s.userName);
   const userAvatar = useAuthStore((s) => s.userAvatar);
-  const isAdmin = useAuthStore((s) => s.isAdmin);
   const logout = useAuthStore((s) => s.logout);
   const user = useAuthStore((s) => s.user);
   // 订阅 actionSet 变更，触发 canSeeItem 重算（登录 / 切换用户 / 刷新 token 后）
@@ -319,6 +318,14 @@ export default function AdminLayout() {
   };
 
   const selectedHallId = useHallStore((s) => s.selectedHallId);
+
+  // ADR-0021：「新建展项」按 exhibit.edit @ hall 判定（hall_admin 也能用）；
+  // 「新建展厅」走 hall.sync_mdm @ Global（来自 MDM 同步链路，hall_admin 通常没有）
+  const canCreateHall = useCan('hall.sync_mdm');
+  const canCreateExhibit = useCan(
+    'exhibit.edit',
+    selectedHallId ? { type: 'hall', id: String(selectedHallId) } : undefined,
+  );
   const selectedHallName = useHallStore((s) => s.selectedHallName);
   const setSelectedHall = useHallStore((s) => s.setSelectedHall);
   const clearSelectedHall = useHallStore((s) => s.clearSelectedHall);
@@ -680,7 +687,7 @@ export default function AdminLayout() {
                         {halls.length === 0 && (
                           <div className={styles['admin-layout__selector-empty']}>暂无展厅</div>
                         )}
-                        {isAdmin() && (
+                        {canCreateHall && (
                           <>
                             <div className={styles['admin-layout__selector-divider']} />
                             <button
@@ -755,7 +762,7 @@ export default function AdminLayout() {
                       {exhibits.length === 0 && (
                         <div className={styles['admin-layout__selector-empty']}>暂无展项</div>
                       )}
-                      {isAdmin() && (
+                      {canCreateExhibit && (
                         <>
                           <div className={styles['admin-layout__selector-divider']} />
                           <button

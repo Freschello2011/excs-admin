@@ -7,6 +7,7 @@ import dayjs from 'dayjs';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
 import RiskyActionButton from '@/components/authz/RiskyActionButton';
+import { useCan } from '@/lib/authz/can';
 import type {
   PairingCodeListItem,
   PairingCodeStatus,
@@ -37,7 +38,6 @@ function pickServerMessage(err: unknown, fallback: string): string {
 
 interface PairingCodeTabProps {
   hallId: number;
-  isAdmin: boolean;
   /** 限制显示内容：'exhibit' 只展项；'hall' 只展厅码/中控；undefined 默认展项 */
   mode?: 'exhibit' | 'hall';
   /** 仅展项模式下：限定单个展项的配对码卡片（用于展项详情页） */
@@ -221,12 +221,20 @@ function Legend() {
 
 /* ── Main component ── */
 
-export default function PairingCodeTab({ hallId, isAdmin, mode, exhibitId }: PairingCodeTabProps) {
+export default function PairingCodeTab({ hallId, mode, exhibitId }: PairingCodeTabProps) {
   const { message } = useMessage();
   const queryClient = useQueryClient();
   const [generateModalOpen, setGenerateModalOpen] = useState(false);
   const [form] = Form.useForm();
   const tab: 'exhibit' | 'hall' = mode ?? 'exhibit';
+
+  // ADR-0021：按 action + scope 判定，禁用 isAdmin() 字面量门禁。
+  // 写按钮（生成 / 重置 / 锁 / 解锁 / 批量 / 调试踢人）由 RiskyActionButton + 后端 RequireAction 兜底。
+  const hallScope = { type: 'hall' as const, id: String(hallId) };
+  const canViewPairing = useCan('pairing.view', hallScope);
+  const canViewApp = useCan('app.view', hallScope);
+  // 当前 Tab 整体可见性：只要能看配对码或能看 App 实例，就允许进入（内部按钮仍各自后端兜底）
+  const canEnterTab = canViewPairing || canViewApp;
   const [showHistory, setShowHistory] = useState(false);
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
@@ -248,7 +256,7 @@ export default function PairingCodeTab({ hallId, isAdmin, mode, exhibitId }: Pai
     queryKey: queryKeys.pairingCodes(hallId),
     queryFn: () => hallApi.listPairingCodes(hallId),
     select: (res) => res.data.data,
-    enabled: isAdmin,
+    enabled: canViewPairing,
   });
 
   const { data: exhibits = [] } = useQuery({
@@ -261,14 +269,14 @@ export default function PairingCodeTab({ hallId, isAdmin, mode, exhibitId }: Pai
     queryKey: queryKeys.appInstances(hallId),
     queryFn: () => hallApi.getAppInstances(hallId),
     select: (res) => res.data.data,
-    enabled: isAdmin,
+    enabled: canViewApp,
   });
 
   const { data: controlSessions = [] } = useQuery({
     queryKey: queryKeys.controlAppSessions(hallId),
     queryFn: () => hallApi.listControlAppSessions(hallId),
     select: (res) => res.data.data,
-    enabled: isAdmin && tab === 'hall',
+    enabled: canViewApp && tab === 'hall',
   });
 
   const { data: allHalls = [] } = useQuery({
@@ -282,7 +290,7 @@ export default function PairingCodeTab({ hallId, isAdmin, mode, exhibitId }: Pai
     queryKey: queryKeys.announcedDevices,
     queryFn: () => hallApi.listAnnouncedDevices(),
     select: (res) => res.data.data,
-    enabled: isAdmin && tab === 'exhibit',
+    enabled: canViewPairing && tab === 'exhibit',
     refetchInterval: 5000,
   });
 
@@ -347,11 +355,13 @@ export default function PairingCodeTab({ hallId, isAdmin, mode, exhibitId }: Pai
   });
 
   const disconnectDebugMutation = useMutation({
-    mutationFn: (instanceId: number) => hallApi.disconnectDebugInstance(hallId, instanceId),
+    mutationFn: (vars: { instanceId: number; reason?: string }) =>
+      hallApi.disconnectDebugInstance(hallId, vars.instanceId, vars.reason),
     onSuccess: () => {
       message.success('调试实例已断开');
       invalidate();
     },
+    onError: (err) => message.error(pickServerMessage(err, '断开调试实例失败')),
   });
 
   const extendDebugMutation = useMutation({
@@ -680,9 +690,19 @@ export default function PairingCodeTab({ hallId, isAdmin, mode, exhibitId }: Pai
           <Popconfirm title="延长 4 小时？" onConfirm={() => extendDebugMutation.mutate({ instanceId: di.id, hours: 4 })}>
             <Button type="link" size="small">延长</Button>
           </Popconfirm>
-          <Popconfirm title="确认断开该调试实例？" onConfirm={() => disconnectDebugMutation.mutate(di.id)}>
-            <Button type="link" size="small" danger>断开</Button>
-          </Popconfirm>
+          <RiskyActionButton
+            action="pairing.debug"
+            type="link"
+            size="small"
+            danger
+            confirmTitle="断开调试实例"
+            confirmContent="将立即断开该调试实例，调试机会被踢下线。请填写操作原因（≥ 5 字，审计用）。"
+            onConfirm={async (reason) => {
+              await disconnectDebugMutation.mutateAsync({ instanceId: di.id, reason });
+            }}
+          >
+            断开
+          </RiskyActionButton>
         </Space>
       </div>
     );
@@ -1079,10 +1099,15 @@ export default function PairingCodeTab({ hallId, isAdmin, mode, exhibitId }: Pai
     );
   };
 
-  /* ── Guard: non-admin ── */
+  /* ── Guard：缺少最低查看权限 ── */
 
-  if (!isAdmin) {
-    return <div className={s.nonAdmin}>仅管理员可管理配对码</div>;
+  if (!canEnterTab) {
+    const need = tab === 'hall' ? '查看中控配对码与会话' : '查看展项配对码与待配对设备';
+    return (
+      <div className={s.nonAdmin}>
+        您没有{need}的权限。请联系管理员授权当前展厅的「查看配对（pairing.view）」或「查看展厅 App（app.view）」。
+      </div>
+    );
   }
 
   const loading = codesLoading;

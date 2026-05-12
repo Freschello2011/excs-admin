@@ -6,22 +6,27 @@ import dayjs from 'dayjs';
 import StatusTag from '@/components/common/StatusTag';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
+import { useCan } from '@/lib/authz/can';
 import type { AppInstanceListItem } from '@/api/gen/client';
 
 interface AppInstanceTabProps {
   hallId: number;
-  isAdmin: boolean;
 }
 
-export default function AppInstanceTab({ hallId, isAdmin }: AppInstanceTabProps) {
+export default function AppInstanceTab({ hallId }: AppInstanceTabProps) {
   const { message } = useMessage();
   const queryClient = useQueryClient();
+
+  // ADR-0021：按 action + scope 判定，禁用 isAdmin() 字面量门禁
+  const hallScope = { type: 'hall' as const, id: String(hallId) };
+  const canView = useCan('app.view', hallScope);
+  const canManage = useCan('app.manage', hallScope);
 
   const { data: instances = [], isLoading } = useQuery({
     queryKey: queryKeys.appInstances(hallId),
     queryFn: () => hallApi.getAppInstances(hallId),
     select: (res) => res.data.data,
-    enabled: isAdmin,
+    enabled: canView,
   });
 
   const unpairMutation = useMutation({
@@ -71,7 +76,7 @@ export default function AppInstanceTab({ hallId, isAdmin }: AppInstanceTabProps)
       width: 180,
       render: (v: string | null) => v ? dayjs(v).format('YYYY-MM-DD HH:mm') : '-',
     },
-    ...(isAdmin ? [{
+    ...(canManage ? [{
       title: '操作',
       width: 100,
       render: (_: unknown, record: AppInstanceListItem) => (
@@ -89,11 +94,11 @@ export default function AppInstanceTab({ hallId, isAdmin }: AppInstanceTabProps)
     }] : []),
   ];
 
-  if (!isAdmin) {
+  if (!canView) {
     return (
       <Card>
         <div style={{ textAlign: 'center', color: 'var(--color-outline)', padding: 40 }}>
-          仅管理员可查看 App 实例
+          您没有查看 App 实例的权限。请联系管理员授权当前展厅的「查看展厅 App（app.view）」。
         </div>
       </Card>
     );

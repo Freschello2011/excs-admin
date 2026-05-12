@@ -6,15 +6,17 @@ import dayjs from 'dayjs';
 import StatusTag from '@/components/common/StatusTag';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
+import { useCan } from '@/lib/authz/can';
 import type { HallDetail } from '@/api/gen/client';
 import styles from './HallInfoTab.module.scss';
 
 interface HallInfoTabProps {
   hall: HallDetail;
-  isAdmin: boolean;
 }
 
-export default function HallInfoTab({ hall, isAdmin }: HallInfoTabProps) {
+export default function HallInfoTab({ hall }: HallInfoTabProps) {
+  // ADR-0021：服务期是 Global scope critical action；按 hall.update_service_period 判定
+  const canUpdateServicePeriod = useCan('hall.update_service_period');
   const { message } = useMessage();
   const queryClient = useQueryClient();
   const [serviceModalOpen, setServiceModalOpen] = useState(false);
@@ -71,7 +73,7 @@ export default function HallInfoTab({ hall, isAdmin }: HallInfoTabProps) {
       <Card
         title="展厅信息"
         extra={
-          isAdmin ? (
+          canUpdateServicePeriod ? (
             <Button type="link" onClick={openServiceModal}>
               管理服务期
             </Button>

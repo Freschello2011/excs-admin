@@ -30,6 +30,30 @@ export type ResponseField = components['schemas']['ResponseField'];
 export type HeartbeatPattern = components['schemas']['HeartbeatPattern'];
 export type DocumentedListenerPattern = components['schemas']['DocumentedListenerPattern'];
 
+/* ===== ADR-0030 raw_transport 命令级响应判定 + 设备级连接生命周期 VO ===== */
+
+export type ExpectResponse = components['schemas']['ExpectResponse'];
+export type ExpectResponseMode = components['schemas']['ExpectResponseMode'];
+
+/**
+ * raw_transport TCP 连接生命周期模式（ADR-0030 §D1）。
+ *   - short：每发一次新建 TcpClient + connect + write + close（ADR-0017 D5 行为）
+ *   - persistent：常驻连接 + idle 计时器；写命令前发现流不健康则懒重连一次（D7）
+ *
+ * server 把 connection_config 当 opaque jsonb（schema.gen.ts 透传 [key:string]: unknown），
+ * connection_mode / heartbeat 是 raw_transport 的 well-known 子键 —— admin 在 connection_config
+ * 里读写这俩字段属约定级 contract，不依赖 server typed schema。
+ */
+export type ConnectionMode = 'short' | 'persistent';
+
+/** raw_transport 设备 connection_config.heartbeat 子对象（ADR-0030 §D2，仅 persistent 启用） */
+export interface HeartbeatConfig {
+  enabled?: boolean;
+  interval_ms?: number;
+  command_code?: string;
+  miss_threshold?: number;
+}
+
 /* ===== Preset / Protocol / Plugin DTOs ===== */
 
 export type PresetCatalogDTO = components['schemas']['PresetCatalogDTO'];

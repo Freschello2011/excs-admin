@@ -1,13 +1,11 @@
 import { useState } from 'react';
 import { Tabs } from 'antd';
 import PageHeader from '@/components/common/PageHeader';
-import { useAuthStore } from '@/stores/authStore';
 import { useHallStore } from '@/stores/hallStore';
 import PanelEditorPage from './PanelEditorPage';
 import PairingCodeTab from '@/pages/hall/tabs/PairingCodeTab';
 
 export default function ControlAppPage() {
-  const isAdmin = useAuthStore((s) => s.isAdmin);
   const hallId = useHallStore((s) => s.selectedHallId);
   const [activeTab, setActiveTab] = useState<'panel' | 'pairing'>('panel');
 
@@ -21,7 +19,7 @@ export default function ControlAppPage() {
       key: 'pairing',
       label: '中控配对码',
       children: hallId ? (
-        <PairingCodeTab hallId={hallId} isAdmin={isAdmin()} mode="hall" />
+        <PairingCodeTab hallId={hallId} mode="hall" />
       ) : (
         <div style={{ textAlign: 'center', color: 'var(--color-outline)', padding: 60 }}>
           请先在顶栏选择展厅

@@ -666,6 +666,7 @@ export default function DeviceDebugConsolePage() {
             <InlineCommandsTab
               deviceId={deviceId}
               initial={inlineCommands}
+              initialConnectionConfig={device.connection_config}
               onCountChange={setInlineCmdCount}
             />
           )}

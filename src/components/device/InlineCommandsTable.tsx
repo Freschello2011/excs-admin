@@ -5,9 +5,15 @@
  *   - 默认隐藏独立 code 列；code 渲染到 名字 cell 下方小灰副行
  *     - 已持久化行：🔒 ID · xxx
  *     - 未持久化行：系统自动起 · ID · xxx（按名字 slug 实时生成）
- *   - 列：名字 / 类型 / 格式 / 发送内容 / [最近测试] / 操作 [▶ 测试 / ⋯ 详情 / 删]
+ *   - 列：名字 / 类型 / 格式 / 发送内容 / 响应判定 / [最近测试] / 操作 [▶ 测试 / ⋯ 详情 / 删]
  *   - 「⋯ 详情」打开 InlineCommandAdvancedDrawer 看 / 改 ID（已存只读 + 复制；未存可改 + 重算）
  *   - autogen 在 prepareInlineCommandsForSave 中执行（调用方保存前 await）
+ *
+ * Step 7（ADR-0030 §D3）— 响应判定列：
+ *   - mode 下拉 4 选 1：发完就算 / 来啥都行 / 看回应 / 原样回声（界面用业务词，落 DB 仍用 none/any/match/echo）
+ *   - mode=match → 同 cell 出现「期望」正则 inline 输入
+ *   - 新建命令默认 mode=match（D3 决策聚焦响应设备）
+ *   - 老命令缺 expect_response → 显示"未配置（按发完就算处理）"提示鼓励选模式；server 端 applyInlineCommandsDefaults 兜底
  *
  * 复用于：
  *   - 新建 / 编辑设备抽屉 step1 末尾（保存前一并提交到 inline_commands）
@@ -16,6 +22,7 @@
  * 校验：
  *   - 行内 live：未持久化空 code 不报错（保存时由 prepareInlineCommandsForSave 兜底生成）
  *   - 已存 code 不允许重复 / 覆盖；hex 格式 request 必须合法 hex
+ *   - mode=match → match_pattern 必填且为合法正则（server ValidateInlineCommands 同规则双向对齐）
  */
 import { useCallback, useMemo, useState } from 'react';
 import { Button, Input, Select, Space, Tag, Tooltip, Typography } from 'antd';
@@ -25,7 +32,12 @@ import {
   PlayCircleOutlined,
   PlusOutlined,
 } from '@ant-design/icons';
-import type { CommandKind, DeviceCommand } from '@/types/deviceConnector';
+import type {
+  CommandKind,
+  DeviceCommand,
+  ExpectResponse,
+  ExpectResponseMode,
+} from '@/types/deviceConnector';
 import { generateInlineCommandCode } from './inlineCommandCodeAutogen';
 import InlineCommandAdvancedDrawer from './InlineCommandAdvancedDrawer';
 
@@ -42,12 +54,63 @@ export interface TestResult {
   ok: boolean;
   latencyMs?: number;
   detail?: string;
+  /** ADR-0030 §D5：失败时的结构化错误码（READ_TIMEOUT / EXPECT_NOT_MATCHED / 等）。成功时不填 */
+  errorCode?: string;
   at: number;
+}
+
+/** error_code → 中文部署员视角短语；缺省直接显示原始 code（兜底防新加 code 不更新映射） */
+const ERROR_CODE_LABELS: Record<string, string> = {
+  READ_TIMEOUT: '读响应超时',
+  READ_EMPTY: '设备未回应',
+  READ_FAILED: '读响应异常',
+  EXPECT_NOT_MATCHED: '回应不符合期望',
+  EXPECT_FAIL_MATCHED: '命中失败模式',
+  EXPECT_ECHO_MISMATCH: '回声不匹配',
+  REGEX_TIMEOUT: '正则匹配超时',
+  MISCONFIGURED: '配置不全',
+  ACK_TIMEOUT: '展厅 App 没回',
+  NO_HALL_MASTER_ONLINE: '本展厅无展厅 App 在线',
+};
+
+/** 渲染服务端 detail 的三段卡片（ADR-0030 §D5：已发送 N 字节 / 已读 M 字节 / 匹配 OK）+ 失败时高亮 error_code */
+export function renderTestDetailCard(detail: string | undefined, errorCode: string | undefined, ok: boolean): React.ReactNode {
+  if (!detail) {
+    return <span style={{ fontSize: 12 }}>无详细信息</span>;
+  }
+  // server 写好的格式按 " / " 分段，前端只负责按段渲染（不重排版）
+  const segments = detail.split(' / ').map((s) => s.trim()).filter(Boolean);
+  return (
+    <div style={{ fontSize: 12, lineHeight: 1.6, maxWidth: 360 }}>
+      {!ok && errorCode && (
+        <div style={{ marginBottom: 4 }}>
+          <Tag
+            color="error"
+            style={{
+              marginRight: 0,
+              fontFamily: 'var(--font-family-mono, ui-monospace, monospace)',
+              fontSize: 11,
+            }}
+          >
+            {ERROR_CODE_LABELS[errorCode] ?? errorCode}
+          </Tag>
+        </div>
+      )}
+      {segments.map((seg, i) => (
+        <div key={i} style={{ display: 'flex', gap: 6 }}>
+          <span style={{ color: 'var(--ant-color-text-tertiary)', minWidth: 14 }}>
+            {i === 0 ? '①' : i === 1 ? '②' : i === 2 ? '③' : `${i + 1}.`}
+          </span>
+          <span>{seg}</span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export interface ValidationIssue {
   rowKey: string;
-  field: 'code' | 'name' | 'request';
+  field: 'code' | 'name' | 'request' | 'expect_response';
   message: string;
 }
 
@@ -58,6 +121,49 @@ export function isValidHex(input: string): boolean {
   const cleaned = input.replace(/\s+/g, '').toLowerCase();
   if (cleaned.length === 0 || cleaned.length % 2 !== 0) return false;
   return HEX_RE.test(cleaned);
+}
+
+/** 业务词 → mode enum 的反查表（select 选项 + 渲染都用） */
+export const EXPECT_RESPONSE_MODE_LABELS: Record<ExpectResponseMode, string> = {
+  none: '发完就算',
+  any: '来啥都行',
+  match: '看回应',
+  echo: '原样回声',
+};
+
+/** select 的 dropdown 选项（带次行解释，部署员视角） */
+export const EXPECT_RESPONSE_MODE_OPTIONS: ReadonlyArray<{
+  value: ExpectResponseMode;
+  label: string;
+  desc: string;
+}> = [
+  { value: 'none', label: '发完就算', desc: '写完就关，不等设备回话（灯光盒类）' },
+  { value: 'any', label: '来啥都行', desc: '读到任何字节都算成功（调试 / 探测协议用）' },
+  { value: 'match', label: '看回应', desc: '设备回话里要匹配某段文字才算成功（命令-响应主流）' },
+  { value: 'echo', label: '原样回声', desc: '设备必须把发出去的内容原样回来才算成功' },
+];
+
+/** 校验单条 expect_response（match_pattern 必填 + 合法正则；与 server ValidateExpectResponse 同规则） */
+export function validateExpectResponseCell(er: ExpectResponse | undefined | null): string | null {
+  if (!er || !er.mode) {
+    // null / 缺 mode 不视为行错误 —— admin 显示提示鼓励选；server applyInlineCommandsDefaults 会兜底 mode=none
+    return null;
+  }
+  if (er.mode === 'match') {
+    const p = (er.match_pattern ?? '').trim();
+    if (!p) return '响应判定选「看回应」时，必须填一段期望文字（正则）';
+    try {
+      new RegExp(p);
+    } catch (e) {
+      return `期望正则不合法：${e instanceof Error ? e.message : String(e)}`;
+    }
+  }
+  if (er.mode === 'echo') {
+    if ((er.match_pattern ?? '').trim() || (er.fail_pattern ?? '').trim()) {
+      return '响应判定选「原样回声」时不需要再填期望 / 失败文字（语义冲突）';
+    }
+  }
+  return null;
 }
 
 /**
@@ -96,6 +202,10 @@ export function validateInlineCommands(
         field: 'request',
         message: 'hex 格式需为偶数个 0-9a-f（容忍空白）',
       });
+    }
+    const erErr = validateExpectResponseCell(r.expect_response ?? null);
+    if (erErr) {
+      issues.push({ rowKey, field: 'expect_response', message: erErr });
     }
   });
   return issues;
@@ -214,12 +324,14 @@ export default function InlineCommandsTable({
 
   const addRow = useCallback(() => {
     const idx = value.length;
+    // ADR-0030 §D3：新建命令默认 mode=match（部署员选「看回应」需手动改 / chip 切到灯光盒一键改 none）
     const row: InlineCommandRow = {
       code: '',
       name: '',
       kind: 'control' as CommandKind,
       request: '',
       request_format: 'text',
+      expect_response: { mode: 'match' },
     };
     ensureRowKey(row, idx);
     onChange([...value, row]);
@@ -288,15 +400,20 @@ export default function InlineCommandsTable({
       >
         <thead>
           <tr>
-            <th style={{ ...headStyle, width: '32%' }}>名字</th>
-            <th style={{ ...headStyle, width: '10%' }}>类型</th>
-            <th style={{ ...headStyle, width: '9%' }}>格式</th>
-            <th style={{ ...headStyle, width: showLastTest ? '25%' : '32%' }}>发送内容</th>
+            <th style={{ ...headStyle, width: showLastTest ? '22%' : '25%' }}>名字</th>
+            <th style={{ ...headStyle, width: '8%' }}>类型</th>
+            <th style={{ ...headStyle, width: '7%' }}>格式</th>
+            <th style={{ ...headStyle, width: showLastTest ? '20%' : '22%' }}>发送内容</th>
+            <th style={{ ...headStyle, width: showLastTest ? '18%' : '20%' }}>
+              <Tooltip title="设备回什么算成功 — 4 选 1：发完就算 / 来啥都行 / 看回应 / 原样回声">
+                <span>响应判定</span>
+              </Tooltip>
+            </th>
             {showLastTest && <th style={{ ...headStyle, width: '10%' }}>最近测试</th>}
             <th
               style={{
                 ...headStyle,
-                width: onTest ? '14%' : '8%',
+                width: onTest ? (showLastTest ? '15%' : '18%') : '18%',
                 textAlign: 'right',
               }}
             >
@@ -308,7 +425,7 @@ export default function InlineCommandsTable({
           {value.length === 0 && (
             <tr>
               <td
-                colSpan={showLastTest ? 6 : 5}
+                colSpan={showLastTest ? 7 : 6}
                 style={{
                   ...cellStyle,
                   textAlign: 'center',
@@ -326,6 +443,9 @@ export default function InlineCommandsTable({
             const nameIssue = rowIssues.find((i) => i.field === 'name');
             const reqIssue = rowIssues.find((i) => i.field === 'request');
             const codeDupIssue = rowIssues.find((i) => i.field === 'code');
+            const erIssue = rowIssues.find((i) => i.field === 'expect_response');
+            const er = row.expect_response ?? null;
+            const erMode = er?.mode;
             const result = liveResults[rowKey];
             const isDirty = dirtyRowKeys?.has(rowKey);
             const isPersisted = persistedRowKeys?.has(rowKey) ?? false;
@@ -425,20 +545,98 @@ export default function InlineCommandsTable({
                     onChange={(e) => setRow(idx, { request: e.target.value })}
                   />
                 </td>
+                <td style={cellStyle}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    <Select
+                      size="small"
+                      variant="borderless"
+                      value={erMode}
+                      placeholder="未配置"
+                      disabled={readOnly}
+                      style={{ width: '100%' }}
+                      status={erIssue ? 'error' : undefined}
+                      onChange={(v: ExpectResponseMode) => {
+                        const next: ExpectResponse = { ...(er ?? {}), mode: v };
+                        // 切到 echo → 清空 match/fail（语义冲突，server validation 同规则）
+                        if (v === 'echo') {
+                          delete next.match_pattern;
+                          delete next.fail_pattern;
+                        }
+                        setRow(idx, { expect_response: next });
+                      }}
+                      options={EXPECT_RESPONSE_MODE_OPTIONS.map((o) => ({
+                        value: o.value,
+                        label: (
+                          <Tooltip title={o.desc} placement="left" mouseEnterDelay={0.3}>
+                            <span>{o.label}</span>
+                          </Tooltip>
+                        ),
+                      }))}
+                    />
+                    {erMode === 'match' && (
+                      <Input
+                        size="small"
+                        variant="borderless"
+                        style={{
+                          fontFamily: 'var(--font-family-mono, ui-monospace, monospace)',
+                          fontSize: 12,
+                        }}
+                        value={er?.match_pattern ?? ''}
+                        placeholder="期望（正则）如 ^OK"
+                        disabled={readOnly}
+                        status={erIssue ? 'error' : undefined}
+                        onChange={(e) =>
+                          setRow(idx, {
+                            expect_response: {
+                              ...(er ?? { mode: 'match' as const }),
+                              match_pattern: e.target.value,
+                            },
+                          })
+                        }
+                      />
+                    )}
+                    {!erMode && (
+                      <Tooltip title="老命令缺响应判定 —— 不阻断保存，server 端按「发完就算」兜底；建议显式选模式">
+                        <span
+                          style={{
+                            fontSize: 11,
+                            color: 'var(--ant-color-text-tertiary)',
+                            padding: '0 6px',
+                          }}
+                        >
+                          未配置（按发完就算处理）
+                        </span>
+                      </Tooltip>
+                    )}
+                    {erIssue && (
+                      <span
+                        style={{
+                          fontSize: 11,
+                          color: 'var(--ant-color-error)',
+                          padding: '0 6px',
+                        }}
+                      >
+                        {erIssue.message}
+                      </span>
+                    )}
+                  </div>
+                </td>
                 {showLastTest && (
                   <td style={cellStyle}>
                     {result ? (
-                      result.ok ? (
-                        <Tag color="success" style={{ marginRight: 0 }}>
-                          ✓ {result.latencyMs ?? '?'}ms
+                      <Tooltip
+                        title={renderTestDetailCard(result.detail, result.errorCode, result.ok)}
+                        placement="left"
+                        overlayInnerStyle={{ maxWidth: 380 }}
+                      >
+                        <Tag color={result.ok ? 'success' : 'error'} style={{ marginRight: 0, cursor: 'help' }}>
+                          {result.ok
+                            ? `✓ ${result.latencyMs ?? '?'}ms`
+                            : result.errorCode
+                              ? `✗ ${ERROR_CODE_LABELS[result.errorCode] ?? result.errorCode}`
+                              : '✗ 失败'}
                         </Tag>
-                      ) : (
-                        <Tooltip title={result.detail}>
-                          <Tag color="error" style={{ marginRight: 0 }}>
-                            ✗ 失败
-                          </Tag>
-                        </Tooltip>
-                      )
+                      </Tooltip>
                     ) : (
                       <Text type="secondary" style={{ fontSize: 12 }}>
                         未测
