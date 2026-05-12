@@ -22,6 +22,7 @@ import {
   type KeyCount,
   type DatePointInt,
 } from '@/api/authz';
+import { useCan } from '@/lib/authz/can';
 import type { RoleTemplate, ScopeType } from '@/api/gen/client';
 import { useActionsMap } from '@/lib/authz/useActionsMap';
 import ScopeTag from '@/components/authz/common/ScopeTag';
@@ -102,11 +103,15 @@ function BarCard({ title, data }: { title: string; data?: KeyCount[] }) {
 
 export default function AuditReportPage() {
   const actionsMap = useActionsMap();
+  // 守门：模板列表归 user.view 域，hall_admin 不持有此 action，无权时跳过请求，
+  // 下游柱图自动回退到显示 raw template_code（templateCodeMap.get() 返 undefined）。
+  const canViewUsers = useCan('user.view');
 
   const { data: templates } = useQuery({
     queryKey: ['authz', 'role-templates'],
     queryFn: () => authzApi.listTemplates(),
     select: (res) => res.data.data?.list ?? [],
+    enabled: canViewUsers,
   });
 
   const { data: halls } = useQuery({

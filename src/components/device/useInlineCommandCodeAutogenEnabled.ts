@@ -14,13 +14,18 @@
 import { useQuery } from '@tanstack/react-query';
 import { sysConfigApi } from '@/api/sysConfig';
 import { queryKeys } from '@/api/queryKeys';
+import { useCan } from '@/lib/authz/can';
 
 export function useInlineCommandCodeAutogenEnabled(): boolean {
+  // 守门：hall_admin / 非平台级用户没有 config.view，直接走默认 ON 兜底，
+  // 不发请求避免全局 403 toast（设备管理页副作用 GET 噪音）。
+  const canViewConfig = useCan('config.view');
   const { data } = useQuery({
     queryKey: queryKeys.sysConfigGroup('device_mgmt'),
     queryFn: () => sysConfigApi.getGroupConfigs('device_mgmt'),
     staleTime: 5 * 60 * 1000,
     retry: false,
+    enabled: canViewConfig,
   });
   const items = data?.data?.data?.items ?? [];
   const flag = items.find((i) => i.key === 'inline_command_code_autogen_enabled');

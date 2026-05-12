@@ -17,6 +17,7 @@ import ScopeTag, { SCOPE_ORDER } from '@/components/authz/common/ScopeTag';
 import { authzApi } from '@/api/authz';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
+import { useCan } from '@/lib/authz/can';
 import type { Grant, ScopeType } from '@/api/gen/client';
 
 const { Text } = Typography;
@@ -29,22 +30,41 @@ interface Props {
 }
 
 export default function GrantSummaryCard({ userId, onGrantWizard, isSelf = false }: Props) {
+  // 守门：user-view / role-templates 端点归 user.view 域；非平台级用户（含 self 看自己）
+  // 无此 action，跳过请求避免 403 toast。无权限时本卡显示降级 Empty。
+  const canViewUsers = useCan('user.view');
   const { data: view, isLoading } = useQuery({
     queryKey: ['authz', 'user-view', userId],
     queryFn: () => authzApi.getUserAuthzView(userId),
     select: (res) => res.data.data,
-    enabled: userId > 0,
+    enabled: userId > 0 && canViewUsers,
   });
   const { data: templates } = useQuery({
     queryKey: ['authz', 'role-templates'],
     queryFn: () => authzApi.listTemplates(),
     select: (res) => res.data.data?.list ?? [],
+    enabled: canViewUsers,
   });
   const { data: halls } = useQuery({
     queryKey: queryKeys.halls({ page: 1, page_size: 200 }),
     queryFn: () => hallApi.getHalls({ page: 1, page_size: 200 }),
     select: (res) => res.data.data?.list ?? [],
   });
+
+  // 无权限分支：返回 Empty 而非空白，告知用户原因。
+  if (!canViewUsers) {
+    return (
+      <Card size="small" title="当前授权（Grant）" style={{ marginBottom: 16 }}>
+        <Empty
+          description={
+            isSelf
+              ? '您没有「查看用户」权限，无法在此处查看自己的 Grant 详情。如需查看，请联系管理员授权（action: user.view）。'
+              : '您没有「查看用户」权限。请联系管理员授权（action: user.view）。'
+          }
+        />
+      </Card>
+    );
+  }
 
   if (isLoading) {
     return (

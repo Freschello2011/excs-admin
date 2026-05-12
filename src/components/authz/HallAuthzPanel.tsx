@@ -33,6 +33,7 @@ import ExpiryTag from '@/components/authz/common/ExpiryTag';
 import { useMessage } from '@/hooks/useMessage';
 import { authzApi } from '@/api/authz';
 import { userApi } from '@/api/user';
+import { useCan } from '@/lib/authz/can';
 import { queryKeys } from '@/api/queryKeys';
 import type { Grant, RoleTemplate } from '@/api/gen/client';
 import type { UserListItem } from '@/api/gen/client';
@@ -66,16 +67,21 @@ export default function HallAuthzPanel({ hallId, hallName }: Props) {
     enabled: hallId > 0,
   });
 
+  // 守门：模板列表 / 用户列表归 user.view 域；外层 HallDetailPage 已用 <Can> 包了，
+  // 这里再加一次 enabled 兜底（深度防御 + feedback_excs_isadmin_vs_usecan 一致性）。
+  const canViewUsers = useCan('user.view');
   const { data: templates } = useQuery({
     queryKey: ['authz', 'role-templates'],
     queryFn: () => authzApi.listTemplates(),
     select: (res) => res.data.data?.list ?? [],
+    enabled: canViewUsers,
   });
 
   const { data: users } = useQuery({
     queryKey: queryKeys.users({ page: 1, page_size: 500 }),
     queryFn: () => userApi.getUsers({ page: 1, page_size: 500 }),
     select: (res) => res.list ?? [],
+    enabled: canViewUsers,
   });
 
   const templateMap = useMemo(() => {

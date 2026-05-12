@@ -239,10 +239,13 @@ export default function UserAuthzPanel({ userId, onNavigateGrantWizard }: Props)
     enabled: userId > 0,
   });
 
+  // 守门：模板列表归 user.view 域，无权时跳过请求避免 403 toast（自己看自己用户详情场景）
+  const canViewUsers = useCan('user.view');
   const { data: templates } = useQuery({
     queryKey: ['authz', 'role-templates'],
     queryFn: () => authzApi.listTemplates(),
     select: (res) => res.data.data?.list ?? [],
+    enabled: canViewUsers,
   });
 
   const { data: halls } = useQuery({

@@ -43,6 +43,7 @@ import { authzApi } from '@/api/authz';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
 import { makeDefaultExpiry } from '@/lib/authz/expiry';
+import { useCan } from '@/lib/authz/can';
 import AccountTypeTag from '@/components/authz/common/AccountTypeTag';
 import { resolveAccountType, type LoginUser } from '@/api/gen/client';
 import type { CreateGrantBody, RoleTemplate, ScopeType } from '@/api/gen/client';
@@ -86,11 +87,13 @@ export default function QuickGrantDrawer({ open, target, onClose }: Props) {
   const isVendor = accountType === 'vendor';
 
   /* ------ data ------ */
+  // 守门：模板列表归 user.view 域，深度防御 (drawer 通常只在持 user.grant 用户主动打开)
+  const canViewUsers = useCan('user.view');
   const { data: templates, isLoading: loadingTemplates } = useQuery({
     queryKey: ['authz', 'role-templates'],
     queryFn: () => authzApi.listTemplates(),
     select: (res) => res.data.data?.list ?? [],
-    enabled: open,
+    enabled: open && canViewUsers,
   });
 
   const { data: halls, isLoading: loadingHalls } = useQuery({
