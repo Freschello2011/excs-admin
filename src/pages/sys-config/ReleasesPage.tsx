@@ -33,6 +33,25 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+// 简易 semver 比较：仅支持 x.y.z 数字段；非数字段降级到字符串比较。
+// 返回值与 String.localeCompare 同语义：>0 / =0 / <0。
+function compareSemver(a: string, b: string): number {
+  const pa = a.split('.');
+  const pb = b.split('.');
+  const len = Math.max(pa.length, pb.length);
+  for (let i = 0; i < len; i++) {
+    const na = parseInt(pa[i] ?? '0', 10);
+    const nb = parseInt(pb[i] ?? '0', 10);
+    if (Number.isNaN(na) || Number.isNaN(nb)) {
+      const cmp = (pa[i] ?? '').localeCompare(pb[i] ?? '');
+      if (cmp !== 0) return cmp;
+      continue;
+    }
+    if (na !== nb) return na - nb;
+  }
+  return 0;
+}
+
 export default function ReleasesPage() {
   const { message } = useMessage();
   const queryClient = useQueryClient();
@@ -169,6 +188,17 @@ export default function ReleasesPage() {
       releaseApi.notifyUpdate(data.hallId, data.version, data.reason),
     onSuccess: () => message.success('更新通知已推送'),
     onError: (err: Error) => message.error(err.message || '推送失败'),
+  });
+
+  // 一次性维护：target_version 抹平到 installed_version（仅 installed > target 的陈旧钉版用）
+  const syncToInstalledMutation = useMutation({
+    mutationFn: (data: { hallId: number; platform: string; reason?: string }) =>
+      releaseApi.syncHallVersionToInstalled(data.hallId, data.platform, data.reason),
+    onSuccess: (_data, variables) => {
+      message.success('目标版本已抹平到现网装版');
+      queryClient.invalidateQueries({ queryKey: queryKeys.hallAppVersion(variables.hallId) });
+    },
+    onError: (err: Error) => message.error(err.message || '抹平失败'),
   });
 
   // ==================== 表格列 ====================
@@ -389,6 +419,30 @@ export default function ReleasesPage() {
                   </Tag>
                 ) : (
                   <Tag color="default">展厅 App 从未上报</Tag>
+                )}
+                {/* 测试期 rollout=all 让 App 自然滚到最新，但 per-hall 钉版字段不会自动追平 →
+                    installed 远新于 target 时给 admin 一键抹平。仅在 installed > target 时显示，
+                    避免与正向升级路径（installed < target 应走"推送更新通知"）混淆。 */}
+                {row.installed_version &&
+                 row.installed_version !== row.target_version &&
+                 compareSemver(row.installed_version, row.target_version) > 0 && (
+                  <RiskyActionButton
+                    action="release.manage"
+                    type="link"
+                    size="small"
+                    loading={syncToInstalledMutation.isPending}
+                    confirmTitle="把目标版本抹平到现网装版"
+                    confirmContent={`将把 ${PLATFORMS.find(x => x.value === row.platform)?.label ?? row.platform} 的目标版本从 ${row.target_version} 改为 ${row.installed_version}，状态置为「已完成」。展厅 App 不动。请填写操作原因（≥ 5 字，审计用）。`}
+                    onConfirm={async (reason) => {
+                      await syncToInstalledMutation.mutateAsync({
+                        hallId: selectedHallId!,
+                        platform: row.platform,
+                        reason,
+                      });
+                    }}
+                  >
+                    抹平到现网装版
+                  </RiskyActionButton>
                 )}
                 <span style={{ marginLeft: 16 }}>心跳：</span>
                 {row.last_report_at ? (() => {

@@ -3134,6 +3134,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/halls/{hallId}/app-version/sync-to-installed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hallId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 把目标版本抹平到现网装版（target_version := installed_version，rollout_status := done）
+         * @description 仅当 (hall_id, platform) 行已存在且 installed_version 非空时生效。
+         *     installed_version 为空（App 从未上报）返 409；行不存在返 404。
+         *     target_version 已等于 installed_version 时返 200 no-op。
+         *     要求 `X-Action-Reason` 头（≥ 5 字，审计）。
+         */
+        post: operations["syncHallAppVersionToInstalled"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/halls/{hallId}/notify-update": {
         parameters: {
             query?: never;
@@ -8455,6 +8480,14 @@ export interface components {
             /** @description osx-arm64 / osx-x64 / win-x64 / linux-x64；与 release.platform 对齐（不做 oneof 校验，遇新 RID 自然兼容） */
             platform: string;
         };
+        /**
+         * @description 把展厅 × 平台的 target_version 抹平到当前 installed_version。
+         *     platform 必填（复合键定位 hall_app_versions 行）。
+         */
+        SyncHallAppVersionToInstalledRequest: {
+            /** @description osx-arm64 / osx-x64 / win-x64 / linux-x64；与 hall_app_versions.platform 对齐 */
+            platform: string;
+        };
         NotifyAppUpdateRequest: {
             version: string;
         };
@@ -9716,16 +9749,25 @@ export interface components {
              */
             suggested_cidr?: string | null;
         };
+        /**
+         * @description ADR-0029 P1 follow-up：聚合 hall 内 online 展厅 App 心跳上报的 NIC 指纹
+         *     （hall_app_instance.network_fingerprint），union 所有 NIC + 推断 expected_subnets 建议值。
+         *     sources 数组按 last_heartbeat_at DESC 排序，多实例时 admin 可展示"基于 N 台展厅 App"。
+         */
         HallNetworkInterfacesResult: {
             /** Format: int64 */
             hall_id: number;
-            /** @description NIC 数据来源标记（哪台展厅 App 上报的） */
-            source: {
-                exhibit_app_machine_code: string;
-                exhibit_app_version: string;
+            /** @description NIC 数据来源标记（哪些展厅 App 实例上报的 fingerprint） */
+            sources: {
+                /** Format: int64 */
+                instance_id: number;
+                machine_code: string;
+                /** @description 展厅 App 自报 installed_version */
+                current_version: string;
                 /** Format: date-time */
-                fetched_at: string;
-            };
+                last_heartbeat_at: string;
+            }[];
+            /** @description 所有 source 实例 NIC 的 union（按 ip 去重） */
             interfaces: components["schemas"]["NetworkInterfaceVO"][];
             /**
              * @description 所有 is_private NIC 的 suggested_cidr 用 `,` 拼接的字符串，admin 表单可一键填入；
@@ -16459,6 +16501,39 @@ export interface operations {
             403: components["responses"]["Forbidden"];
         };
     };
+    syncHallAppVersionToInstalled: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hallId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SyncHallAppVersionToInstalledRequest"];
+            };
+        };
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["HallAppVersionDTO"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
     notifyAppUpdate: {
         parameters: {
             query?: never;
@@ -19045,7 +19120,11 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
-            /** @description hall 内无展厅 App 在线 */
+            /**
+             * @description hall 内无可用 fingerprint。errno 之一：
+             *     - `no_online_devices_with_fingerprint`：hall 下无 last_heartbeat_at 新鲜且
+             *       network_fingerprint 非空的实例（要求所有展厅 App 升级到上报 NIC 的版本）
+             */
             503: {
                 headers: {
                     [name: string]: unknown;

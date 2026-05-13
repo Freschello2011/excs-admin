@@ -112,8 +112,8 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
       get().refreshActionSet().catch(() => {});
       return data.access_token;
     } catch (err) {
-      // Bug 5b：主动续期失败 — 累加 request.ts 失败计数（与 axios 1002 路径共享阈值）
-      noteRefreshFailure();
+      // Bug 5b：主动续期失败 — 把 err 传给 request.ts 走错误分流（致命直踢 / 可重试走退避）
+      noteRefreshFailure(err);
       throw err;
     }
   },

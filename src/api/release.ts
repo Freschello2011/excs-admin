@@ -8,6 +8,7 @@ import type { AxiosResponse } from 'axios';
 import {
   releaseClient,
   type AppRelease,
+  type HallAppVersionDTO,
   type HallAppVersionListData,
   type RequestReleaseUploadRequest,
   type RequestReleaseUploadResponse,
@@ -76,6 +77,16 @@ export const releaseApi = {
     reason?: string,
   ): Promise<AxiosResponse<ApiResponse<null>>> {
     return releaseClient.setHallAppVersion(hallId, body, reason).then(() => ok(null));
+  },
+  /** 把展厅 × 平台目标版本抹平到当前 installed_version；rollout_status 切 done。 */
+  syncHallVersionToInstalled(
+    hallId: number,
+    platform: string,
+    reason?: string,
+  ): Promise<AxiosResponse<ApiResponse<HallAppVersionDTO>>> {
+    return releaseClient
+      .syncHallAppVersionToInstalled(hallId, { platform }, reason)
+      .then((d) => ok(d));
   },
   notifyUpdate(
     hallId: number,

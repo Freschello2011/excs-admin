@@ -318,14 +318,14 @@ request.interceptors.response.use(
               originalConfig.headers.Authorization = `Bearer ${access_token}`;
               return request(originalConfig);
             } else {
-              // Bug 5b：refresh 业务失败 — 走容忍 logout（连续 2 次才硬踢）
-              handleLogout();
+              // Bug 5b：refresh 业务失败 — 错误分流 + 退避重试（致命直踢，可重试走 backoff）
+              recordRefreshFailure({ code: refreshData?.code });
               return Promise.reject(refreshData);
             }
           })
           .catch((err) => {
-            // Bug 5b：refresh 网络/超时失败 — 走容忍 logout
-            handleLogout();
+            // Bug 5b：refresh 网络/超时失败 — 错误分流 + 退避重试
+            recordRefreshFailure(err);
             return Promise.reject(err);
           })
           .finally(() => {
@@ -445,28 +445,147 @@ request.interceptors.response.use(
   },
 );
 
-/* ==================== Bug 5b：refresh 失败容忍 + dirty 阻断 ==================== *
+/* ==================== Bug 5b：refresh 失败容忍 + 退避重试 + dirty 阻断 ==================== *
  * 单次 refresh 失败不立即踢回 SSO（典型场景：用户在编辑器停留 25-120 min 期间
- * 网络抖动 / token 因 perm_ver bump 触发 1002）。连续 RAW_LOGOUT_THRESHOLD 次失败
- * 才硬踢。
+ * 网络抖动 / token 因 perm_ver bump 触发 1002）。
  *
- * 同时阻断含 timeline 草稿残留 / 编辑器 dirty 的硬踢（Bug 5a autosave 已落盘，
+ * 三段守门（spec 升级 2026-05-12）：
+ *   1) 退避重试：连续失败最多 MAX_REFRESH_RETRIES=3 次，每次间隔指数 [5s,15s,45s]；
+ *      重试本身仍是 POST /api/v1/auth/refresh，成功即清零；
+ *      网络错误 / 5xx / 408 / timeout 走可重试路径
+ *   2) 错误分流：401（含 code=1002 invalid_token） / 403 = 致命，无重试直接强踢；
+ *      用户禁用 / refresh token 真失效都走这条
+ *   3) dirty 阻断：3 次重试用尽且当前页有未保存改动（timeline 草稿残留 / form dirty）
+ *      时弹 Modal 让用户先导出，确认后才真踢
+ *
+ * 同时阻断 timeline 草稿残留 / 编辑器 dirty 的硬踢（Bug 5a autosave 已落盘，
  * 但极端时序 — 用户改完立即 1002 + dirty + autosave 30s 还没到 — 仍可能丢稿）。
  *
- * authStore 主动续期成功时调 `noteRefreshSuccess` 清零计数。
+ * authStore 主动续期成功时调 `noteRefreshSuccess` 清零计数 + 取消挂起重试。
  */
-const RAW_LOGOUT_THRESHOLD = 2;
+const MAX_REFRESH_RETRIES = 3;
+const BACKOFF_DELAYS_MS = [5_000, 15_000, 45_000];
 let refreshFailureCount = 0;
 let lastLogoutAttemptAt = 0;
+let pendingRetryTimer: ReturnType<typeof setTimeout> | null = null;
+let warnedThisCycle = false;
 
-/** authStore 主动续期成功 / response 1002 走 refresh 成功后调用 — 清零失败计数 */
-export function noteRefreshSuccess(): void {
-  refreshFailureCount = 0;
+function clearPendingRetry(): void {
+  if (pendingRetryTimer !== null) {
+    clearTimeout(pendingRetryTimer);
+    pendingRetryTimer = null;
+  }
 }
 
-/** authStore 主动续期失败 / response 1002 走 refresh 失败后调用 — 累加计数 */
-export function noteRefreshFailure(): void {
+/** 错误是否可重试。401/403 视为致命无重试；网络 / 408 / 5xx 视为可重试。 */
+export function classifyRefreshError(err: unknown): 'fatal' | 'retryable' {
+  if (!err || typeof err !== 'object') return 'retryable';
+  const e = err as {
+    response?: { status?: number; data?: { code?: number } };
+    code?: string | number;
+    isAxiosError?: boolean;
+  };
+  // axios HTTP error
+  if (e.response) {
+    const status = e.response.status ?? 0;
+    if (status === 401 || status === 403) return 'fatal';
+    if (status === 408 || (status >= 500 && status < 600)) return 'retryable';
+    // 其它 4xx（429 限流除外）当致命，避免无限退避
+    if (status === 429) return 'retryable';
+    return 'fatal';
+  }
+  // 业务 envelope（已被 response interceptor unwrap，无 HTTP wrapper）
+  // code=1002 即 invalid_token / refresh token 失效 → 致命
+  // code=2001/2002 = SSO / 账户禁用 → 致命
+  const bizCode = (e as { code?: number }).code;
+  if (bizCode === 1002 || bizCode === 2001 || bizCode === 2002) return 'fatal';
+  // axios timeout / 网络层错误
+  if (e.code === 'ECONNABORTED' || e.code === 'ERR_NETWORK') return 'retryable';
+  // 默认可重试（保守）
+  return 'retryable';
+}
+
+/** 后台单次重试 refresh — 由 backoff 定时器触发。 */
+async function performRefreshRetry(): Promise<void> {
+  pendingRetryTimer = null;
+  const refreshToken = localStorage.getItem('excs-refresh-token');
+  if (!refreshToken) {
+    // 已被清空（用户切 tab logout 等）— 不再重试
+    resetRefreshState();
+    return;
+  }
+  try {
+    const res = await request.post(
+      '/api/v1/auth/refresh',
+      { refresh_token: refreshToken },
+      { skipErrorMessage: true },
+    );
+    const body = res.data as { code?: number; data?: { access_token?: string; refresh_token?: string } };
+    if (body && body.code === 0 && body.data?.access_token && body.data?.refresh_token) {
+      localStorage.setItem('excs-access-token', body.data.access_token);
+      localStorage.setItem('excs-refresh-token', body.data.refresh_token);
+      noteRefreshSuccess();
+    } else {
+      // 业务失败 — 走 envelope 分流
+      recordRefreshFailure({ code: body?.code });
+    }
+  } catch (err) {
+    recordRefreshFailure(err);
+  }
+}
+
+function scheduleBackoffRetry(): void {
+  clearPendingRetry();
+  // refreshFailureCount 1-based；first failure → delay[0]=5s
+  const idx = Math.min(refreshFailureCount - 1, BACKOFF_DELAYS_MS.length - 1);
+  const delay = BACKOFF_DELAYS_MS[idx];
+  pendingRetryTimer = setTimeout(() => {
+    void performRefreshRetry();
+  }, delay);
+}
+
+function resetRefreshState(): void {
+  refreshFailureCount = 0;
+  warnedThisCycle = false;
+  clearPendingRetry();
+}
+
+/** authStore 主动续期成功 / response 1002 走 refresh 成功后调用 — 清零失败计数 + 取消挂起重试 */
+export function noteRefreshSuccess(): void {
+  resetRefreshState();
+}
+
+/**
+ * authStore 主动续期失败 / response 1002 走 refresh 失败后调用 — 错误分流 + 累加计数。
+ * 致命错误立即强踢；可重试错误累加 + 调度退避重试；耗尽 MAX_REFRESH_RETRIES 走 dirty 阻断硬踢。
+ */
+export function noteRefreshFailure(err?: unknown): void {
+  recordRefreshFailure(err);
+}
+
+function recordRefreshFailure(err?: unknown): void {
+  const kind = classifyRefreshError(err);
+  if (kind === 'fatal') {
+    // 致命 — 无重试直接强踢（refresh token 真失效 / 用户禁用 / 权限被撤）
+    resetRefreshState();
+    handleLogout({ force: true });
+    return;
+  }
   refreshFailureCount += 1;
+  if (!warnedThisCycle) {
+    warnedThisCycle = true;
+    messageBus.emit({
+      level: 'warning',
+      content: '会话刷新失败，正在自动重试…',
+    });
+  }
+  if (refreshFailureCount >= MAX_REFRESH_RETRIES) {
+    // 退避重试用尽 — 走 dirty 阻断 / 否则真踢
+    resetRefreshState();
+    handleLogout();
+    return;
+  }
+  scheduleBackoffRetry();
 }
 
 /** 当前距上次"被阻断的 logout 尝试"是否在冷却期内（<5min）— 用于 dirty 阻断回弹 */
@@ -475,31 +594,20 @@ export function isLogoutCoolingDown(): boolean {
 }
 
 /**
- * 触发硬踢（Bug 5b 守门）。容忍单次失败 + dirty 阻断。
- * 调用方仍可主动 force=true 绕过（如 /logout 按钮）。
+ * 触发硬踢（Bug 5b 守门）。容忍 + dirty 阻断（force=true 时绕过）。
+ * 调用方仍可主动 force=true 绕过（如 /logout 按钮 / classifyRefreshError 致命路径）。
  */
 function handleLogout(opts?: { force?: boolean }): void {
   const force = !!opts?.force;
-  refreshFailureCount += 1;
 
-  // 守门 1：连续 < THRESHOLD 次失败仅警告，不立即踢（典型网络抖动）
-  if (!force && refreshFailureCount < RAW_LOGOUT_THRESHOLD) {
-    lastLogoutAttemptAt = Date.now();
-    messageBus.emit({
-      level: 'warning',
-      content: '会话刷新失败，正在重试…',
-    });
-    return;
-  }
-
-  // 守门 2：编辑器 dirty / 草稿残留时弹 Modal 阻断硬踢
+  // 守门：编辑器 dirty / 草稿残留时弹 Modal 阻断硬踢（force=true 跳过）
   if (!force && shouldBlockLogoutForDraft()) {
     lastLogoutAttemptAt = Date.now();
     showDraftRetentionModal();
     return;
   }
 
-  refreshFailureCount = 0;
+  resetRefreshState();
   localStorage.removeItem('excs-access-token');
   localStorage.removeItem('excs-refresh-token');
   localStorage.removeItem('excs-user');

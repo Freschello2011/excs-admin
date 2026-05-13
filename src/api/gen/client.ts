@@ -2380,6 +2380,8 @@ export type RequestReleaseUploadResponse =
   components['schemas']['RequestReleaseUploadResponse'];
 export type CreateReleaseRequest = components['schemas']['CreateReleaseRequest'];
 export type SetHallVersionRequest = components['schemas']['SetHallVersionRequest'];
+export type SyncHallAppVersionToInstalledRequest =
+  components['schemas']['SyncHallAppVersionToInstalledRequest'];
 export type NotifyAppUpdateRequest = components['schemas']['NotifyAppUpdateRequest'];
 export type CheckAppUpdateResponse = components['schemas']['CheckAppUpdateResponse'];
 export type ReportAppUpdateStatusRequest =
@@ -2455,6 +2457,23 @@ export const releaseClient = {
     return unwrap(
       request.get<ApiEnvelope<HallAppVersionListData>>(
         `/api/v1/halls/${hallId}/app-version`,
+      ),
+    );
+  },
+  /**
+   * 把展厅 × 平台的 target_version 抹平到当前 installed_version，rollout_status 切 done。
+   * 用途：测试期 release.rollout_policy=all 让 App 自动滚到最新，但 per-hall 钉版字段
+   * 不会自动追平，UI 永远显示 "⚠ 与目标版本不一致"。release.manage + RequireReason。
+   */
+  syncHallAppVersionToInstalled(
+    hallId: number,
+    body: SyncHallAppVersionToInstalledRequest,
+    reason?: string,
+  ): Promise<HallAppVersionDTO> {
+    return unwrap(
+      request.post<ApiEnvelope<HallAppVersionDTO>>(
+        `/api/v1/halls/${hallId}/app-version/sync-to-installed`,
+        mergeReasonBody(body as unknown as Record<string, unknown>, reason),
       ),
     );
   },

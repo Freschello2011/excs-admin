@@ -1,7 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { createBrowserRouter, Navigate, useParams } from 'react-router-dom';
 import RequireAuth from '@/components/guards/RequireAuth';
-import RequireAdmin from '@/components/guards/RequireAdmin';
+import RequireAction from '@/components/guards/RequireAction';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import HallContextGuard from '@/components/common/HallContextGuard';
 import { useHallStore } from '@/stores/hallStore';
@@ -343,10 +343,17 @@ export const router = createBrowserRouter([
         path: 'ai/avatars',
         element: <HallRoute><AiAvatarListPage /></HallRoute>,
       },
-      /* SmartHome 聚合页（5 tab：网关/设备全景/规则/触发日志/告警，admin-only） */
+      /* SmartHome 聚合页（5 tab：网关/设备全景/规则/触发日志/告警） */
       {
         path: 'smarthome',
-        element: <RequireAdmin><HallRoute><SmartHomeHubPage /></HallRoute></RequireAdmin>,
+        element: (
+          <RequireAction
+            actions={['smarthome.view', 'smarthome.manage_gateway', 'smarthome.manage_rule', 'smarthome.alert_ack']}
+            label="智能家居"
+          >
+            <HallRoute><SmartHomeHubPage /></HallRoute>
+          </RequireAction>
+        ),
       },
       /* 旧 5 路径 → 新 hub ?tab=xxx，保留外链/书签 */
       { path: 'smarthome/gateways', element: <Navigate to="/smarthome?tab=gateways" replace /> },
@@ -359,11 +366,19 @@ export const router = createBrowserRouter([
       /* device-mgmt-v2 P6：设备目录（4 tab 合并入口） */
       {
         path: 'platform/device-catalog',
-        element: <RequireAdmin><SuspenseWrap><DeviceCatalogPage /></SuspenseWrap></RequireAdmin>,
+        element: (
+          <RequireAction actions={['catalog.view', 'catalog.edit']} label="设备目录">
+            <SuspenseWrap><DeviceCatalogPage /></SuspenseWrap>
+          </RequireAction>
+        ),
       },
       {
         path: 'platform/ai-avatar-library',
-        element: <RequireAdmin><SuspenseWrap><AiAvatarLibraryPage /></SuspenseWrap></RequireAdmin>,
+        element: (
+          <RequireAction actions={['catalog.view', 'catalog.edit']} label="AI 形象库">
+            <SuspenseWrap><AiAvatarLibraryPage /></SuspenseWrap>
+          </RequireAction>
+        ),
       },
       /* Legacy AI 形象库路径 */
       {
@@ -374,12 +389,20 @@ export const router = createBrowserRouter([
       /* 运营分析（运行概览 / 内容统计 / AI 互动 三 Tab） */
       {
         path: 'analytics',
-        element: <RequireAdmin><SuspenseWrap><AnalyticsHubPage /></SuspenseWrap></RequireAdmin>,
+        element: (
+          <RequireAction actions="analytics.view" label="运营分析">
+            <SuspenseWrap><AnalyticsHubPage /></SuspenseWrap>
+          </RequireAction>
+        ),
       },
       /* 存储与费用（用量总览 / 文件浏览 / 费用分析 三 Tab） */
       {
         path: 'analytics/storage',
-        element: <RequireAdmin><SuspenseWrap><StorageOverviewPage /></SuspenseWrap></RequireAdmin>,
+        element: (
+          <RequireAction actions="analytics.view" label="存储与费用">
+            <SuspenseWrap><StorageOverviewPage /></SuspenseWrap>
+          </RequireAction>
+        ),
       },
       /* Legacy 路径：保持 Dashboard 旧链接 / 老书签可用，自动跳到对应 Tab */
       {
@@ -408,20 +431,36 @@ export const router = createBrowserRouter([
       },
       {
         path: 'notifications',
-        element: <RequireAdmin><SuspenseWrap><NotificationListPage /></SuspenseWrap></RequireAdmin>,
+        element: (
+          <RequireAction actions={['notification.view', 'notification.edit']} label="通知管理">
+            <SuspenseWrap><NotificationListPage /></SuspenseWrap>
+          </RequireAction>
+        ),
       },
       {
         path: 'logs',
-        element: <RequireAdmin><SuspenseWrap><LogsHubPage /></SuspenseWrap></RequireAdmin>,
+        element: (
+          <RequireAction actions="audit.view" label="日志">
+            <SuspenseWrap><LogsHubPage /></SuspenseWrap>
+          </RequireAction>
+        ),
       },
       /* 系统配置（新前缀 /platform/*） */
       {
         path: 'platform/sys-config',
-        element: <RequireAdmin><SuspenseWrap><SysConfigPage /></SuspenseWrap></RequireAdmin>,
+        element: (
+          <RequireAction actions={['config.view', 'config.edit']} label="系统参数">
+            <SuspenseWrap><SysConfigPage /></SuspenseWrap>
+          </RequireAction>
+        ),
       },
       {
         path: 'platform/releases',
-        element: <RequireAdmin><SuspenseWrap><ReleasesPage /></SuspenseWrap></RequireAdmin>,
+        element: (
+          <RequireAction actions={['release.view', 'release.manage']} label="展厅软件发布">
+            <SuspenseWrap><ReleasesPage /></SuspenseWrap>
+          </RequireAction>
+        ),
       },
       /* 权限管理（Phase 6）——不挂 RequireAdmin，靠菜单 requireActions 过滤 + 后端 403 interceptor 兜底 */
       /* P0.5（2026-04-25）：用户列表 / 详情 / 三步授权向导 全族迁入 /platform/authz/users 下 */
