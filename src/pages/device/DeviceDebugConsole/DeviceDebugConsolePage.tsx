@@ -667,6 +667,7 @@ export default function DeviceDebugConsolePage() {
               deviceId={deviceId}
               initial={inlineCommands}
               initialConnectionConfig={device.connection_config}
+              transport={device.connector_ref?.transport}
               onCountChange={setInlineCmdCount}
             />
           )}

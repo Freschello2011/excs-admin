@@ -2,7 +2,7 @@
  * SceneEditPage v2 — ADR-0020-v2 Stage 5 admin Phase B host（Phase D 解锁 · S5-10）
  *
  * 路由：/halls/:hallId/scenes/:sceneId/edit
- * SSOT：admin-UI §4.20.4 + mockup M1（07-ui/mockup/runbook-v2/M1-admin-scene-editor.html）
+ * SSOT：admin-UI §4.20.4 + mockup M1（07-ui/mockup/08-runbook-v2/01-admin-scene-editor.html）
  *
  * 布局：
  *   [PageHeader] 面包屑 + 标题(场景名 + 类型 chip) + actions[立即试运行 / 取消 / 保存]

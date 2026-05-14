@@ -3,7 +3,7 @@
  *
  * 入口：从 PanelEditorPage 触发（点 device_command 卡的「编辑」按钮）→ 全屏 Drawer 打开本组件。
  *
- * SSOT：admin-UI §4.20.5 + mockup M2（07-ui/mockup/runbook-v2/M2-admin-device-command-editor.html）
+ * SSOT：admin-UI §4.20.5 + mockup M2（07-ui/mockup/08-runbook-v2/02-admin-device-command-editor.html）
  *
  * 布局（mockup M2 line 440-877）：
  *   [PageHeader] 面包屑 + 标题 + actions[关闭 / 应用到草稿]

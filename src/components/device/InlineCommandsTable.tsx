@@ -69,6 +69,7 @@ const ERROR_CODE_LABELS: Record<string, string> = {
   EXPECT_ECHO_MISMATCH: '回声不匹配',
   REGEX_TIMEOUT: '正则匹配超时',
   MISCONFIGURED: '配置不全',
+  OSC_PARSE_FAIL: 'OSC 响应解析失败',
   ACK_TIMEOUT: '展厅 App 没回',
   NO_HALL_MASTER_ONLINE: '本展厅无展厅 App 在线',
 };

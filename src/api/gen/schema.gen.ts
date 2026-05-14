@@ -4971,6 +4971,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/cloud-device-credentials/lease": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 颁发 cloud-only 设备凭据 lease（明文 15 min TTL）
+         * @description 展厅 App 启动 + hall_master 切换 + 每 10 min 调本端点拉自己负责的 cloud-only 设备凭据。
+         *     response 明文 + 内存隔离 + 短 TTL 三件套；详见 ADR-0035。
+         */
+        post: operations["leaseCloudDeviceCredentials"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v2/halls/{hallId}/discovery/scan": {
         parameters: {
             query?: never;
@@ -10280,6 +10301,100 @@ export interface components {
             label?: string;
             /** Format: date-time */
             last_rotated_at?: string | null;
+        };
+        LeaseCloudDeviceCredentialsRequest: {
+            /**
+             * Format: uint64
+             * @description 拉取该 exhibit 下所有 cloud-only 设备的凭据（exhibit-level）。
+             *     必填——即便只想拿 hall-level 也要传调用方所属 exhibit_id 作为审计 anchor。
+             * @example 1
+             */
+            exhibit_id: number;
+            /**
+             * @description 是否附加 hall-level cloud-only 设备的凭据。
+             *     仅当本 App instance 当前是该 hall 的 hall_master 时允许 true；
+             *     server 校验失败 → 403 not_hall_master。
+             * @example true
+             */
+            include_hall_level: boolean;
+            /**
+             * @description 审计可见的用途标签。当前仅 device_dispatch；预留 screening / test 等扩展。
+             * @example device_dispatch
+             * @enum {string}
+             */
+            purpose: "device_dispatch" | "screening" | "test";
+        };
+        CloudDeviceCredential: {
+            /**
+             * Format: uint64
+             * @example 29
+             */
+            device_id: number;
+            /**
+             * @description 厂家 key（如 smyoo / pjlink_oem_xxx）。展厅 App 据此选 driver。
+             * @example smyoo
+             */
+            vendor_key: string;
+            /**
+             * Format: int64
+             * @description 厂家凭据库（excs_vendor_credentials）的主键。
+             *     展厅 App 用作 driver session cache key（避免多账号串扰）。
+             * @example 2
+             */
+            vendor_credential_id: number;
+            /**
+             * @description **明文凭据 (sensitive)** — 仅本响应可见，TLS 通道保护。
+             *     不同 vendor_key 字段集合不同（map[string]string）：
+             *       - smyoo: phone / password / client_id / client_secret / endpoint（可选）
+             * @example {
+             *       "endpoint": "https://auth.smyoo.com",
+             *       "phone": "20019812736",
+             *       "password": "<redacted>",
+             *       "client_id": "<redacted>",
+             *       "client_secret": "<redacted>"
+             *     }
+             */
+            payload: {
+                [key: string]: string;
+            };
+            /**
+             * @description 设备级非敏感连接配置（如 smyoo mcuid / deviceid）。从 device.connection_config 透传
+             *     去除 vendor_credential_id 字段后的剩余字段。
+             * @example {
+             *       "mcuid": "5F0A1234..."
+             *     }
+             */
+            device_connection_config?: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * @description 响应含明文凭据（payload.phone / password / client_id / client_secret）。
+         *     展厅 App 内存持有不落盘；server 端禁止入日志 / 监控 dashboard / 截图。
+         */
+        LeaseCloudDeviceCredentialsResponse: {
+            /**
+             * Format: uuid
+             * @description 本次 lease 的唯一标识（UUID v4，server 不持久化，仅响应回写 + 审计写入）
+             * @example 9c4e0c2a-3a8e-4f43-9f6d-1f2a5b6c7d8e
+             */
+            lease_id: string;
+            /**
+             * Format: date-time
+             * @example 2026-05-13T12:00:00Z
+             */
+            issued_at: string;
+            /**
+             * Format: date-time
+             * @description TTL 15 min 后失效；展厅 App 每 10 min 应主动续 lease。
+             * @example 2026-05-13T12:15:00Z
+             */
+            expires_at: string;
+            /**
+             * @description 该 lease 覆盖的 cloud-only 设备凭据列表。
+             *     无 cloud-only 设备时 server 直接 404 no_cloud_devices（不返空数组）。
+             */
+            credentials: components["schemas"]["CloudDeviceCredential"][];
         };
         DiscoveryScanRequest: {
             /**
@@ -20042,6 +20157,77 @@ export interface operations {
             404: components["responses"]["NotFound"];
             /** @description 凭据被 device 引用，无法删除 */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
+                };
+            };
+        };
+    };
+    leaseCloudDeviceCredentials: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description 展厅 App 实例 ID（paired 后从 server 返回，写入 App 本地状态）。
+                 *     server 校验 JWT.instance_id == header 值，不匹配 → 401。
+                 */
+                "X-App-Instance-ID": number;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LeaseCloudDeviceCredentialsRequest"];
+            };
+        };
+        responses: {
+            /** @description 颁发成功（含明文凭据 ⚠️ x-sensitive）。 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["LeaseCloudDeviceCredentialsResponse"];
+                    };
+                };
+            };
+            /** @description 鉴权失败（JWT 无效 / 缺 instance_id / 与 token 不匹配） */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
+                };
+            };
+            /**
+             * @description - not_hall_master：请求 include_hall_level=true 但本 instance 当前不是 hall_master
+             *     - instance_not_paired：App instance 未 paired / 已 unpair
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
+                };
+            };
+            /** @description - no_cloud_devices：该 exhibit 下无 cloud-only 设备（正常情形；展厅 App 不重试） */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
+                };
+            };
+            /** @description rate_limited（同 instance 30s 内仅 1 次 lease 调用） */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -1,7 +1,7 @@
 /**
  * 总览（Dashboard v5.1）—— 三 Tab：平台监控 / 业务看板 / 操作审计。
  *
- * 设计源：07-ui/mockup/dashboard-v2-mockup.html
+ * 设计源：07-ui/mockup/03-dashboard/dashboard-v2-mockup.html
  * PRD：01-docs/01-contexts/platform-monitor/PRD.md §4
  * DDD：01-docs/01-contexts/platform-monitor/DDD.md §5
  */

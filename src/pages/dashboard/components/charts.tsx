@@ -1,5 +1,5 @@
 /**
- * SVG 渲染函数 1:1 平移自 07-ui/mockup/dashboard-v2-mockup.html。
+ * SVG 渲染函数 1:1 平移自 07-ui/mockup/03-dashboard/dashboard-v2-mockup.html。
  *
  * 三个场景：
  *  - Trend24Chart —— 24h 资源曲线 + 80% 阈值虚线 + 阈值区域底色

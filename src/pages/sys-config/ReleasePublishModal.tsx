@@ -1,7 +1,7 @@
 /**
  * ReleasePublishModal —— app-upgrade-strategy Phase 4 平台发布对话框。
  *
- * 三块新能力（mockup 07-ui/mockup/ux-overhaul-2026-04-30/05-release-publish.html）：
+ * 三块新能力（mockup 07-ui/mockup/09-ux-overhaul/05-release-publish.html）：
  *   1. Markdown release notes 分屏编辑/预览（react-markdown + remark-gfm；前端 hard limit 50KB）
  *   2. is_critical 红色 Switch + 警示文案（越权 production，不能越权 paused）
  *   3. 灰度 Radio 4 档（10% / 50% / 100% / 自定义）+ 投放优先级 + 实时预览矩阵
@@ -85,7 +85,9 @@ export interface ReleasePayloadInput {
   oss_key: string;
   file_size: number;
   sha256: string;
-  release_notes: string;
+  /** Deprecated 兼容字段：server 端从 release_notes_md 兜底派生（service.go derivePlainTextFromMarkdown）。
+   *  admin 弹窗不再手填；保留 optional 是给 CI / 外部脚本上传时仍能透传。 */
+  release_notes?: string;
   release_notes_md: string;
   is_critical: boolean;
   rollout_policy: RolloutPolicy;
@@ -235,7 +237,8 @@ export default function ReleasePublishModal({
         oss_key: '', // 由 onSubmit 上传后填
         file_size: file.size,
         sha256: '', // 由 onSubmit 上传后计算
-        release_notes: values.release_notes ?? '',
+        // release_notes 字段由 server 端从 release_notes_md 兜底派生（service.go derivePlainTextFromMarkdown）；
+        // admin 不再让用户手填，避免"老纯文本说明"伪需求让用户填两次。老 App < 0.8.2 兜底兼容由 server 负责。
         release_notes_md: notesMd,
         is_critical: isCritical,
         rollout_policy: policy,
@@ -362,15 +365,14 @@ export default function ReleasePublishModal({
                 {(notesMdBytes / 1024).toFixed(1)} KB / 50 KB
               </span>
               <span className={styles.helpText}>
-                展厅 App 用 Markdig 渲染，<strong>不支持 raw HTML / 脚本</strong>（XSS 安全）
+                展厅 App 用 Markdown.Avalonia 渲染，<strong>不支持 raw HTML / 脚本</strong>（XSS 安全）
               </span>
             </div>
             {notesMdError && <div className={styles.errorText}>{notesMdError}</div>}
+            <div className={styles.helpText} style={{ marginTop: 8 }}>
+              展厅 App &lt; 0.8.2 老版会显示从此 Markdown 自动派生的纯文本（首 500 字符），无需另外手填。
+            </div>
           </div>
-
-          <Form.Item name="release_notes" label="老版纯文本说明（向后兼容，可选）" style={{ marginTop: 12 }}>
-            <Input.TextArea rows={2} placeholder="App 端老版本（< 0.8.2）渲染此字段；新版本读 release_notes_md" />
-          </Form.Item>
         </div>
 
         {/* Section 3: 发布策略 */}

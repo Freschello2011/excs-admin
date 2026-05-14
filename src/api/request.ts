@@ -195,6 +195,17 @@ request.interceptors.request.use(
     }
     config._startTs = Date.now();
 
+    // ADR-0034 §D2：admin 整 app 都是运维特权入口，POST /commands/{device,exhibit}
+    // 必须显式标 X-Command-Source: admin_device_mgmt 才会命中 server 直发 cloud-only 设备；
+    // 未标 → server fallback panel → MQTT 宿主转发 → 宿主无 SmyooDriver ack failed。
+    // 路径末尾锚 $ 避开 /commands/device-command-button / runbook-action 等他端点。
+    if (
+      config.method?.toLowerCase() === 'post' &&
+      /\/commands\/(device|exhibit)$/.test(config.url ?? '')
+    ) {
+      config.headers['X-Command-Source'] = 'admin_device_mgmt';
+    }
+
     const dc = useDirectConnect.getState();
 
     // P9-E.2：LAN 模式 — baseURL 切换 + path mapping + 写操作暂存

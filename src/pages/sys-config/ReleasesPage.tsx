@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Card, Table, Button, Space, Tag, Tabs, Modal, Form, Input,
-  Select, Typography,
+  Select, Typography, Alert,
 } from 'antd';
 import { useMessage } from '@/hooks/useMessage';
 import { UploadOutlined, DeleteOutlined, SendOutlined, DownloadOutlined, CopyOutlined } from '@ant-design/icons';
@@ -139,7 +139,7 @@ export default function ReleasesPage() {
         oss_key,
         file_size: file.size,
         sha256,
-        release_notes: payload.release_notes,
+        release_notes: payload.release_notes || undefined,
         release_notes_md: payload.release_notes_md || undefined,
         is_critical: payload.is_critical || undefined,
         rollout_policy: payload.rollout_policy,
@@ -215,7 +215,20 @@ export default function ReleasesPage() {
       render: (s: string) => <Text copyable={{ text: s }} className={styles.shaMono}>{s.slice(0, 12)}...</Text>,
     },
     {
-      title: '发布说明', dataIndex: 'release_notes', key: 'release_notes', ellipsis: true,
+      title: '发布说明', dataIndex: 'release_notes_md', key: 'release_notes_md', ellipsis: true,
+      render: (md: string | undefined, r: AppRelease) => {
+        // 权威源是 release_notes_md（Markdown）；展示时剥常见 md 标记成首行 plain text。
+        // 老 release 仅有 release_notes 时降级；都没有显示 '—'。
+        const raw = md || r.release_notes || '';
+        if (!raw) return '—';
+        const firstLine = raw
+          .replace(/^#+\s+/gm, '')           // ATX 标题
+          .replace(/^\s*[-*+]\s+/gm, '')     // 列表项
+          .replace(/\*\*([^*\n]+)\*\*/g, '$1') // bold
+          .replace(/`([^`\n]+)`/g, '$1')     // inline code
+          .split(/\r?\n/).map(l => l.trim()).filter(Boolean)[0] ?? '';
+        return firstLine || '—';
+      },
     },
     {
       title: '发布时间', dataIndex: 'created_at', key: 'created_at', width: 170,
@@ -244,6 +257,19 @@ export default function ReleasesPage() {
 
   return (
     <div>
+      {/* ADR-0037 Phase 3 — v0.12.0 起 Win x64 包瘦身（剥 LibVLC + .NET runtime），老版本必须手动跑新 Installer */}
+      <Alert
+        type="warning"
+        showIcon
+        style={{ marginBottom: 12 }}
+        message="v0.12.0 起 Windows x64 包瘦身（剥 LibVLC + .NET runtime）"
+        description={
+          <div style={{ fontSize: 12 }}>
+            老版本（v0.11.x）无法走 OTA 自动升级到 v0.12.x，必须手动跑新 Installer。
+            现场人员看到展厅 App 弹「展厅 App 需手动重装」对话框时，按对话框指引操作即可（下载下方安装器 → 双击 .exe → UAC 同意 → 自动装完保留配对状态）。
+          </div>
+        }
+      />
       {/* 📥 安装器（Phase 4c）— 现场新增展项首装专用，永久不变下载链接 */}
       <Card
         size="small"

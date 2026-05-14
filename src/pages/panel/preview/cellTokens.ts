@@ -1,7 +1,7 @@
 /**
  * 中控面板改版 P2 — 按钮单元 token（CSS 变量）
  *
- * 数据源：panel-redesign-PRD §3.2.1 + 07-ui/mockup/control-app-v2-mockup.html `.scene` / `.tile` / `.tile.empty`。
+ * 数据源：panel-redesign-PRD §3.2.1 + 07-ui/mockup/01-control-app/control-app-v2-mockup.html `.scene` / `.tile` / `.tile.empty`。
  *
  * 这一份 token 在 P3 由中控 App Flutter 端用同一规范实现（不共享代码，仅共享数值）；
  * scene_group / device_toggle / device_command 三种卡的按钮单元统一从这里读，

@@ -1,6 +1,6 @@
 /**
  * 中控 App v2.0 设计令牌（暗黑毛玻璃 + 霓虹）
- * 数据源：07-ui/mockup/control-app-v2-mockup.html + 01-docs/ui/ExCS-panel-UI.md（v2.0）
+ * 数据源：07-ui/mockup/01-control-app/control-app-v2-mockup.html + 01-docs/ui/ExCS-panel-UI.md（v2.0）
  * 与 Flutter 端 control-app/lib/app/theme.dart (ExcsColors v2) 保持同步
  *
  * 用于 React 后台预览组件的 inline style；改色统一改这里，避免散落。

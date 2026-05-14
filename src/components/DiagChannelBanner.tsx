@@ -1,7 +1,7 @@
 /**
  * DRC-Phase 5 — 反向通道错误态 banner（state 1 / 2 / 4）
  *
- * 视觉权威：07-ui/mockup/diag-reverse-channel/01-offline-states.html（PM 文案版）
+ * 视觉权威：07-ui/mockup/07-diag-reverse-channel/01-offline-states.html（PM 文案版）
  *
  * 渲染矩阵：
  *   kind=app_offline       → state 1（红 / Alert error / IP+MAC+心跳+3 步排查）

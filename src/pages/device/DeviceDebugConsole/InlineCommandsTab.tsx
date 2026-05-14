@@ -48,6 +48,13 @@ interface Props {
   initial: DeviceCommand[];
   /** 设备 connection_config 透传（free-form jsonb；本 tab 读写 connection_mode + heartbeat 子键） */
   initialConnectionConfig?: Record<string, unknown>;
+  /**
+   * 设备 connector_ref.transport（'tcp' / 'udp' / 'serial' / 'osc'）。
+   * ADR-0030 §D1/§D2 的 connection_mode + heartbeat 是 TCP 连接级语义，UDP/OSC 无连接概念、Serial 不在本批；
+   * 仅 transport='tcp' 时渲染 profile chips + 连接方式 + 心跳块；其余 transport 顶部换一条说明 Alert，
+   * 命令清单行的 expect_response 列保持全 transport 一致（ADR-0030 §C / §D6 schema 一次铺满决策）。
+   */
+  transport?: string;
   onCountChange?: (count: number) => void;
 }
 
@@ -121,8 +128,12 @@ export default function InlineCommandsTab({
   deviceId,
   initial,
   initialConnectionConfig,
+  transport,
   onCountChange,
 }: Props) {
+  // ADR-0030 §D1/§D2 适用面：连接级字段仅 TCP 有意义。
+  // UDP/OSC 无连接、Serial 不在本批实装；这些 transport 隐藏 profile chips + connection_mode + heartbeat 块。
+  const showConnectionBlock = transport === 'tcp';
   const { message, modal } = useMessage();
   const queryClient = useQueryClient();
 
@@ -255,16 +266,20 @@ export default function InlineCommandsTab({
       const cleaned = prepared.rows.map(({ _row: _drop, ...rest }) => rest);
       // 把 connection_mode + heartbeat 合并进 connection_config，保留其他键（host/port/cascade_units 等）
       const baseCfg: Record<string, unknown> = { ...(initialConnectionConfig ?? {}) };
-      baseCfg.connection_mode = connectionMode;
-      // 只有 heartbeat.enabled=true 时才落 heartbeat 子对象，否则清掉避免脏数据残留
-      if (heartbeat.enabled) {
-        const hb: HeartbeatConfig = { enabled: true };
-        if (heartbeat.interval_ms) hb.interval_ms = heartbeat.interval_ms;
-        if (heartbeat.command_code) hb.command_code = heartbeat.command_code;
-        if (heartbeat.miss_threshold) hb.miss_threshold = heartbeat.miss_threshold;
-        baseCfg.heartbeat = hb;
-      } else {
-        delete baseCfg.heartbeat;
+      // 仅 TCP 写 connection_mode/heartbeat（ADR-0030 §D1/§D2 TCP 连接级语义）；
+      // UDP/OSC/Serial 不动这两键，避免把 UI 默认值脏入库到无连接概念的 transport。
+      if (showConnectionBlock) {
+        baseCfg.connection_mode = connectionMode;
+        // 只有 heartbeat.enabled=true 时才落 heartbeat 子对象，否则清掉避免脏数据残留
+        if (heartbeat.enabled) {
+          const hb: HeartbeatConfig = { enabled: true };
+          if (heartbeat.interval_ms) hb.interval_ms = heartbeat.interval_ms;
+          if (heartbeat.command_code) hb.command_code = heartbeat.command_code;
+          if (heartbeat.miss_threshold) hb.miss_threshold = heartbeat.miss_threshold;
+          baseCfg.heartbeat = hb;
+        } else {
+          delete baseCfg.heartbeat;
+        }
       }
       // PUT /api/v1/devices/:id —— deviceV2Api.update 用 Partial<CreateDeviceV2Body>。
       // 单次 PUT 同时落 inline_commands + connection_config 保证一致性。
@@ -376,7 +391,25 @@ export default function InlineCommandsTab({
 
   return (
     <div>
-      {/* ADR-0030 §D4 — profile chips：5 选 1 批量填三件事 */}
+      {/* Serial：driver 响应判定还没实装，顶部挂提醒条；连接级字段也对 UDP/OSC 一并隐藏。
+          ADR-0030 Follow-up：UDP（Step 2 v0.11.9 上 prod）+ OSC（Step 2 v0.12.1）已实装真响应判定；
+          Serial 单独排队下一批 Follow-up。 */}
+      {transport === 'serial' && (
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 12 }}
+          message={
+            <span style={{ fontSize: 12 }}>
+              <strong>当前传输方式：SERIAL</strong> ——
+              Serial 协议响应判定 driver 还没实装（ADR-0030 Follow-up 待开工），保存数据落库但运行时一律按「发完就算」执行；
+              UDP / OSC 协议本期已实装真响应判定。
+            </span>
+          }
+        />
+      )}
+      {/* ADR-0030 §D4 — profile chips：5 选 1 批量填三件事（仅 TCP 显示） */}
+      {showConnectionBlock && (
       <div
         style={{
           padding: '10px 12px',
@@ -535,6 +568,7 @@ export default function InlineCommandsTab({
           )}
         </div>
       </div>
+      )}
 
       <div
         style={{
