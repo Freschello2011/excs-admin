@@ -14,7 +14,7 @@ import type { ChannelEntry } from '@/api/channelMap';
 import { fromRetainedState, findEntry, type ChannelState } from './state';
 import styles from './DeviceDebugConsole.module.scss';
 
-export type MatrixVariant = 'k32' | 'smyoo16' | 'generic';
+export type MatrixVariant = 'k32' | 'smyoo16' | 'event_listener' | 'generic';
 
 export interface ChannelAction {
   key: 'on' | 'off' | 'blink' | 'label' | 'preset';

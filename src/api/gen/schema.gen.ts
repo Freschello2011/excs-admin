@@ -4749,6 +4749,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v2/devices/{id}/event-bindings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        /** 列出设备所有 event-binding triggers */
+        get: operations["listDeviceEventBindings"];
+        /**
+         * 批量替换设备的 event-bindings（admin 整页保存）
+         * @description 事务语义：删除该 device 所有现存 binding triggers，按 request.bindings 顺序新增。
+         *     bindings=[] 表示清空所有 binding；越界检查由 admin client-side 算，server 只做基本校验
+         *     （ValidateTrigger 在 domain 层兜底）。
+         */
+        put: operations["replaceDeviceEventBindings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v2/halls/{hallId}/devices": {
         parameters: {
             query?: never;
@@ -5729,8 +5754,13 @@ export interface components {
             /** @description 加密模式（standard / fuse / none） */
             encryption_mode: string;
             /**
-             * @description 流水线总状态。service 层 mapPipelineOverallStatus 输出：
-             *     uploading / processing / ready / failed。
+             * @description 流水线总状态。service 层 mapPipelineOverallStatus 映射后输出，**永远不是 entity 原值** `'ready'`：
+             *       - `queued`     — entity `uploading`
+             *       - `processing` — entity `encrypting` / `encrypted` / `generating_thumbnail` / `ai_tagging` / `publishing`
+             *       - `completed`  — entity `ready`（流水线完成 = 可用）
+             *       - `failed`     — entity `failed`
+             *       - `empty`      — entity `''`（老内容未走流水线）
+             *     判定"内容是否可用"应组合 status 字段：`pipeline_status='completed' || status IN ('ready','bound')`。
              */
             pipeline_status: string;
             /** @description 流水线错误信息（仅失败时填） */
@@ -9915,7 +9945,7 @@ export interface components {
         };
         PluginDeviceList: components["schemas"]["PluginDeviceDTO"][];
         /** @enum {string} */
-        TriggerKind: "listener" | "timer";
+        TriggerKind: "listener" | "timer" | "device_event_binding";
         /** @enum {string} */
         TriggerActionKind: "scene" | "command" | "media" | "query" | "webhook";
         /**
@@ -10038,6 +10068,40 @@ export interface components {
             external_procs?: components["schemas"]["ExternalProc"][];
             /** Format: date-time */
             checked_at: string;
+        };
+        /**
+         * @description 单条 event-binding（admin 矩阵编辑器一格 = 一条 binding）。等价于 TriggerDTO
+         *     的 kind=device_event_binding 子集投影，只暴露 admin 矩阵编辑器关心的字段。
+         */
+        DeviceEventBindingDTO: {
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            device_id: number;
+            event_index: number;
+            event_type: string;
+            enabled: boolean;
+            action: components["schemas"]["TriggerAction"];
+            /** @description 可选；admin 矩阵保存时若未指定，server 生成默认 "第 {event_index+1} 路 · {event_type}" */
+            name?: string;
+            /** Format: date-time */
+            last_fired_at?: string;
+        };
+        DeviceEventBindingListResponse: {
+            list: components["schemas"]["DeviceEventBindingDTO"][];
+            total: number;
+        };
+        /** @description PUT 整页保存时的单条输入。无 id —— 替换语义，server 重新生成。 */
+        DeviceEventBindingInput: {
+            event_index: number;
+            event_type: string;
+            /** @default true */
+            enabled: boolean;
+            action: components["schemas"]["TriggerAction"];
+            name?: string;
+        };
+        PutDeviceEventBindingsRequest: {
+            bindings: components["schemas"]["DeviceEventBindingInput"][];
         };
         DisplayInfo: {
             name: string;
@@ -11623,10 +11687,7 @@ export interface operations {
                 page_size?: number;
                 keyword?: string;
                 status?: string;
-                /**
-                 * @description 按展项筛选（兼容旧前端；service 层 ListContents 当前不接 exhibit_id 但 yaml 留位
-                 *     以便未来扩展，handler 用 query 解析时只读 hall_id/keyword/status）
-                 */
+                /** @description 按展项过滤；缺省或 `=0` 时不过滤（返回整个 hall 的 contents）。 */
                 exhibit_id?: number;
             };
             header?: never;
@@ -19715,6 +19776,74 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             /** @description 展厅 App 离线（无法预检） */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"];
+                };
+            };
+        };
+    };
+    listDeviceEventBindings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["DeviceEventBindingListResponse"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    replaceDeviceEventBindings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PutDeviceEventBindingsRequest"];
+            };
+        };
+        responses: {
+            /** @description 成功（返回保存后完整列表） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data?: components["schemas"]["DeviceEventBindingListResponse"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description 单条 binding 校验失败 */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

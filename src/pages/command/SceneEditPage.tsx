@@ -56,6 +56,9 @@ import type {
 } from '@/api/gen/client';
 import ActionStepListEditor from '@/pages/_shared/runbook/ActionStepListEditor';
 import type { ActionStep } from '@/pages/_shared/runbook/types';
+import ContentPicker, {
+  type ContentPickerMode,
+} from '@/pages/panel/components/ContentPicker';
 import SceneBasicInfoCard, {
   type SceneBasicValues,
 } from './components/SceneBasicInfoCard';
@@ -142,6 +145,13 @@ export default function SceneEditPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [dirty, setDirty] = useState(false);
   const initRef = useRef<SceneDetail | null>(null);
+  const [pickerState, setPickerState] = useState<{
+    open: boolean;
+    mode: ContentPickerMode;
+    exhibitId: number;
+    currentContentId: number | null;
+    resolve: ((id: number | null) => void) | null;
+  } | null>(null);
 
   // 装载 detail → 初始化 form（载入新 detail 时 reset 编辑态）
   // 用 ref 守住"已初始化的 sceneId"，避免 setState 死循环；不能 derive 走 useMemo —
@@ -171,6 +181,30 @@ export default function SceneEditPage() {
   function patchSteps(next: ActionStep[]) {
     setSteps(next);
     setDirty(true);
+  }
+
+  async function openContentPicker(
+    mode: 'play_video' | 'show_screen_image',
+    exhibitId: number,
+    currentContentId: number | null,
+  ): Promise<number | null> {
+    return new Promise<number | null>((resolve) => {
+      setPickerState({
+        open: true,
+        mode,
+        exhibitId,
+        currentContentId,
+        resolve,
+      });
+    });
+  }
+  function handlePickerSelect(contentId: number) {
+    pickerState?.resolve?.(contentId);
+    setPickerState(null);
+  }
+  function handlePickerCancel() {
+    pickerState?.resolve?.(null);
+    setPickerState(null);
   }
 
   // ----- mutations -----
@@ -462,6 +496,7 @@ export default function SceneEditPage() {
                 errors={Object.fromEntries(
                   Object.entries(errors).filter(([k]) => /^\d+\./.test(k)),
                 )}
+                onSelectContent={openContentPicker}
                 disabled={!canEdit}
                 editingIndex={editingIndex}
                 onEditingIndexChange={setEditingIndex}
@@ -471,6 +506,22 @@ export default function SceneEditPage() {
         </div>
       </div>
 
+      {pickerState && (
+        <ContentPicker
+          open={pickerState.open}
+          mode={pickerState.mode}
+          hallId={hallId}
+          exhibitId={pickerState.exhibitId}
+          exhibitName={
+            (exhibitsQuery.data ?? []).find(
+              (e) => e.id === pickerState.exhibitId,
+            )?.name
+          }
+          currentContentId={pickerState.currentContentId}
+          onSelect={handlePickerSelect}
+          onCancel={handlePickerCancel}
+        />
+      )}
     </div>
   );
 }

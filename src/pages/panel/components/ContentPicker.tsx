@@ -31,6 +31,8 @@ interface Props {
   mode: ContentPickerMode;
   hallId: number;
   exhibitId: number;
+  /** 展项名（host 注入，标题用）；缺省回退 `#${exhibitId}` */
+  exhibitName?: string;
   /** 已选 content_id，弹出时高亮 */
   currentContentId: number | null;
   onSelect: (contentId: number) => void;
@@ -50,6 +52,7 @@ function ContentPickerInner({
   mode,
   hallId,
   exhibitId,
+  exhibitName,
   currentContentId,
   onSelect,
   onCancel,
@@ -67,7 +70,7 @@ function ContentPickerInner({
         hall_id: hallId,
         exhibit_id: exhibitId,
         page: 1,
-        page_size: 200,
+        page_size: 100, // server cap = 100；超出会静默回落 default 20
       }),
     select: (res) => res.data.data?.list ?? [],
     enabled: open && hallId > 0 && exhibitId > 0,
@@ -77,15 +80,24 @@ function ContentPickerInner({
     const list = (listQuery.data ?? []) as ContentDetailDTO[];
     const kw = keyword.trim().toLowerCase();
     return list.filter((c) => {
+      // server 当前不接 exhibit_id 入参（gen.ListContentsParams 留位但 handler 忽略），
+      // 客户端按 exhibit_id 兜底过一遍，避免列出整个 hall 的视频。
+      if (c.exhibit_id !== exhibitId) return false;
       const typeMatch =
         mode === 'play_video'
           ? VIDEO_TYPES.has(c.type)
           : c.type === 'image';
       if (!typeMatch) return false;
       if (kw && !c.name.toLowerCase().includes(kw)) return false;
-      return c.pipeline_status === 'ready' || c.status === 'bound';
+      // pipeline_status 是 mapPipelineOverallStatus 输出（completed/processing/queued/failed/empty），
+      // 永远不是 'ready'。可用 = 新流水线 completed 或 老内部路径 status='ready' 或 vendor 'bound'。
+      return (
+        c.pipeline_status === 'completed' ||
+        c.status === 'ready' ||
+        c.status === 'bound'
+      );
     });
-  }, [listQuery.data, mode, keyword]);
+  }, [listQuery.data, mode, keyword, exhibitId]);
 
   const isVideo = mode === 'play_video';
 
@@ -96,10 +108,11 @@ function ContentPickerInner({
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
           {isVideo ? <PlayCircleOutlined /> : <PictureOutlined />}
           {isVideo ? '选择视频' : '选择守屏图'}
-          <Tag style={{ marginLeft: 8 }}>展项 #{exhibitId}</Tag>
+          <Tag style={{ marginLeft: 8 }}>{exhibitName ?? `展项 #${exhibitId}`}</Tag>
         </span>
       }
-      width={720}
+      width="min(960px, 92vw)"
+      styles={{ body: { maxHeight: '60vh', overflowY: 'auto' } }}
       okText="确认选择"
       okButtonProps={{
         disabled: picked == null || picked === currentContentId,
@@ -140,10 +153,8 @@ function ContentPickerInner({
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
             gap: 10,
-            maxHeight: 420,
-            overflowY: 'auto',
             padding: 4,
           }}
         >

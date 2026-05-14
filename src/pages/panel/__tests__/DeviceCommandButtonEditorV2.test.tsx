@@ -203,6 +203,30 @@ describe('buttonV2Codec', () => {
     expect(result.errors[0]['actions.0.device_id']).toBeTruthy();
     expect(result.errors[0]['actions.1.content_intent']).toBeTruthy();
   });
+
+  it('validateButtons：device_id 不在 knownDeviceIds（设备已删除）→ 报错', () => {
+    const result = validateButtons(
+      [
+        {
+          label: '某按钮',
+          actions: [
+            {
+              type: 'device',
+              delay_seconds_after_prev_start: 0,
+              device_id: 43,
+              command: 'channel_on',
+              params: null,
+              preconditions: null,
+              friendly_description: null,
+            },
+          ],
+        },
+      ],
+      new Set([10, 11, 12]),
+    );
+    expect(result.hasError).toBe(true);
+    expect(result.errors[0]['actions.0.device_id']).toMatch(/已删除/);
+  });
 });
 
 // ──────────── Component integration ────────────

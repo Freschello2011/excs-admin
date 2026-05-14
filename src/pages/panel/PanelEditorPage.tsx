@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import {
-  Button, Modal, Form, Input, Select, Space, Popconfirm,
+  Alert, Button, Modal, Form, Input, Select, Space, Popconfirm,
   Empty, Spin, InputNumber, Tag, Tooltip, Badge,
 } from 'antd';
 import { useMessage } from '@/hooks/useMessage';
@@ -319,6 +319,45 @@ export default function PanelEditorPage() {
 
   const sections = buffer.sections;
   const previewSections = useMemo(() => bufferToPreviewSections(buffer), [buffer]);
+
+  // 扫 buffer 找出所有引用了"已删除设备"的 device_command 卡按钮（v1 / v2 binding 同形）。
+  // 服务端 SaveDraft 已对这两类引用宽松（不再硬拦），但 Publish 仍严格——此 banner 让
+  // 用户在编辑期就能看到所有需清理的引用，免得等到发布时才一个个 trial-and-error。
+  const brokenDeviceRefs = useMemo(() => {
+    if (!devices) return []; // 设备列表未加载时不预警，避免误报
+    const known = new Set((devices ?? []).map((d: DeviceListItem) => d.id));
+    type Ref = {
+      sectionId: number;
+      sectionName: string;
+      card: BufferCard;
+      buttonIndex: number;
+      buttonLabel: string;
+      deviceId: number;
+    };
+    const out: Ref[] = [];
+    for (const sec of buffer.sections) {
+      for (const card of sec.cards) {
+        if (card.card_type !== 'device_command') continue;
+        const binding = card.binding as { buttons?: Array<{ label?: string; actions?: Array<{ device_id?: number }> }> } | null;
+        const buttons = binding?.buttons ?? [];
+        buttons.forEach((btn, i) => {
+          (btn.actions ?? []).forEach((act) => {
+            if (typeof act.device_id === 'number' && act.device_id > 0 && !known.has(act.device_id)) {
+              out.push({
+                sectionId: sec.id,
+                sectionName: sec.name,
+                card,
+                buttonIndex: i,
+                buttonLabel: btn.label || `按钮 ${i + 1}`,
+                deviceId: act.device_id,
+              });
+            }
+          });
+        });
+      }
+    }
+    return out;
+  }, [buffer, devices]);
 
   const hasPanel = !!panel && panel.id > 0;
   const currentVersionId = (panel as { current_version_id?: number | null } | undefined)
@@ -722,6 +761,46 @@ export default function PanelEditorPage() {
           )}
         </Space>
       </div>
+
+      {hasPanel && brokenDeviceRefs.length > 0 && canEdit && viewVersionId == null && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 12 }}
+          message={`面板有 ${brokenDeviceRefs.length} 处引用了已删除的设备，发布时会被服务端拦下，请逐个修复`}
+          description={
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
+              {brokenDeviceRefs.slice(0, 10).map((ref, i) => (
+                <div key={`${ref.card.id}-${ref.buttonIndex}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span>
+                    <Tag>{ref.sectionName}</Tag>
+                    <Tag color="blue">设备命令卡</Tag>
+                    <Tag color="orange">按钮：{ref.buttonLabel}</Tag>
+                    <span style={{ color: 'var(--ant-color-text-secondary)' }}>引用已删除的</span>
+                    <Tag color="red">设备 {ref.deviceId}</Tag>
+                  </span>
+                  <Button
+                    size="small"
+                    type="link"
+                    onClick={() => {
+                      setV2EditorCard(ref.card);
+                      setV2EditorSectionId(ref.sectionId);
+                      setV2EditorOpen(true);
+                    }}
+                  >
+                    去修复
+                  </Button>
+                </div>
+              ))}
+              {brokenDeviceRefs.length > 10 && (
+                <div style={{ color: 'var(--ant-color-text-secondary)' }}>
+                  …还有 {brokenDeviceRefs.length - 10} 处未列出
+                </div>
+              )}
+            </div>
+          }
+        />
+      )}
 
       {!hasPanel && (
         <Empty

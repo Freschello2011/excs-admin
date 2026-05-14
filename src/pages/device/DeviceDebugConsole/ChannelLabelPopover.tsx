@@ -16,6 +16,8 @@ interface Props {
   indexes: number[];
   channelMap: ChannelEntry[];
   groupSuggestions: string[];
+  hideGroup?: boolean;
+  titleOverride?: string;
   onCancel: () => void;
   onSubmit: (next: ChannelEntry[]) => Promise<void> | void;
 }
@@ -25,6 +27,8 @@ export default function ChannelLabelPopover({
   indexes,
   channelMap,
   groupSuggestions,
+  hideGroup = false,
+  titleOverride,
   onCancel,
   onSubmit,
 }: Props) {
@@ -52,7 +56,11 @@ export default function ChannelLabelPopover({
       const label = (labels[idx] ?? '').trim();
       if (!label) continue;
       const i = next.findIndex((x) => x.index === idx);
-      const entry: ChannelEntry = { index: idx, label, group: group.trim() || undefined };
+      const entry: ChannelEntry = {
+        index: idx,
+        label,
+        group: hideGroup ? undefined : group.trim() || undefined,
+      };
       if (i >= 0) next[i] = entry;
       else next.push(entry);
     }
@@ -68,7 +76,10 @@ export default function ChannelLabelPopover({
   return (
     <Modal
       open={open}
-      title={ordered.length > 1 ? `批量打标签（${ordered.length} 路）` : `打标签 — 通道 ${ordered[0] ?? ''}`}
+      title={
+        titleOverride ??
+        (ordered.length > 1 ? `批量打标签（${ordered.length} 路）` : `打标签 — 通道 ${ordered[0] ?? ''}`)
+      }
       onCancel={onCancel}
       onOk={handleSubmit}
       confirmLoading={submitting}
@@ -76,20 +87,22 @@ export default function ChannelLabelPopover({
       width={ordered.length > 1 ? 640 : 480}
     >
       <Form layout="vertical">
-        <Form.Item label="分组（可选）">
-          <Select
-            mode="tags"
-            allowClear
-            value={group ? [group] : []}
-            onChange={(arr) => setGroup((Array.isArray(arr) ? arr[arr.length - 1] : arr) ?? '')}
-            placeholder="如：奥运场馆 / 城市地标"
-            options={groupSuggestions.map((g) => ({ value: g, label: g }))}
-            style={{ width: '100%' }}
-          />
-          <Text type="secondary" style={{ fontSize: 11 }}>
-            同一组的通道可以一键全开 / 全关；演出 / 触发器中也可按组引用。
-          </Text>
-        </Form.Item>
+        {!hideGroup && (
+          <Form.Item label="分组（可选）">
+            <Select
+              mode="tags"
+              allowClear
+              value={group ? [group] : []}
+              onChange={(arr) => setGroup((Array.isArray(arr) ? arr[arr.length - 1] : arr) ?? '')}
+              placeholder="如：奥运场馆 / 城市地标"
+              options={groupSuggestions.map((g) => ({ value: g, label: g }))}
+              style={{ width: '100%' }}
+            />
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              同一组的通道可以一键全开 / 全关；演出 / 触发器中也可按组引用。
+            </Text>
+          </Form.Item>
+        )}
 
         {ordered.length === 1 ? (
           <Form.Item label="实物名" required>

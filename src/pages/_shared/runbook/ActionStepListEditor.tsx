@@ -18,6 +18,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   Button,
   Card,
   Input,
@@ -42,6 +43,7 @@ import {
 } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { hallApi } from '@/api/hall';
+import { contentApi } from '@/api/content';
 import { queryKeys } from '@/api/queryKeys';
 import WidgetRenderer from '@/components/device-catalog/WidgetRenderer';
 import CommandLabel from '@/components/command/CommandLabel';
@@ -558,16 +560,33 @@ function DeviceStepBody({
   disabled,
   onPatch,
 }: DeviceBodyProps) {
-  const deviceOptions = useMemo(
-    () => devices.map((d) => ({ value: d.id, label: d.name })),
-    [devices],
-  );
+  // 已删除设备识别：step.device_id 已落卡但当前 hall 设备列表里查不到
+  // （现网真实事故：device 43 删后老 panel 草稿仍引用 → 保存触发服务端
+  // VERSION_DEVICE_NOT_IN_HALL；server 已加 DEVICE_HAS_PANEL_BUTTON 拦下未来删除，
+  // 这里给"已留下"的脏数据一个清晰的修复入口）。
+  const isMissingDevice =
+    !!step.device_id &&
+    step.device_id > 0 &&
+    devices.length > 0 &&
+    !devices.some((d) => d.id === step.device_id);
+
+  const deviceOptions = useMemo(() => {
+    const opts = devices.map((d) => ({ value: d.id, label: d.name }));
+    if (isMissingDevice && step.device_id) {
+      opts.push({
+        value: step.device_id,
+        label: `设备 ${step.device_id}（已删除，请改选或删除此动作）`,
+      });
+    }
+    return opts;
+  }, [devices, isMissingDevice, step.device_id]);
 
   const { data: commands } = useQuery({
     queryKey: queryKeys.effectiveCommands(step.device_id || 0),
     queryFn: () => hallApi.getEffectiveCommands(step.device_id as number),
     select: (res) => res.data.data,
-    enabled: !!step.device_id && step.device_id > 0,
+    // 已删除设备拉 effective-commands 必 404，跳过避免 toast 噪音
+    enabled: !!step.device_id && step.device_id > 0 && !isMissingDevice,
   });
 
   const selectedCommand = useMemo(
@@ -626,6 +645,15 @@ function DeviceStepBody({
 
   return (
     <div data-testid="device-step-body">
+      {isMissingDevice && (
+        <Alert
+          type="error"
+          showIcon
+          style={{ marginBottom: 8 }}
+          message={`目标设备 ${step.device_id} 已被删除`}
+          description="请在右侧设备下拉改选其他设备，或在按钮列表中删除本动作；保存草稿前必须解决。"
+        />
+      )}
       <div
         style={{
           display: 'grid',
@@ -657,7 +685,7 @@ function DeviceStepBody({
               }
               options={deviceOptions}
               disabled={disabled}
-              status={errorPaths.device_id ? 'error' : undefined}
+              status={isMissingDevice || errorPaths.device_id ? 'error' : undefined}
               showSearch
               optionFilterProp="label"
               style={{ width: '100%' }}
@@ -914,6 +942,23 @@ function ContentStepBody({
 }
 
 // ============================================================
+// 已选内容名标签 — 拿 content_id 异步查名字（加载中回退 id；查不到回退 id）
+// ============================================================
+
+function SelectedContentLabel({ contentId }: { contentId: number }) {
+  const { data, isLoading, isError } = useQuery({
+    queryKey: queryKeys.contentDetail(contentId),
+    queryFn: () => contentApi.getContent(contentId),
+    select: (res) => res.data.data,
+    enabled: contentId > 0,
+    staleTime: 30_000,
+  });
+  if (isLoading) return <>已选 #{contentId} · 加载中…</>;
+  if (isError || !data?.name) return <>已选 #{contentId} · 点此替换</>;
+  return <>已选「{data.name}」· 点此替换</>;
+}
+
+// ============================================================
 // 8 意图的参数表单
 // ============================================================
 
@@ -973,11 +1018,13 @@ function ContentIntentParamsForm({
             disabled={disabled || !hasContentPickerCallback}
             danger={!!fieldErr}
           >
-            {cid
-              ? `已选 content_id = ${cid}`
-              : hasContentPickerCallback
-                ? '点击选择…'
-                : '（host 注入 ContentPicker 后可用）'}
+            {cid ? (
+              <SelectedContentLabel contentId={cid} />
+            ) : hasContentPickerCallback ? (
+              '点击选择…'
+            ) : (
+              '（host 注入 ContentPicker 后可用）'
+            )}
           </Button>
           {fieldErr && (
             <div

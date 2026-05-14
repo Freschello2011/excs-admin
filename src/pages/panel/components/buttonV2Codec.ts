@@ -89,7 +89,15 @@ export interface ValidationOutcome {
   globalBlock?: string;
 }
 
-export function validateButtons(buttons: ButtonViewModel[]): ValidationOutcome {
+export function validateButtons(
+  buttons: ButtonViewModel[],
+  /**
+   * 当前 hall 的活设备 id 集合（可选）。提供后会校验 device 步的 device_id 必须落在活设备列表，
+   * 拦下"设备已删但旧 binding 仍引用"导致的服务端 VERSION_DEVICE_NOT_IN_HALL 死锁。
+   * 不传 = 跳过此校验（兼容老 caller / 设备列表未加载时）。
+   */
+  knownDeviceIds?: ReadonlySet<number> | null,
+): ValidationOutcome {
   const errors: Record<number, Record<string, string>> = {};
   let globalBlock: string | undefined;
 
@@ -105,7 +113,11 @@ export function validateButtons(buttons: ButtonViewModel[]): ValidationOutcome {
     }
     b.actions.forEach((s, idx) => {
       if (s.type === 'device') {
-        if (!s.device_id) e[`actions.${idx}.device_id`] = '请选择设备';
+        if (!s.device_id) {
+          e[`actions.${idx}.device_id`] = '请选择设备';
+        } else if (knownDeviceIds && !knownDeviceIds.has(s.device_id)) {
+          e[`actions.${idx}.device_id`] = `设备 ${s.device_id} 已删除，请改选或删除此动作`;
+        }
         if (!s.command) e[`actions.${idx}.command`] = '请选择命令';
       } else if (s.type === 'content') {
         if (!s.exhibit_id) e[`actions.${idx}.exhibit_id`] = '请选择展项';

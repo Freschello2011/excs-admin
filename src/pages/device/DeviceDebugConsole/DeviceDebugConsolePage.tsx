@@ -13,14 +13,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Button, Form, Input, InputNumber, Popover, Space, Spin, Tag, Tooltip, Typography } from 'antd';
+import { Alert, Button, Empty, Form, Input, InputNumber, Popover, Select, Space, Spin, Tag, Tooltip, Typography } from 'antd';
 import { CloseOutlined, EditOutlined, FullscreenOutlined, PrinterOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useMessage } from '@/hooks/useMessage';
 import { deviceDebugApi, type DeviceDebugBundle } from '@/api/deviceDebug';
 import { channelMapApi, type ChannelEntry, type ChannelMap } from '@/api/channelMap';
 import { commandPresetApi, type CommandPreset } from '@/api/commandPreset';
 import { deviceCommandApi } from '@/api/deviceCommand';
-import { deviceV2Api } from '@/api/deviceConnector';
+import { deviceV2Api, presetCatalogApi } from '@/api/deviceConnector';
 import { hallApi } from '@/api/hall';
 import { queryKeys } from '@/api/queryKeys';
 import { startEventStream, type SSEClient } from '@/api/diag';
@@ -35,11 +35,12 @@ import { fromRetainedState, verifyPreset, type PresetVerifyResult } from './stat
 import RawStream from './RawStream';
 import ResponseParser from './ResponseParser';
 import InlineCommandsTab from './InlineCommandsTab';
+import EventListenerMonitor from './EventListenerMonitor';
 import styles from './DeviceDebugConsole.module.scss';
 
 const { Text } = Typography;
 
-type TabKey = 'matrix' | 'commands' | 'presets' | 'raw' | 'parser';
+type TabKey = 'matrix' | 'commands' | 'presets' | 'raw' | 'parser' | 'events' | 'listener_rules';
 
 export default function DeviceDebugConsolePage() {
   const { deviceId: deviceIdStr } = useParams<{ deviceId: string }>();
@@ -148,19 +149,38 @@ export default function DeviceDebugConsolePage() {
     };
   }, [hallIdForSse, exhibitIdForSse, deviceId]);
 
-  // Variant 推断：preset.transport_kind = http → smyoo 风格；其他默认 K32 风格
+  // Variant 推断：
+  // - preset shanyou_switch_16ch → 闪优 8×2
+  // - preset xiuzhan_laser_16ch（含其它纯接收器 preset：commands=[] + default_listener_patterns）
+  //   → event_listener：触发监视布局，无通道矩阵 / 命令组合 / 响应解析
+  // - 其它 preset（K32 等）→ K32 风格通道矩阵
   const variant: MatrixVariant = useMemo(() => {
     if (!bundle) return 'generic';
     const ref = bundle.device.connector_ref ?? {};
     if (bundle.device.connector_kind === 'preset' && ref.preset_key === 'shanyou_switch_16ch') {
       return 'smyoo16';
     }
-    if (bundle.device.connector_kind === 'preset' && bundle.device.connector_kind === 'preset') {
-      // K32 / 激光笔接收器：base=32 / 16，serial 类
+    if (bundle.device.connector_kind === 'preset' && ref.preset_key === 'xiuzhan_laser_16ch') {
+      return 'event_listener';
+    }
+    if (bundle.device.connector_kind === 'preset') {
       return 'k32';
     }
     return 'generic';
   }, [bundle]);
+
+  // 纯接收器型 preset 单独拉一次 catalog detail 拿 default_listener_patterns（yaml 单源）。
+  // 仅 event_listener variant 触发；其它 variant 不触发避免无谓 RPC。
+  const presetKey =
+    bundle?.device.connector_kind === 'preset'
+      ? bundle?.device.connector_ref?.preset_key
+      : undefined;
+  const { data: presetDetail } = useQuery({
+    queryKey: ['preset-catalog', presetKey],
+    queryFn: () => presetCatalogApi.get(presetKey!),
+    select: (res) => res.data.data,
+    enabled: variant === 'event_listener' && !!presetKey,
+  });
 
   // 联级 cascade_units PATCH
   const cascadeMutation = useMutation({
@@ -176,6 +196,21 @@ export default function DeviceDebugConsolePage() {
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : '更新失败';
       message.error(msg);
+    },
+  });
+
+  const connectionConfigMutation = useMutation({
+    mutationFn: async (patch: Record<string, unknown>) => {
+      const cfg = { ...(bundle?.device.connection_config ?? {}), ...patch };
+      await hallApi.updateDevice(deviceId, { connection_config: cfg });
+    },
+    onSuccess: () => {
+      message.success('接收器信息已更新');
+      queryClient.invalidateQueries({ queryKey: ['device-debug-bundle', deviceId] });
+      queryClient.invalidateQueries({ queryKey: ['devices'] });
+    },
+    onError: (err: unknown) => {
+      message.error(err instanceof Error ? err.message : '更新失败');
     },
   });
 
@@ -231,14 +266,22 @@ export default function DeviceDebugConsolePage() {
 
   // ADR-0017 P-C：raw_transport 设备首次 bundle 加载后默认落到「命令清单」tab
   // （无通道矩阵；admin 进调试台主要就是为了改命令）。
+  // 纯接收器型 preset（event_listener variant）默认落到「触发监视」tab。
   useEffect(() => {
     if (didDefaultTab) return;
     if (!bundle) return;
+    let nextTab: TabKey | null = null;
     if (bundle.device.connector_kind === 'raw_transport' && activeTab === 'matrix') {
-      setActiveTab('commands');
+      nextTab = 'commands';
+    } else if (variant === 'event_listener' && activeTab === 'matrix') {
+      nextTab = 'events';
     }
-    setDidDefaultTab(true);
-  }, [bundle, didDefaultTab, activeTab]);
+    const timer = window.setTimeout(() => {
+      if (nextTab) setActiveTab(nextTab);
+      setDidDefaultTab(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [bundle, didDefaultTab, activeTab, variant]);
 
   // 监听 retained 变化，跑 verifyPreset 对比
   useEffect(() => {
@@ -275,6 +318,7 @@ export default function DeviceDebugConsolePage() {
   const presets: CommandPreset[] = device.command_presets ?? [];
   const total = bundle.max_channel;
   const isK32 = variant === 'k32';
+  const isEventListener = variant === 'event_listener';
   const groupSuggestions = Array.from(
     new Set(channelMap.map((e) => e.group).filter((g): g is string => !!g)),
   );
@@ -403,48 +447,77 @@ export default function DeviceDebugConsolePage() {
     await updateChannelMapMutation.mutateAsync(next);
   };
 
+  const handleScrollToCascadeSelector = () => {
+    if (isEventListener && activeTab !== 'events') {
+      setActiveTab('events');
+    } else if (!isEventListener && activeTab !== 'matrix') {
+      setActiveTab('matrix');
+    }
+    window.setTimeout(() => {
+      document
+        .querySelector('[data-cascade-selector]')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 0);
+  };
+
   const exhibitId = device.exhibit_id ?? 0;
 
   // ─── tabs ───
   const isRawTransport = device.connector_kind === 'raw_transport';
   const inlineCommands = (device.inline_commands ?? []) as DeviceCommandView[];
+  const listenerPatternsCount = presetDetail?.default_listener_patterns?.length ?? 0;
   const tabs: { key: TabKey; label: React.ReactNode }[] = [];
-  if (!isRawTransport) {
-    // 通道矩阵 tab：raw_transport 没有"通道"概念，隐去
+  if (isEventListener) {
+    // 纯接收器（激光笔等）：触发监视 / 协议调试 / 监听规则
+    // 不显示通道矩阵 / 命令组合 / 响应解析（该设备无命令也无响应解析需求）
+    tabs.push({ key: 'events', label: <>🎯 触发监视</> });
+    tabs.push({ key: 'raw', label: '⌨️ 协议调试' });
     tabs.push({
-      key: 'matrix',
+      key: 'listener_rules',
       label: (
         <>
-          🔲 通道矩阵 <span className={styles.tabBadge}>{onlineCount}/{total}</span>
+          📥 监听规则 <span className={styles.tabBadge}>{listenerPatternsCount}</span>
         </>
       ),
     });
-  }
-  if (isRawTransport) {
-    // ADR-0017 P-C：仅 raw_transport 显示「命令清单」tab
+  } else {
+    if (!isRawTransport) {
+      // 通道矩阵 tab：raw_transport 没有"通道"概念，隐去
+      tabs.push({
+        key: 'matrix',
+        label: (
+          <>
+            🔲 通道矩阵 <span className={styles.tabBadge}>{onlineCount}/{total}</span>
+          </>
+        ),
+      });
+    }
+    if (isRawTransport) {
+      // ADR-0017 P-C：仅 raw_transport 显示「命令清单」tab
+      tabs.push({
+        key: 'commands',
+        label: (
+          <>
+            📝 命令清单{' '}
+            <span className={styles.tabBadge}>{inlineCmdCount || inlineCommands.length}</span>
+          </>
+        ),
+      });
+    }
     tabs.push({
-      key: 'commands',
+      key: 'presets',
       label: (
         <>
-          📝 命令清单{' '}
-          <span className={styles.tabBadge}>{inlineCmdCount || inlineCommands.length}</span>
+          📚 命令组合 <span className={styles.tabBadge}>{presets.length}</span>
         </>
       ),
     });
+    tabs.push({
+      key: 'raw',
+      label: variant === 'smyoo16' ? '⌨️ 网络请求' : '⌨️ 协议调试',
+    });
+    tabs.push({ key: 'parser', label: '🔍 响应解析' });
   }
-  tabs.push({
-    key: 'presets',
-    label: (
-      <>
-        📚 命令组合 <span className={styles.tabBadge}>{presets.length}</span>
-      </>
-    ),
-  });
-  tabs.push({
-    key: 'raw',
-    label: variant === 'smyoo16' ? '⌨️ 网络请求' : '⌨️ 协议调试',
-  });
-  tabs.push({ key: 'parser', label: '🔍 响应解析' });
 
 
   return (
@@ -539,7 +612,7 @@ export default function DeviceDebugConsolePage() {
             <>
               {/* K32 联级配置 */}
               {isK32 && (
-                <div className={styles.tools}>
+                <div className={styles.tools} data-cascade-selector>
                   <CascadeSelector
                     baseChannel={bundle.base_channel}
                     cascadeUnits={bundle.cascade_units}
@@ -711,14 +784,104 @@ export default function DeviceDebugConsolePage() {
               effectiveCommands={bundle.effective_commands}
             />
           )}
+
+          {activeTab === 'events' && isEventListener && (
+            <>
+              <div className={styles.tools} data-cascade-selector>
+                <CascadeSelector
+                  baseChannel={bundle.base_channel}
+                  cascadeUnits={bundle.cascade_units}
+                  channelMap={channelMap}
+                  loading={cascadeMutation.isPending}
+                  onChange={(units) => cascadeMutation.mutateAsync(units)}
+                />
+              </div>
+              <EventListenerMonitor
+                hallId={device.hall_id}
+                exhibitId={exhibitId}
+                deviceId={deviceId}
+                total={total}
+                channelMap={channelMap}
+                listenerPatterns={presetDetail?.default_listener_patterns}
+                portName={(device.connection_config as { port_name?: string } | undefined)?.port_name}
+                onEditLabel={(idx) => setLabelPopoverIndexes([idx])}
+              />
+            </>
+          )}
+
+          {activeTab === 'listener_rules' && isEventListener && (
+            <div className={styles.listenerRulesWrap}>
+              <Alert
+                type="info"
+                showIcon
+                style={{ marginBottom: 12 }}
+                message="本设备是「纯接收器」，不接受任何命令"
+                description="激光笔按下时，接收器向串口发送下列帧。在触发器配置页可一键引用这些 pattern，把 A/B 键映射到场景或演出动作。"
+              />
+              {(presetDetail?.default_listener_patterns ?? []).length === 0 ? (
+                <Empty description="该 preset 未声明 default_listener_patterns" />
+              ) : (
+                <div className={styles.listenerRulesList}>
+                  {(presetDetail?.default_listener_patterns ?? []).map((p, i) => (
+                    <div key={i} className={styles.listenerRuleCard}>
+                      <div className={styles.listenerRuleHeader}>
+                        <strong>{p.label}</strong>
+                        <Tag>{p.pattern_kind}</Tag>
+                      </div>
+                      <div className={styles.listenerRuleField}>
+                        <span className={styles.listenerRuleFieldLabel}>正则</span>
+                        <code>{p.pattern}</code>
+                      </div>
+                      {p.capture_groups && p.capture_groups.length > 0 && (
+                        <div className={styles.listenerRuleField}>
+                          <span className={styles.listenerRuleFieldLabel}>捕获组</span>
+                          <code>{p.capture_groups.join(', ')}</code>
+                        </div>
+                      )}
+                      <div className={styles.listenerRuleField}>
+                        <span className={styles.listenerRuleFieldLabel}>示例</span>
+                        <code>{p.example_payload}</code>
+                      </div>
+                      <div className={styles.listenerRuleField}>
+                        <span className={styles.listenerRuleFieldLabel}>含义</span>
+                        <span style={{ fontSize: 12, color: 'var(--ant-color-text-secondary)' }}>
+                          {p.example_meaning}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {device.hall_id > 0 && (
+                <div style={{ marginTop: 16 }}>
+                  <Button
+                    type="primary"
+                    onClick={() =>
+                      navigate(`/halls/${device.hall_id}/triggers?deviceId=${deviceId}`)
+                    }
+                  >
+                    去配置触发器 →
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* 右侧 sidebar：始终显示状态 + preset list 摘要（matrix tab 下），切到其他 tab 后 sidebar 仍保留 */}
         <div className={styles.sidePanel}>
           <div className={styles.sideCard}>
             <div className={styles.sideCardTitle}>
-              <span>{isRawTransport ? '设备信息' : '当前状态'}</span>
-              <small>{isRawTransport ? device.connector_kind : retainedState ? 'retained' : '未收到'}</small>
+              <span>{isRawTransport ? '设备信息' : isEventListener ? '接收器信息' : '当前状态'}</span>
+              <small>
+                {isRawTransport
+                  ? device.connector_kind
+                  : isEventListener
+                  ? '被动监听'
+                  : retainedState
+                  ? 'retained'
+                  : '未收到'}
+              </small>
             </div>
             {isRawTransport ? (
               <RawTransportSideStats
@@ -731,6 +894,15 @@ export default function DeviceDebugConsolePage() {
                   queryClient.invalidateQueries({ queryKey: ['device-debug-bundle', deviceId] });
                   queryClient.invalidateQueries({ queryKey: ['devices'] });
                 }}
+              />
+            ) : isEventListener ? (
+              <EventListenerSideStats
+                device={device}
+                total={total}
+                listenerPatternsCount={listenerPatternsCount}
+                onSaveConfig={connectionConfigMutation.mutateAsync}
+                saving={connectionConfigMutation.isPending}
+                onEditCascade={handleScrollToCascadeSelector}
               />
             ) : (
               <>
@@ -758,7 +930,7 @@ export default function DeviceDebugConsolePage() {
                 </div>
               </>
             )}
-            {!isRawTransport && channelsRaw && (
+            {!isRawTransport && !isEventListener && channelsRaw && (
               <>
                 <hr style={{ margin: '8px 0', border: 'none', borderTop: '1px dashed var(--ant-color-border)' }} />
                 <div style={{ fontSize: 11.5, color: 'var(--ant-color-text-secondary)', marginBottom: 4 }}>
@@ -783,42 +955,56 @@ export default function DeviceDebugConsolePage() {
           {/* 闪优凭据卡 */}
           {variant === 'smyoo16' && <SmyooCredsCard deviceId={deviceId} />}
 
-          <div className={styles.sideCard}>
-            <div className={styles.sideCardTitle}>
-              <span>命令组合</span>
-              <small>{presets.length} 个</small>
-            </div>
-            <CommandPresetList
-              presets={presets}
-              verifyResults={verifyResults}
-              commandRequestByCode={commandRequestByCode}
-              total={total}
-              retainedState={retainedState ?? null}
-              onTrigger={handlePresetTrigger}
-              onEdit={(p) =>
-                setPresetEditor({ open: true, initial: p, editingExisting: true })
-              }
-              onDelete={(p) => deletePresetMutation.mutate(p.name)}
-              onAdd={() => setPresetEditor({ open: true, initial: null, editingExisting: false })}
-            />
-          </div>
+          {/* 纯接收器型设备不渲染「命令组合」（commands=[]，无法 trigger）和常驻 Raw 流（已在主区 EventListenerMonitor 渲染） */}
+          {!isEventListener && (
+            <>
+              <div className={styles.sideCard}>
+                <div className={styles.sideCardTitle}>
+                  <span>命令组合</span>
+                  <small>{presets.length} 个</small>
+                </div>
+                <CommandPresetList
+                  presets={presets}
+                  verifyResults={verifyResults}
+                  commandRequestByCode={commandRequestByCode}
+                  total={total}
+                  retainedState={retainedState ?? null}
+                  onTrigger={handlePresetTrigger}
+                  onEdit={(p) =>
+                    setPresetEditor({ open: true, initial: p, editingExisting: true })
+                  }
+                  onDelete={(p) => deletePresetMutation.mutate(p.name)}
+                  onAdd={() => setPresetEditor({ open: true, initial: null, editingExisting: false })}
+                />
+              </div>
 
-          {/* sidePanel 常驻 Raw 流卡片（mockup 05 行 519-541），切到任意 tab 都能看到设备实时流 */}
-          {exhibitId > 0 && (
-            <RawStream
-              hallId={device.hall_id}
-              exhibitId={exhibitId}
-              deviceId={deviceId}
-              protocolStyle={variant === 'smyoo16' ? 'http' : 'raw'}
-              variant="mini"
-            />
+              {/* sidePanel 常驻 Raw 流卡片（mockup 05 行 519-541），切到任意 tab 都能看到设备实时流 */}
+              {exhibitId > 0 && (
+                <RawStream
+                  hallId={device.hall_id}
+                  exhibitId={exhibitId}
+                  deviceId={deviceId}
+                  protocolStyle={variant === 'smyoo16' ? 'http' : 'raw'}
+                  variant="mini"
+                />
+              )}
+            </>
           )}
 
-          <div className={styles.callout}>
-            💡 <strong>实施小贴士</strong>：未标注的灯亮起后，
-            <strong>右键单格 → [打标签…]</strong> 当场命名。多格拖选 →{' '}
-            <strong>[存为命令组合…]</strong> 保存灯组合，演出 / 场景里直接复用。
-          </div>
+          {isEventListener ? (
+            <div className={styles.callout}>
+              💡 <strong>实施小贴士</strong>：本设备「按下时才有数据」，无心跳；
+              "在线 / 离线"徽章不反映可用性，请以 <strong>触发监视</strong> tab
+              有无亮格 为准。配好 listener 后到 <strong>触发器</strong>
+              页绑定场景 / 演出。
+            </div>
+          ) : (
+            <div className={styles.callout}>
+              💡 <strong>实施小贴士</strong>：未标注的灯亮起后，
+              <strong>右键单格 → [打标签…]</strong> 当场命名。多格拖选 →{' '}
+              <strong>[存为命令组合…]</strong> 保存灯组合，演出 / 场景里直接复用。
+            </div>
+          )}
         </div>
       </div>
 
@@ -828,6 +1014,8 @@ export default function DeviceDebugConsolePage() {
         indexes={labelPopoverIndexes ?? []}
         channelMap={channelMap}
         groupSuggestions={groupSuggestions}
+        hideGroup={isEventListener}
+        titleOverride={isEventListener ? '编辑接收点标注' : undefined}
         onCancel={() => setLabelPopoverIndexes(null)}
         onSubmit={handleLabelSubmit}
       />
@@ -892,6 +1080,161 @@ function SmyooCredsCard({ deviceId }: { deviceId: number }) {
         🔄 重新登录
       </Button>
     </div>
+  );
+}
+
+/** 纯接收器型设备右侧 sidebar 信息卡。
+ *  替代 K32 的"开通道/未知通道/cascade_units"统计，强调"被动监听 / 无心跳"语义。 */
+function EventListenerSideStats({
+  device,
+  total,
+  listenerPatternsCount,
+  onSaveConfig,
+  saving,
+  onEditCascade,
+}: {
+  device: DeviceDebugBundle['device'];
+  total: number;
+  listenerPatternsCount: number;
+  onSaveConfig: (patch: Record<string, unknown>) => Promise<void>;
+  saving: boolean;
+  onEditCascade: () => void;
+}) {
+  const cfg = (device.connection_config ?? {}) as { port_name?: string; baud_rate?: number };
+  return (
+    <>
+      <div className={styles.statRow}>
+        <span>类型</span>
+        <strong>纯接收器（无命令）</strong>
+      </div>
+      <div className={styles.statRow}>
+        <span>通道数</span>
+        <Space size={4}>
+          <strong>{total}</strong>
+          <Button type="link" size="small" style={{ padding: 0, height: 18 }} onClick={onEditCascade}>
+            改联级
+          </Button>
+        </Space>
+      </div>
+      <div className={styles.statRow}>
+        <span>串口</span>
+        <PortNameEditor
+          value={cfg.port_name}
+          saving={saving}
+          onSave={(next) => onSaveConfig({ port_name: next })}
+        />
+      </div>
+      <div className={styles.statRow}>
+        <span>波特率</span>
+        <Select
+          size="small"
+          value={cfg.baud_rate ?? 115200}
+          style={{ width: 96 }}
+          disabled={saving}
+          options={[9600, 19200, 38400, 115200].map((rate) => ({
+            label: String(rate),
+            value: rate,
+          }))}
+          onChange={(next) => onSaveConfig({ baud_rate: next })}
+        />
+      </div>
+      <div className={styles.statRow}>
+        <span>监听规则</span>
+        <strong>{listenerPatternsCount} 条</strong>
+      </div>
+    </>
+  );
+}
+
+function PortNameEditor({
+  value,
+  saving,
+  onSave,
+}: {
+  value: string | undefined;
+  saving: boolean;
+  onSave: (next: string) => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(value ?? '');
+  const [localSaving, setLocalSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setDraft(value ?? '');
+      setErr(null);
+    }
+  }, [open, value]);
+
+  const submit = async () => {
+    if (localSaving || saving) return;
+    const next = draft.trim();
+    if (!next) {
+      setErr('请填写串口名称');
+      return;
+    }
+    if (next === (value ?? '')) {
+      setOpen(false);
+      return;
+    }
+    setLocalSaving(true);
+    setErr(null);
+    try {
+      await onSave(next);
+      setOpen(false);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : '保存失败');
+    } finally {
+      setLocalSaving(false);
+    }
+  };
+
+  const content = (
+    <div style={{ width: 200 }}>
+      <Input
+        size="small"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        placeholder="COM3 / /dev/ttyUSB0"
+        autoFocus
+        onPressEnter={submit}
+        onBlur={submit}
+        disabled={localSaving || saving}
+      />
+      {err && (
+        <div style={{ color: 'var(--ant-color-error)', fontSize: 11.5, marginTop: 6 }}>
+          {err}
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => !localSaving && !saving && setOpen(nextOpen)}
+      trigger="click"
+      placement="left"
+      title="编辑串口"
+      content={content}
+    >
+      <Tooltip title="点击编辑">
+        <strong
+          style={{
+            fontSize: 11,
+            cursor: saving ? 'not-allowed' : 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+            opacity: saving ? 0.6 : 1,
+          }}
+        >
+          {value || '?'}
+          <EditOutlined style={{ fontSize: 11, opacity: 0.6 }} />
+        </strong>
+      </Tooltip>
+    </Popover>
   );
 }
 

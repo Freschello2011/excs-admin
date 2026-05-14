@@ -182,7 +182,14 @@ export default function DeviceCommandButtonEditorV2({
 
   // ----- 派生 -----
   const activeButton = buttons[activeIndex] ?? null;
-  const validation = useMemo(() => validateButtons(buttons), [buttons]);
+  const knownDeviceIds = useMemo(() => {
+    if (!devicesData) return null;
+    return new Set(devicesData.map((d: DeviceListItem) => d.id));
+  }, [devicesData]);
+  const validation = useMemo(
+    () => validateButtons(buttons, knownDeviceIds),
+    [buttons, knownDeviceIds],
+  );
   const activeErrors = useMemo(
     () => validation.errors[activeIndex] ?? {},
     [validation, activeIndex],
@@ -522,6 +529,9 @@ export default function DeviceCommandButtonEditorV2({
           mode={pickerState.mode}
           hallId={hallId}
           exhibitId={pickerState.exhibitId}
+          exhibitName={
+            exhibits.find((e) => e.id === pickerState.exhibitId)?.name
+          }
           currentContentId={pickerState.currentContentId}
           onSelect={handlePickerSelect}
           onCancel={handlePickerCancel}
