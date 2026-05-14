@@ -10,6 +10,7 @@ import type {
   ConflictReport,
   ResourceKind,
 } from '@/types/deviceConnector';
+import type { components } from '@/api/gen/schema.gen';
 
 interface ApiEnvelope<T> {
   code: number;
@@ -20,14 +21,20 @@ interface ApiEnvelope<T> {
 interface ListParams {
   hall_id?: number;
   exhibit_id?: number;
+  enabled?: boolean;
   device_id?: number;
   kind?: 'listener' | 'timer';
 }
 
+export type DeviceEventBindingDTO = components['schemas']['DeviceEventBindingDTO'];
+export type DeviceEventBindingInput = components['schemas']['DeviceEventBindingInput'];
+
 export const triggerApi = {
   /** 注意：后端返 `{list, total}` 对象，不是裸数组 */
   list: (params: ListParams) =>
-    request.get<ApiEnvelope<{ list: Trigger[]; total: number }>>('/api/v1/v2/triggers', { params }),
+    request.get<ApiEnvelope<{ list: Trigger[]; total: number }>>('/api/v1/v2/triggers', {
+      params: { ...params, include_bindings_raw: true },
+    }),
   get: (id: number) =>
     request.get<ApiEnvelope<Trigger>>(`/api/v1/v2/triggers/${id}`),
   create: (body: CreateTriggerBody) =>
@@ -53,4 +60,13 @@ export const triggerApi = {
   /** 手动触发一次（"模拟收"测试） */
   test: (id: number) =>
     request.post<ApiEnvelope<{ ok: boolean }>>(`/api/v1/v2/triggers/${id}/test`),
+  listDeviceEventBindings: (deviceId: number) =>
+    request.get<ApiEnvelope<{ list: DeviceEventBindingDTO[]; total: number }>>(
+      `/api/v1/v2/devices/${deviceId}/event-bindings`,
+    ),
+  replaceDeviceEventBindings: (deviceId: number, bindings: DeviceEventBindingInput[]) =>
+    request.put<ApiEnvelope<{ list: DeviceEventBindingDTO[]; total: number }>>(
+      `/api/v1/v2/devices/${deviceId}/event-bindings`,
+      { bindings },
+    ),
 };

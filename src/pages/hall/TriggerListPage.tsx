@@ -4,17 +4,21 @@
  * 列表 + 新建/编辑抽屉（listener / timer）+ 5 类 action 编辑 + _check_conflict + reload
  */
 import { useState, useMemo } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
   Button,
+  Card,
+  Col,
+  Dropdown,
   Drawer,
   Form,
   Input,
   InputNumber,
   Modal,
   Radio,
+  Row,
   Select,
   Space,
   Switch,
@@ -22,8 +26,9 @@ import {
   Tabs,
   Tag,
   Tooltip,
+  Typography,
 } from 'antd';
-import type { TableColumnsType } from 'antd';
+import type { MenuProps, TableColumnsType } from 'antd';
 import { PlusOutlined, ExperimentOutlined } from '@ant-design/icons';
 import { useMessage } from '@/hooks/useMessage';
 import PageHeader from '@/components/common/PageHeader';
@@ -71,17 +76,28 @@ interface DeviceListItemV2 {
   status?: string;
 }
 
+type DeviceBindingGroup = {
+  deviceId: number;
+  deviceName: string;
+  totalBindings: number;
+  boundCount: number;
+  totalSlots: number;
+};
+
 export default function TriggerListPage() {
   const { hallId: hallIdStr } = useParams<{ hallId: string }>();
   const hallId = Number(hallIdStr);
   const selectedHallId = useHallStore((s) => s.selectedHallId);
   const effectiveHallId = hallId || selectedHallId || 0;
+  const navigate = useNavigate();
   const { message } = useMessage();
   const queryClient = useQueryClient();
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingTrigger, setEditingTrigger] = useState<Trigger | null>(null);
   const [filterKind, setFilterKind] = useState<'all' | TriggerKind>('all');
+  const [bindingSelectOpen, setBindingSelectOpen] = useState(false);
+  const [bindingDeviceId, setBindingDeviceId] = useState<number | null>(null);
 
   const { data: triggers = [], isLoading } = useQuery({
     queryKey: ['triggers', { hall_id: effectiveHallId }],
@@ -104,10 +120,44 @@ export default function TriggerListPage() {
     enabled: effectiveHallId > 0,
   });
 
+  const deviceBindingGroups = useMemo<DeviceBindingGroup[]>(() => {
+    const byDevice = new Map<number, Trigger[]>();
+    for (const trigger of triggers) {
+      if (trigger.kind !== 'device_event_binding' || trigger.device_id == null) continue;
+      byDevice.set(trigger.device_id, [...(byDevice.get(trigger.device_id) ?? []), trigger]);
+    }
+    return Array.from(byDevice.entries()).map(([deviceId, deviceTriggers]) => ({
+      deviceId,
+      deviceName: devices.find((device) => device.id === deviceId)?.name ?? `设备 #${deviceId}`,
+      totalBindings: deviceTriggers.length,
+      boundCount: new Set(deviceTriggers.map((t) => readSourceEventIndex(t.source)).filter(isNumber)).size,
+      totalSlots: 0,
+    }));
+  }, [triggers, devices]);
+
   const filtered = useMemo(
-    () => (filterKind === 'all' ? triggers : triggers.filter((t) => t.kind === filterKind)),
+    () =>
+      triggers.filter((trigger) => {
+        if (trigger.kind === 'device_event_binding') return false;
+        if (filterKind === 'all') return true;
+        return trigger.kind === filterKind;
+      }),
     [triggers, filterKind],
   );
+
+  const bindingMenuItems: MenuProps['items'] = [
+    {
+      key: 'device-event-binding',
+      label: (
+        <div>
+          <div>🔘 设备消息触发器</div>
+          <div style={{ fontSize: 12, color: 'var(--ant-color-text-secondary)' }}>
+            按设备 × 接收点矩阵批量配置（适合激光笔等多点触发设备）
+          </div>
+        </div>
+      ),
+    },
+  ];
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => triggerApi.delete(id),
@@ -206,17 +256,25 @@ export default function TriggerListPage() {
         title="触发器"
         description="当设备发来数据，或到点了，自动切场景 / 发命令 / 播放媒体"
         extra={
-          <Button
+          <Dropdown.Button
             type="primary"
             icon={<PlusOutlined />}
             disabled={!effectiveHallId}
+            menu={{
+              items: bindingMenuItems,
+              onClick: ({ key }) => {
+                if (key !== 'device-event-binding') return;
+                setBindingDeviceId(null);
+                setBindingSelectOpen(true);
+              },
+            }}
             onClick={() => {
               setEditingTrigger(null);
               setDrawerOpen(true);
             }}
           >
             新建触发器
-          </Button>
+          </Dropdown.Button>
         }
       />
 
@@ -228,6 +286,41 @@ export default function TriggerListPage() {
 
       {effectiveHallId > 0 && (
         <>
+          {deviceBindingGroups.length > 0 && (
+            <div style={{ marginBottom: 24 }}>
+              <Typography.Title level={5} style={{ marginBottom: 12 }}>
+                🔘 设备消息触发器（按设备）
+              </Typography.Title>
+              <Row gutter={[12, 12]}>
+                {deviceBindingGroups.map((group) => (
+                  <Col key={group.deviceId} xs={24} sm={12} md={8}>
+                    <Card
+                      size="small"
+                      hoverable
+                      onClick={() =>
+                        navigate(
+                          `/halls/${effectiveHallId}/triggers/device-event-binding/${group.deviceId}/edit`,
+                        )
+                      }
+                      style={{ borderRadius: 8, cursor: 'pointer' }}
+                    >
+                      <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                        <strong>
+                          {group.deviceName}（#{group.deviceId}）
+                        </strong>
+                        <span style={{ color: 'var(--ant-color-text-secondary)', fontSize: 12 }}>
+                          已配 {group.boundCount} 个接收点 · 共 {group.totalBindings} 条 binding
+                        </span>
+                      </Space>
+                    </Card>
+                  </Col>
+                ))}
+              </Row>
+            </div>
+          )}
+          <Typography.Title level={5} style={{ marginBottom: 12 }}>
+            ⚙ 通用触发器（监听 / 定时）
+          </Typography.Title>
           <Space style={{ marginBottom: 16 }}>
             <Radio.Group value={filterKind} onChange={(e) => setFilterKind(e.target.value)}>
               <Radio.Button value="all">全部</Radio.Button>
@@ -258,11 +351,47 @@ export default function TriggerListPage() {
           setDrawerOpen(false);
         }}
       />
+
+      <Modal
+        open={bindingSelectOpen}
+        title="选择设备"
+        okText="去配置"
+        cancelText="取消"
+        okButtonProps={{ disabled: !bindingDeviceId }}
+        onCancel={() => setBindingSelectOpen(false)}
+        onOk={() => {
+          if (!bindingDeviceId || !effectiveHallId) return;
+          setBindingSelectOpen(false);
+          navigate(`/halls/${effectiveHallId}/triggers/device-event-binding/${bindingDeviceId}/edit`);
+        }}
+      >
+        <Select
+          value={bindingDeviceId ?? undefined}
+          onChange={(v) => setBindingDeviceId(v)}
+          placeholder="选择要批量配置接收点的设备"
+          showSearch
+          optionFilterProp="label"
+          style={{ width: '100%' }}
+          options={devices.map((d) => ({
+            value: d.id,
+            label: d.name,
+          }))}
+        />
+      </Modal>
     </div>
   );
 }
 
 /* ==================== 列表 摘要 ==================== */
+
+function readSourceEventIndex(source: Trigger['source']): number | null {
+  const value = (source as Record<string, unknown>).event_index;
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function isNumber(value: number | null): value is number {
+  return value != null;
+}
 
 function SourceSummary({ trigger, devices }: { trigger: Trigger; devices: DeviceListItemV2[] }) {
   if (trigger.kind === 'listener') {

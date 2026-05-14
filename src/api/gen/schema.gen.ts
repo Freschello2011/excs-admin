@@ -19571,6 +19571,16 @@ export interface operations {
         parameters: {
             query: {
                 hall_id: number;
+                /** @description 可选；提供时只返该 exhibit 范围内的 trigger（含 device_event_binding 的所属 device 的 exhibit_id） */
+                exhibit_id?: number;
+                /** @description 可选；true 时只返 enabled=true 的 trigger */
+                enabled?: boolean;
+                /**
+                 * @description 可选，默认 false。
+                 *     - false（默认）：把 kind=device_event_binding 的 trigger 渲染为等价 listener trigger（展厅 App 用）。
+                 *     - true：保留 device_event_binding 原始形态（admin 矩阵编辑器/触发器列表卡片分组用）。
+                 */
+                include_bindings_raw?: boolean;
             };
             header?: never;
             path?: never;

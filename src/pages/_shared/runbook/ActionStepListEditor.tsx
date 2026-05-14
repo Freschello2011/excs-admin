@@ -100,6 +100,7 @@ interface Props {
   /** 当前正在编辑的步下标；命中时给 .editing 视觉态 */
   editingIndex?: number | null;
   onEditingIndexChange?: (next: number | null) => void;
+  maxSteps?: number;
 }
 
 interface ParamsSchemaShape {
@@ -151,6 +152,7 @@ export default function ActionStepListEditor({
   disabled,
   editingIndex,
   onEditingIndexChange,
+  maxSteps,
 }: Props) {
   function patchAt(index: number, patch: Partial<ActionStep>) {
     onChange(value.map((s, i) => (i === index ? { ...s, ...patch } : s)));
@@ -176,6 +178,7 @@ export default function ActionStepListEditor({
   }
 
   const stepErrors = useMemo(() => groupErrorsByStep(errors), [errors]);
+  const canAddStep = maxSteps == null || value.length < maxSteps;
 
   return (
     <div data-testid="action-step-list-editor">
@@ -233,52 +236,54 @@ export default function ActionStepListEditor({
       </div>
 
       {/* 添加按钮区（admin-UI §4.20.3 末行） */}
-      <div
-        data-testid="action-step-add-buttons"
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
-          gap: 12,
-          marginTop: 12,
-        }}
-      >
-        <Button
-          type="dashed"
-          size="large"
-          block
-          icon={<PlusOutlined />}
-          onClick={addDevice}
-          disabled={disabled}
-          data-testid="action-step-add-device"
+      {canAddStep && (
+        <div
+          data-testid="action-step-add-buttons"
           style={{
-            color: 'var(--ant-color-warning)',
-            borderColor: 'var(--ant-color-warning)',
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: 12,
+            marginTop: 12,
           }}
         >
-          添加 设备动作{' '}
-          <span style={{ fontSize: 11, opacity: 0.7, marginLeft: 4 }}>
-            （控灯 / 投影 / LED 等）
-          </span>
-        </Button>
-        <Button
-          type="dashed"
-          size="large"
-          block
-          icon={<PlusOutlined />}
-          onClick={addContent}
-          disabled={disabled}
-          data-testid="action-step-add-content"
-          style={{
-            color: 'var(--ant-color-info)',
-            borderColor: 'var(--ant-color-info)',
-          }}
-        >
-          添加 数字内容动作{' '}
-          <span style={{ fontSize: 11, opacity: 0.7, marginLeft: 4 }}>
-            （播视频 / 切前景图 / 守屏图 等）
-          </span>
-        </Button>
-      </div>
+          <Button
+            type="dashed"
+            size="large"
+            block
+            icon={<PlusOutlined />}
+            onClick={addDevice}
+            disabled={disabled}
+            data-testid="action-step-add-device"
+            style={{
+              color: 'var(--ant-color-warning)',
+              borderColor: 'var(--ant-color-warning)',
+            }}
+          >
+            添加 设备动作{' '}
+            <span style={{ fontSize: 11, opacity: 0.7, marginLeft: 4 }}>
+              （控灯 / 投影 / LED 等）
+            </span>
+          </Button>
+          <Button
+            type="dashed"
+            size="large"
+            block
+            icon={<PlusOutlined />}
+            onClick={addContent}
+            disabled={disabled}
+            data-testid="action-step-add-content"
+            style={{
+              color: 'var(--ant-color-info)',
+              borderColor: 'var(--ant-color-info)',
+            }}
+          >
+            添加 数字内容动作{' '}
+            <span style={{ fontSize: 11, opacity: 0.7, marginLeft: 4 }}>
+              （播视频 / 切前景图 / 守屏图 等）
+            </span>
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

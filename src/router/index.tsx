@@ -38,6 +38,9 @@ const AiAvatarLibraryPage = lazy(() => import('@/pages/ai/AiAvatarLibraryPage'))
 // device-mgmt-v2 P6：4 tab 合并页（预置型号 / 协议库 / 插件 / 触发器模板占位）
 const DeviceCatalogPage = lazy(() => import('@/pages/platform/DeviceCatalogPage'));
 const TriggerListPage = lazy(() => import('@/pages/hall/TriggerListPage'));
+const TriggerEventBindingMatrixPage = lazy(
+  () => import('@/pages/hall/TriggerEventBindingMatrixPage'),
+);
 const UserDetailPage = lazy(() => import('@/pages/user/UserDetailPage'));
 const NotificationListPage = lazy(() => import('@/pages/notification/NotificationListPage'));
 const PeopleAuthzHubPage = lazy(() => import('@/pages/authz/PeopleAuthzHubPage'));
@@ -293,6 +296,10 @@ export const router = createBrowserRouter([
       {
         path: 'halls/:hallId/triggers',
         element: <HallRoute><TriggerListPage /></HallRoute>,
+      },
+      {
+        path: 'halls/:hallId/triggers/device-event-binding/:deviceId/edit',
+        element: <HallRoute><TriggerEventBindingMatrixPage /></HallRoute>,
       },
       {
         path: 'triggers',

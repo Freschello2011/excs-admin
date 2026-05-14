@@ -5,6 +5,7 @@
  * Mock hallApi.getEffectiveCommands 让 device step body 不发真请求。
  */
 import '@testing-library/jest-dom/vitest';
+import type { ComponentProps } from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   render,
@@ -44,7 +45,11 @@ vi.mock('@/components/device-catalog/WidgetRenderer', () => ({
   default: () => <div data-testid="widget-renderer-stub" />,
 }));
 
-function renderUI(value: ActionStep[], onChange: (v: ActionStep[]) => void) {
+function renderUI(
+  value: ActionStep[],
+  onChange: (v: ActionStep[]) => void,
+  props: Partial<ComponentProps<typeof ActionStepListEditor>> = {},
+) {
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
@@ -61,6 +66,7 @@ function renderUI(value: ActionStep[], onChange: (v: ActionStep[]) => void) {
           ]}
           exhibits={[{ id: 10, name: '序厅' }]}
           scenes={[{ id: 100, name: '开馆' }]}
+          {...props}
         />
       </ConfigProvider>
     </QueryClientProvider>,
@@ -97,6 +103,32 @@ describe('<ActionStepListEditor>', () => {
     fireEvent.click(screen.getByTestId('action-step-add-content'));
     const next = onChange.mock.calls[0][0] as ActionStep[];
     expect(next[0].type).toBe('content');
+  });
+
+  it('maxSteps=1 且 value.length=0 → 添加按钮可见', () => {
+    renderUI([], vi.fn(), { maxSteps: 1 });
+    expect(screen.getByTestId('action-step-add-device')).toBeInTheDocument();
+    expect(screen.getByTestId('action-step-add-content')).toBeInTheDocument();
+  });
+
+  it('maxSteps=1 且 value.length=1 → 添加按钮隐藏', () => {
+    renderUI(
+      [
+        {
+          type: 'device',
+          delay_seconds_after_prev_start: 0,
+          device_id: 1,
+          command: null,
+          params: null,
+          preconditions: null,
+          friendly_description: null,
+        },
+      ],
+      vi.fn(),
+      { maxSteps: 1 },
+    );
+    expect(screen.queryByTestId('action-step-add-device')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('action-step-add-content')).not.toBeInTheDocument();
   });
 
   it('1 步 device → 渲染设备 chip "设备动作" + Step 0 "立即" + 类型颜色橙', () => {
